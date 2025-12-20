@@ -30,7 +30,7 @@ const profile = {
   displayName: "Loker Jombang & Tentang Jombang",
   category: "Recruitment & Employment Agency",
   bio: "Info Loker Jombang #1 🏆\nCari kerja? Kami bantu! 💼\n#lokerjombang #lowongankerja",
-  website: "infolokerjombang.com",
+  website: "infolokerjombang.net",
   avatarUrl: "/profile.png",
   stats: {
     posts: "9.755",
@@ -221,17 +221,8 @@ export default function Home() {
           </Button>
         </div>
 
-        {/* Story Highlights (Mock) */}
-        <div className="flex gap-4 overflow-x-auto pb-4 mb-6 scrollbar-hide">
-          {highlights.map((item) => (
-            <div key={item.id} className="flex flex-col items-center gap-1 min-w-[64px]">
-              <div className="w-16 h-16 rounded-full border border-border/50 bg-accent/30 flex items-center justify-center text-2xl shadow-sm">
-                {item.img}
-              </div>
-              <span className="text-xs truncate w-full text-center">{item.title}</span>
-            </div>
-          ))}
-        </div>
+        {/* Story Highlights Removed */}
+
 
         {/* Links List - "Content" */}
         <motion.div
