@@ -27,7 +27,7 @@ import { cn } from "@/lib/utils";
 // Profile Data
 const profile = {
   username: "infolokerjombang",
-  displayName: "Loker Jombang & Tentang Jombang",
+  displayName: "@infolokerjombang",
   category: "Recruitment & Employment Agency",
   bio: "Info Loker Jombang #1 🏆\nCari kerja? Kami bantu! 💼\n#lokerjombang #lowongankerja",
   website: "infolokerjombang.net",
@@ -138,8 +138,8 @@ export default function Home() {
     <div className="theme-biolink min-h-screen bg-background/50 text-foreground font-sans relative overflow-x-hidden selection:bg-primary/30">
       <BackgroundGlow />
 
-      {/* Navbar / Top Bar with Glassmorphism */}
-      <div className="flex justify-between items-center px-4 py-3 border-b border-border/10 sticky top-0 bg-background/60 backdrop-blur-xl z-50 shadow-sm transition-all duration-300">
+      {/* Navbar / Top Bar with Glassmorphism - Hidden on Mobile */}
+      <div className="hidden sm:flex justify-between items-center px-4 py-3 border-b border-border/10 sticky top-0 bg-background/60 backdrop-blur-xl z-50 shadow-sm transition-all duration-300">
         <div className="flex items-center gap-1 font-bold text-lg">
           <span>{profile.username}</span>
           <Verified className="w-4 h-4 text-blue-500 fill-blue-500 text-white" />
@@ -150,61 +150,79 @@ export default function Home() {
         </div>
       </div>
 
-      <main className="max-w-md mx-auto pt-6 px-4 pb-20">
-        {/* Profile Header */}
-        <div className="flex items-center justify-between mb-6">
+      <main className="max-w-md mx-auto pt-6 px-4 pb-20 relative">
+        {/* Mobile Mode Toggle (Absolute Top Right) */}
+        <div className="absolute top-4 right-4 sm:hidden z-50">
+          <ModeToggle />
+        </div>
+
+        {/* Profile Header (Centered Layout) */}
+        <div className="flex flex-col items-center text-center mb-8">
+          {/* 1. Avatar */}
           <motion.div
             initial={{ scale: 0.8, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             transition={{ type: "spring", duration: 0.5 }}
-            className="relative"
+            className="relative mb-4"
           >
+            {/* Animated Rings */}
             <motion.div
               animate={{ rotate: 360 }}
               transition={{ repeat: Infinity, duration: 8, ease: "linear" }}
-              className="absolute -inset-1.5 rounded-full bg-gradient-to-tr from-green-500 via-emerald-400 to-blue-500 p-[2px] opacity-80 blur-sm"
+              className="absolute -inset-2 rounded-full bg-gradient-to-tr from-green-500 via-emerald-400 to-blue-500 p-[2px] opacity-80 blur-sm"
             />
             <motion.div
               animate={{ rotate: -360 }}
               transition={{ repeat: Infinity, duration: 12, ease: "linear" }}
-              className="absolute -inset-1 rounded-full bg-gradient-to-tr from-green-600 via-emerald-500 to-blue-600 p-[2px]"
+              className="absolute -inset-1.5 rounded-full bg-gradient-to-tr from-green-600 via-emerald-500 to-blue-600 p-[2px]"
             >
               <div className="rounded-full bg-background p-[2px] w-full h-full"></div>
             </motion.div>
-            <Avatar className="w-20 h-20 sm:w-24 sm:h-24 border-4 border-background relative z-10 shadow-xl">
+
+            <Avatar className="w-28 h-28 sm:w-32 sm:h-32 border-4 border-background relative z-10 shadow-2xl">
               <AvatarImage src={profile.avatarUrl} className="object-cover" />
               <AvatarFallback>ILJ</AvatarFallback>
             </Avatar>
+
+            {/* Verification Badge Absolute Positioned */}
+            <div className="absolute bottom-1 right-1 z-20 bg-background rounded-full p-1 shadow-sm">
+              <Verified className="w-6 h-6 text-blue-500 fill-blue-500 text-white" />
+            </div>
           </motion.div>
 
-          <div className="flex-1 flex justify-around text-center ml-4">
-            <div>
-              <div className="font-bold text-lg sm:text-xl">{profile.stats.posts}</div>
-              <div className="text-xs sm:text-sm text-center">kiriman</div>
+          {/* 2. Bio & Description */}
+          <div className="space-y-2 mb-6 max-w-sm">
+            <h1 className="font-bold text-2xl tracking-tight">{profile.displayName}</h1>
+            <Badge variant="secondary" className="mb-2 bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 border-none px-3 py-1">
+              {profile.category}
+            </Badge>
+            <p className="whitespace-pre-line text-sm leading-relaxed text-muted-foreground">
+              {profile.bio}
+            </p>
+            <a
+              href={`https://${profile.website}`}
+              className="inline-flex items-center gap-1.5 text-blue-600 dark:text-blue-400 font-medium text-sm hover:underline mt-1"
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+              {profile.website}
+            </a>
+          </div>
+
+          {/* 3. Stats (Glass Card) */}
+          <div className="grid grid-cols-3 gap-4 w-full max-w-[320px] bg-background/40 backdrop-blur-md border border-border/50 rounded-2xl p-4 shadow-sm">
+            <div className="flex flex-col items-center">
+              <span className="font-bold text-lg">{profile.stats.posts}</span>
+              <span className="text-xs text-muted-foreground uppercase tracking-wider font-medium">Post</span>
             </div>
-            <div>
-              <div className="font-bold text-lg sm:text-xl">{profile.stats.followers}</div>
-              <div className="text-xs sm:text-sm text-center">pengikut</div>
+            <div className="flex flex-col items-center border-x border-border/50">
+              <span className="font-bold text-lg">{profile.stats.followers}</span>
+              <span className="text-xs text-muted-foreground uppercase tracking-wider font-medium">Follower</span>
             </div>
-            <div>
-              <div className="font-bold text-lg sm:text-xl">{profile.stats.following}</div>
-              <div className="text-xs sm:text-sm text-center">diikuti</div>
+            <div className="flex flex-col items-center">
+              <span className="font-bold text-lg">{profile.stats.following}</span>
+              <span className="text-xs text-muted-foreground uppercase tracking-wider font-medium">Following</span>
             </div>
           </div>
-        </div>
-
-        {/* Bio Section */}
-        <div className="space-y-1 mb-6">
-          <div className="font-bold">{profile.displayName}</div>
-          <div className="text-muted-foreground text-sm">{profile.category}</div>
-          <div className="whitespace-pre-line text-sm leading-relaxed">{profile.bio}</div>
-          <a
-            href={`https://${profile.website}`}
-            className="text-blue-900 dark:text-blue-400 font-medium text-sm flex items-center gap-1"
-          >
-            <ExternalLink className="w-3 h-3" />
-            {profile.website}
-          </a>
         </div>
 
         {/* Action Buttons */}
