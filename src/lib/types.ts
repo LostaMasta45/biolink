@@ -162,6 +162,27 @@ export interface MonthlyData {
 }
 
 // ============================================
+// Client Database Types
+// ============================================
+
+export type ClientTier = "bronze" | "silver" | "gold" | "platinum";
+
+export interface AggregatedClient {
+    whatsapp_number: string;
+    company_name: string;
+    total_postings: number;
+    total_spent: number;
+    last_posting_date: string;
+    first_posting_date: string;
+    poster_gallery: string[];
+    tier: ClientTier;
+}
+
+export interface ClientDetail extends AggregatedClient {
+    posting_history: QueuePost[];
+}
+
+// ============================================
 // Common Types
 // ============================================
 

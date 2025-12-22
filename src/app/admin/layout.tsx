@@ -16,6 +16,7 @@ import {
     ChevronRight,
     Settings,
     Bell,
+    Database,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { Button } from "@/components/ui/button";
@@ -30,6 +31,7 @@ const navItems = [
     { href: "/admin", icon: LayoutDashboard, label: "Dashboard" },
     { href: "/admin/invoice", icon: FileText, label: "Invoice" },
     { href: "/admin/antri", icon: ListTodo, label: "Antrian Posting" },
+    { href: "/admin/database", icon: Database, label: "Database" },
     { href: "/admin/keuangan", icon: Wallet, label: "Keuangan" },
 ];
 

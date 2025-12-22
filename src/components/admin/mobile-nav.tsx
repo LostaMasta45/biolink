@@ -8,7 +8,7 @@ import {
     FileText,
     Plus,
     ListTodo,
-    Wallet
+    Database
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -23,10 +23,10 @@ export function MobileNav() {
 
     const navItems = [
         { href: "/admin", icon: LayoutDashboard, label: "Home" },
-        { href: "/admin/invoice", icon: FileText, label: "Invoice" },
-        { href: "CENTER", icon: Plus, label: "Create" }, // Special center item
         { href: "/admin/antri", icon: ListTodo, label: "Antri" },
-        { href: "/admin/keuangan", icon: Wallet, label: "Uang" },
+        { href: "CENTER", icon: Plus, label: "Create" }, // Special center item
+        { href: "/admin/database", icon: Database, label: "Database" },
+        { href: "/admin/invoice", icon: FileText, label: "Invoice" },
     ];
 
     return (
