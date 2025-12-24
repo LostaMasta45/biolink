@@ -24,6 +24,7 @@ import {
     X,
     Loader2,
     Hash,
+    Copy,
 } from "lucide-react";
 import { formatRupiah, formatDate, generateInvoiceNumber } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -321,6 +322,47 @@ export default function InvoicePage() {
         setPreviewInvoice(data);
     };
 
+    const handleDuplicateInvoice = async (id: string) => {
+        const { data, error } = await getInvoiceById(id);
+
+        if (error || !data) {
+            toast.error(`Gagal memuat invoice: ${error}`);
+            return;
+        }
+
+        // Load data into form but with new invoice number and reset ID
+        setEditingInvoiceId(null); // Not editing, creating new
+        setInvoiceNumber(generateInvoiceNumber(Math.floor(Math.random() * 1000))); // Generate new number
+        setClientName(data.client_name);
+        setClientPhone(data.client_phone || "");
+        setClientAddress(data.client_address || "");
+        setInvoiceDate(new Date().toISOString().split("T")[0]); // Reset to today
+        setDueDate(""); // Reset due date
+        setItems(data.items.length > 0 ? data.items.map(item => ({ ...item, id: Date.now().toString() + Math.random() })) : defaultItems);
+        setNotes(data.notes || "");
+        setTemplate(data.template);
+        setStatus("draft"); // Reset status to draft
+        setDiscountType(data.discount_type);
+        setDiscountValue(data.discount_value);
+        setTaxEnabled(data.tax_enabled);
+        setTaxPercent(data.tax_percent);
+
+        // Bank account
+        if (data.bank_name) {
+            setShowBankAccount(true);
+            const matchedBank = bankAccounts.find(b => b.bank_name === data.bank_name);
+            if (matchedBank) {
+                setSelectedBank(matchedBank);
+            }
+        } else {
+            setShowBankAccount(false);
+        }
+
+        // Switch to form tab
+        setActiveTab("form");
+        toast.success("Invoice berhasil diduplikasi! Silakan edit dan simpan.");
+    };
+
     const handleShareWhatsApp = () => {
         const message = `
 *INVOICE ${invoiceNumber}*
@@ -590,10 +632,16 @@ InfoLokerJombang
                 const imgWidth = 210;
                 const imgHeight = (canvas.height * imgWidth) / canvas.width;
                 pdf.addImage(imgData, "PNG", 0, 0, imgWidth, imgHeight);
-                pdf.save(`invoice-${invoiceNumber}.pdf`);
+                // Generate filename: ClientName-InvoiceNumber@infolokerjombang
+                const safeClientName = (clientName || "Invoice").replace(/[^a-zA-Z0-9\s-]/g, "").replace(/\s+/g, "_").substring(0, 50);
+                const fileName = `${safeClientName}-${invoiceNumber}@infolokerjombang`;
+                pdf.save(`${fileName}.pdf`);
             } else {
                 const link = document.createElement("a");
-                link.download = `invoice-${invoiceNumber}.${format === "jpeg" ? "jpg" : "png"}`;
+                // Generate filename: ClientName-InvoiceNumber@infolokerjombang
+                const safeClientName = (clientName || "Invoice").replace(/[^a-zA-Z0-9\s-]/g, "").replace(/\s+/g, "_").substring(0, 50);
+                const fileName = `${safeClientName}-${invoiceNumber}@infolokerjombang`;
+                link.download = `${fileName}.${format === "jpeg" ? "jpg" : "png"}`;
                 link.href = canvas.toDataURL(format === "jpeg" ? "image/jpeg" : "image/png", 0.95);
                 link.click();
             }
@@ -1066,6 +1114,9 @@ InfoLokerJombang
                                                                         <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleEditInvoice(inv.id!)}>
                                                                             <Pencil className="w-4 h-4" />
                                                                         </Button>
+                                                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-500 hover:bg-blue-500/10" onClick={() => handleDuplicateInvoice(inv.id!)} title="Duplikat">
+                                                                            <Copy className="w-4 h-4" />
+                                                                        </Button>
                                                                         <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:bg-destructive/10" onClick={() => setDeleteConfirmId(inv.id!)}>
                                                                             <Trash2 className="w-4 h-4" />
                                                                         </Button>
@@ -1092,12 +1143,15 @@ InfoLokerJombang
                                                             <span className="text-muted-foreground">{formatDate(inv.invoice_date)}</span>
                                                             <span className="font-medium">{formatRupiah(inv.total)}</span>
                                                         </div>
-                                                        <div className="flex gap-2">
+                                                        <div className="flex gap-2 flex-wrap">
                                                             <Button variant="outline" size="sm" className="flex-1" onClick={() => handlePreviewInvoice(inv.id!)}>
                                                                 <Eye className="w-4 h-4 mr-1" /> Preview
                                                             </Button>
                                                             <Button variant="outline" size="sm" className="flex-1" onClick={() => handleEditInvoice(inv.id!)}>
                                                                 <Pencil className="w-4 h-4 mr-1" /> Edit
+                                                            </Button>
+                                                            <Button variant="outline" size="sm" className="flex-1 text-blue-500 hover:bg-blue-500/10" onClick={() => handleDuplicateInvoice(inv.id!)}>
+                                                                <Copy className="w-4 h-4 mr-1" /> Duplikat
                                                             </Button>
                                                             <Button variant="outline" size="sm" className="text-destructive hover:bg-destructive/10" onClick={() => setDeleteConfirmId(inv.id!)}>
                                                                 <Trash2 className="w-4 h-4" />
