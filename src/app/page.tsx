@@ -269,49 +269,70 @@ export default function Home() {
                 className="block group"
               >
                 <Card className={cn(
-                  "flex items-center p-3 gap-4 backdrop-blur-sm border transition-all duration-300 shadow-sm relative overflow-hidden group",
+                  "relative overflow-hidden border transition-all duration-300 shadow-sm group",
+                  "flex items-center p-3.5 gap-4", // Increased padding slightly
                   isPremium
-                    ? "bg-gradient-to-r from-emerald-500/10 via-emerald-500/5 to-transparent border-emerald-500/30 active:scale-95"
+                    ? "bg-gradient-to-r from-emerald-500/10 via-emerald-500/5 to-transparent border-emerald-500/30 dark:border-emerald-500/20"
                     : cn(
-                      "hover:shadow-md active:scale-95",
+                      "hover:shadow-md backdrop-blur-sm bg-background/40 hover:bg-background/60", // More subtle standard card
                       link.baseTint // Permanent tint applied here
                     )
                 )}>
                   {/* Premium Shine Effect */}
                   {isPremium && (
-                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent translate-x-[-100%] animate-[shimmer_2s_infinite] pointer-events-none" />
+                    <>
+                      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-emerald-500/10 to-transparent translate-x-[-100%] animate-[shimmer_2.5s_infinite] pointer-events-none" />
+                      <div className="absolute top-0 right-0 p-1">
+                        <span className="flex h-2 w-2">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                        </span>
+                      </div>
+                    </>
                   )}
 
                   <div
                     className={cn(
-                      "w-11 h-11 rounded-xl flex items-center justify-center text-white shadow-lg transform group-hover:rotate-6 transition-transform duration-300 relative z-10",
+                      "w-12 h-12 rounded-2xl flex items-center justify-center text-white shadow-lg transition-transform duration-500 group-hover:scale-110 group-hover:rotate-3",
                       link.color,
-                      isPremium && "shadow-emerald-500/20 ring-2 ring-emerald-500/20"
+                      isPremium && "shadow-emerald-500/30 ring-4 ring-emerald-500/10"
                     )}
                   >
-                    <link.icon className={cn("w-5 h-5", isPremium && "animate-pulse")} />
+                    <link.icon className={cn("w-6 h-6", isPremium && "animate-pulse")} />
                   </div>
 
-                  <div className="flex-1 min-w-0 relative z-10">
-                    <div className="font-bold text-sm truncate flex items-center gap-2">
+                  <div className="flex-1 min-w-0 z-10">
+                    <div className="flex flex-col gap-0.5">
                       <span className={cn(
+                        "font-bold text-base tracking-tight leading-none mb-1",
                         isPremium
-                          ? "bg-gradient-to-r from-emerald-600 to-teal-500 dark:from-emerald-400 dark:to-teal-300 bg-clip-text text-transparent font-extrabold tracking-wide"
-                          : cn("transition-colors", link.textHover) // Permanent colored text
+                          ? "bg-gradient-to-br from-emerald-600 to-teal-600 dark:from-emerald-400 dark:to-teal-300 bg-clip-text text-transparent filter drop-shadow-sm"
+                          : "text-foreground group-hover:text-primary transition-colors"
                       )}>
                         {link.label}
                       </span>
-                      {isPremium && (
-                        <Verified className="w-4 h-4 text-emerald-500 fill-emerald-500 text-white animate-bounce" />
-                      )}
-                    </div>
-                    <div className={cn("text-xs truncate", isPremium ? "text-emerald-600/80 dark:text-emerald-400/80 font-medium" : "text-muted-foreground")}>
-                      {link.subLabel}
+
+                      <div className="flex items-center gap-2">
+                        {isPremium ? (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/20">
+                            {link.subLabel}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground group-hover:text-foreground/80 transition-colors truncate">
+                            {link.subLabel}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
 
-                  <div className={cn("p-1 rounded-full transition-all", isPremium ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : "bg-background/20")}>
-                    <ChevronRight className={cn("w-4 h-4 transition-transform group-hover:translate-x-0.5", !isPremium && "text-muted-foreground/70 group-hover:text-foreground")} />
+                  <div className={cn(
+                    "w-8 h-8 rounded-full flex items-center justify-center transition-all duration-300",
+                    isPremium
+                      ? "bg-emerald-500 text-white shadow-lg shadow-emerald-500/20 translate-x-0 opacity-100"
+                      : "bg-transparent text-muted-foreground/50 opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 group-hover:bg-primary/10 group-hover:text-primary"
+                  )}>
+                    <ChevronRight className="w-5 h-5" />
                   </div>
                 </Card>
               </motion.a>
