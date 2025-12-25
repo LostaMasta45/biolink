@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">ILJ Hub</string>
+    <string name="title_activity_main">ILJ Hub</string>
+    <string name="package_name">com.infolokerjombang.hub</string>
+    <string name="custom_url_scheme">com.infolokerjombang.hub</string>
+</resources>
