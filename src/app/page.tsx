@@ -15,7 +15,9 @@ import {
   Send,
   ExternalLink,
   MessageCircle,
-  Sparkles
+  Sparkles,
+  ArrowLeft,
+  Share2
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -23,6 +25,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ModeToggle } from "@/components/mode-toggle";
 import { cn } from "@/lib/utils";
+import { usePlatform } from "@/hooks/use-platform";
 
 // Profile Data
 const profile = {
@@ -118,7 +121,35 @@ const BackgroundGlow = () => (
   </div>
 );
 
+// Native Mobile Header for APK
+const NativeHeader = () => (
+  <div className="sticky top-0 z-50 bg-background/95 backdrop-blur-xl border-b border-border/20 safe-area-top">
+    {/* Safe area padding for notch/status bar */}
+    <div className="pt-[env(safe-area-inset-top)]" />
+    <div className="flex items-center justify-between px-4 h-14">
+      <div className="flex items-center gap-3">
+        <Avatar className="w-8 h-8 border-2 border-primary/20">
+          <AvatarImage src="/profile.png" />
+          <AvatarFallback>ILJ</AvatarFallback>
+        </Avatar>
+        <div className="flex items-center gap-1">
+          <span className="font-bold text-base">ILJ Hub</span>
+          <Verified className="w-4 h-4 text-blue-500 fill-blue-500" />
+        </div>
+      </div>
+      <div className="flex items-center gap-2">
+        <ModeToggle />
+        <button className="w-10 h-10 rounded-full flex items-center justify-center hover:bg-muted/50 active:scale-95 transition-all">
+          <Share2 className="w-5 h-5" />
+        </button>
+      </div>
+    </div>
+  </div>
+);
+
 export default function Home() {
+  const { isNativeApp } = usePlatform();
+
   const containerVars = {
     hidden: { opacity: 0 },
     visible: {
@@ -138,23 +169,33 @@ export default function Home() {
     <div className="theme-biolink min-h-screen bg-background/50 text-foreground font-sans relative overflow-x-hidden selection:bg-primary/30">
       <BackgroundGlow />
 
-      {/* Navbar / Top Bar with Glassmorphism - Hidden on Mobile */}
-      <div className="hidden sm:flex justify-between items-center px-4 py-3 border-b border-border/10 sticky top-0 bg-background/60 backdrop-blur-xl z-50 shadow-sm transition-all duration-300">
-        <div className="flex items-center gap-1 font-bold text-lg">
-          <span>{profile.username}</span>
-          <Verified className="w-4 h-4 text-blue-500 fill-blue-500 text-white" />
-        </div>
-        <div className="flex items-center gap-4">
-          <ModeToggle />
-          <MoreHorizontal className="w-6 h-6" />
-        </div>
-      </div>
+      {/* Native Header for APK */}
+      {isNativeApp && <NativeHeader />}
 
-      <main className="max-w-md mx-auto pt-6 px-4 pb-20 relative">
-        {/* Mobile Mode Toggle (Absolute Top Right) */}
-        <div className="absolute top-4 right-4 sm:hidden z-50">
-          <ModeToggle />
+      {/* Navbar / Top Bar with Glassmorphism - Hidden on Mobile & APK */}
+      {!isNativeApp && (
+        <div className="hidden sm:flex justify-between items-center px-4 py-3 border-b border-border/10 sticky top-0 bg-background/60 backdrop-blur-xl z-50 shadow-sm transition-all duration-300">
+          <div className="flex items-center gap-1 font-bold text-lg">
+            <span>{profile.username}</span>
+            <Verified className="w-4 h-4 text-blue-500 fill-blue-500 text-white" />
+          </div>
+          <div className="flex items-center gap-4">
+            <ModeToggle />
+            <MoreHorizontal className="w-6 h-6" />
+          </div>
         </div>
+      )}
+
+      <main className={cn(
+        "max-w-md mx-auto px-4 pb-20 relative",
+        isNativeApp ? "pt-4" : "pt-6"
+      )}>
+        {/* Mobile Mode Toggle (Absolute Top Right) - Only for Web */}
+        {!isNativeApp && (
+          <div className="absolute top-4 right-4 sm:hidden z-50">
+            <ModeToggle />
+          </div>
+        )}
 
         {/* Profile Header (Centered Layout) */}
         <div className="flex flex-col items-center text-center mb-8">
