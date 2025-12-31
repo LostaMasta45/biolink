@@ -10,6 +10,7 @@ import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { InstallPrompt } from "@/components/pwa";
 
 function FormLoader() {
     return (
@@ -256,6 +257,9 @@ function LoginForm() {
 export default function LoginPage() {
     return (
         <div className="min-h-screen grid md:grid-cols-2 bg-slate-50 overflow-hidden font-sans">
+            {/* PWA Install Prompt - Only on Login Page */}
+            <InstallPrompt />
+
             {/* Mobile Background - More Subtle */}
             <div className="absolute inset-0 md:hidden z-0 bg-slate-100">
                 <div className="absolute inset-0 bg-gradient-to-b from-primary/5 to-transparent opacity-60" />
