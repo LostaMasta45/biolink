@@ -1,7 +1,9 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import {
+  User,
   Instagram,
   Facebook,
   Phone,
@@ -26,6 +28,7 @@ import { Badge } from "@/components/ui/badge";
 import { ModeToggle } from "@/components/mode-toggle";
 import { cn } from "@/lib/utils";
 import { usePlatform } from "@/hooks/use-platform";
+import { CompanySlider } from "@/components/company-slider";
 
 // Profile Data
 const profile = {
@@ -35,11 +38,6 @@ const profile = {
   bio: "Info Loker Jombang #1 🏆\nCari kerja? Kami bantu! 💼\n#lokerjombang #lowongankerja",
   website: "infolokerjombang.net",
   avatarUrl: "/profile.png",
-  stats: {
-    posts: "9.755",
-    followers: "205 rb",
-    following: "1.155",
-  },
 };
 
 const links = [
@@ -149,6 +147,23 @@ const NativeHeader = () => (
 
 export default function Home() {
   const { isNativeApp } = usePlatform();
+  const [stats, setStats] = useState({ posts: "9.800+", followers: "205rb" });
+
+  useEffect(() => {
+    // Fetch Instagram stats from API
+    const fetchStats = async () => {
+      try {
+        const res = await fetch("/api/instagram-stats");
+        if (res.ok) {
+          const data = await res.json();
+          setStats(data);
+        }
+      } catch (err) {
+        console.error("Failed to fetch Instagram stats", err);
+      }
+    };
+    fetchStats();
+  }, []);
 
   const containerVars = {
     hidden: { opacity: 0 },
@@ -250,20 +265,54 @@ export default function Home() {
           </div>
 
           {/* 3. Stats (Glass Card) */}
-          <div className="grid grid-cols-3 gap-4 w-full max-w-[320px] bg-background/40 backdrop-blur-md border border-border/50 rounded-2xl p-4 shadow-sm">
-            <div className="flex flex-col items-center">
-              <span className="font-bold text-lg">{profile.stats.posts}</span>
-              <span className="text-xs text-muted-foreground uppercase tracking-wider font-medium">Post</span>
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3, duration: 0.5 }}
+            className="grid grid-cols-3 gap-0 w-full max-w-[340px] bg-gradient-to-b from-white/10 to-white/5 dark:from-white/5 dark:to-transparent backdrop-blur-md border border-white/20 dark:border-white/10 rounded-2xl p-4 shadow-xl relative overflow-hidden group"
+          >
+            {/* Background decorative elements */}
+            <div className="absolute top-0 left-1/4 w-1/2 h-full bg-gradient-to-b from-white/5 to-transparent pointer-events-none" />
+
+            <div className="flex flex-col items-center justify-center relative z-10">
+              <motion.div
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                transition={{ delay: 0.5, type: "spring", stiffness: 200 }}
+                className="w-8 h-8 rounded-full bg-blue-500/10 text-blue-500 flex items-center justify-center mb-1"
+              >
+                <Briefcase className="w-4 h-4" />
+              </motion.div>
+              <span className="font-bold text-lg leading-tight text-foreground">{stats.posts}</span>
+              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mt-0.5">Lowongan</span>
             </div>
-            <div className="flex flex-col items-center border-x border-border/50">
-              <span className="font-bold text-lg">{profile.stats.followers}</span>
-              <span className="text-xs text-muted-foreground uppercase tracking-wider font-medium">Follower</span>
+
+            <div className="flex flex-col items-center justify-center relative z-10 border-x border-white/10 dark:border-white/5">
+              <motion.div
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                transition={{ delay: 0.6, type: "spring", stiffness: 200 }}
+                className="w-8 h-8 rounded-full bg-pink-500/10 text-pink-500 flex items-center justify-center mb-1"
+              >
+                <User className="w-4 h-4" />
+              </motion.div>
+              <span className="font-bold text-lg leading-tight text-foreground">{stats.followers}</span>
+              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mt-0.5">Follower</span>
             </div>
-            <div className="flex flex-col items-center">
-              <span className="font-bold text-lg">{profile.stats.following}</span>
-              <span className="text-xs text-muted-foreground uppercase tracking-wider font-medium">Following</span>
+
+            <div className="flex flex-col items-center justify-center relative z-10">
+              <motion.div
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                transition={{ delay: 0.7, type: "spring", stiffness: 200 }}
+                className="w-8 h-8 rounded-full bg-emerald-500/10 text-emerald-500 flex items-center justify-center mb-1"
+              >
+                <Verified className="w-4 h-4" />
+              </motion.div>
+              <span className="font-bold text-lg leading-tight text-foreground">200++</span>
+              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mt-0.5">Perusahaan</span>
             </div>
-          </div>
+          </motion.div>
         </div>
 
         {/* Action Buttons */}
@@ -283,6 +332,16 @@ export default function Home() {
         {/* Story Highlights Removed */}
 
 
+        {/* Company Logo Slider */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.8 }}
+          className="mb-6"
+        >
+          <CompanySlider />
+        </motion.div>
+
         {/* Links List - "Content" */}
         <motion.div
           variants={containerVars}
@@ -298,6 +357,82 @@ export default function Home() {
 
           {links.map((link) => {
             const isPremium = link.id === "wa-pasang";
+
+            // Special Premium Card for WA Pasang
+            if (isPremium) {
+              return (
+                <motion.a
+                  key={link.id}
+                  href={link.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  variants={itemVars}
+                  whileHover={{ scale: 1.03, y: -3 }}
+                  whileTap={{ scale: 0.98 }}
+                  className="block group relative"
+                >
+                  {/* Outer Glow */}
+                  <div className="absolute -inset-1 bg-gradient-to-r from-emerald-500 via-teal-400 to-emerald-600 rounded-3xl blur-lg opacity-40 group-hover:opacity-70 transition-all duration-500 animate-pulse" />
+
+                  {/* Main Card */}
+                  <div className="relative bg-gradient-to-br from-slate-900 via-emerald-950 to-slate-900 rounded-2xl p-5 border border-emerald-500/30 overflow-hidden shadow-2xl">
+                    {/* Animated Background Pattern */}
+                    <div className="absolute inset-0 opacity-20">
+                      <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(16,185,129,0.3),transparent_50%)]" />
+                      <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_80%,rgba(20,184,166,0.3),transparent_50%)]" />
+                    </div>
+
+                    {/* Shimmer Effect */}
+                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000 ease-out" />
+
+                    {/* Top Badge */}
+                    <div className="absolute -top-1 left-1/2 -translate-x-1/2 flex items-center gap-1.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full shadow-lg shadow-amber-500/30">
+                      <Sparkles className="w-3 h-3" />
+                      HOT
+                    </div>
+
+                    {/* Content */}
+                    <div className="relative flex items-center gap-4 mt-2">
+                      {/* Icon Container */}
+                      <div className="relative">
+                        <div className="absolute inset-0 bg-emerald-500 rounded-2xl blur-md opacity-60" />
+                        <div className="relative w-14 h-14 bg-gradient-to-br from-emerald-400 to-teal-500 rounded-2xl flex items-center justify-center shadow-lg ring-4 ring-emerald-500/20">
+                          <Phone className="w-7 h-7 text-white drop-shadow-md" />
+                        </div>
+                        {/* Pulse Ring */}
+                        <div className="absolute -inset-1 rounded-2xl border-2 border-emerald-400/50 animate-ping opacity-30" />
+                      </div>
+
+                      {/* Text */}
+                      <div className="flex-1">
+                        <h3 className="font-extrabold text-lg text-white tracking-tight leading-tight mb-1 drop-shadow-sm">
+                          PASANG LOWONGAN
+                        </h3>
+                        <div className="flex items-center gap-2">
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                            <MessageCircle className="w-3 h-3" />
+                            WA Khusus Admin
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Arrow Button */}
+                      <div className="relative">
+                        <div className="absolute inset-0 bg-emerald-400 rounded-full blur-md opacity-50 group-hover:opacity-80 transition-opacity" />
+                        <div className="relative w-11 h-11 bg-gradient-to-br from-emerald-400 to-teal-500 rounded-full flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
+                          <ChevronRight className="w-6 h-6 text-white group-hover:translate-x-0.5 transition-transform" />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Bottom Accent Line */}
+                    <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-500 via-teal-400 to-emerald-500" />
+                  </div>
+                </motion.a>
+              );
+            }
+
+            // Regular Links
             return (
               <motion.a
                 key={link.id}
@@ -311,68 +446,31 @@ export default function Home() {
               >
                 <Card className={cn(
                   "relative overflow-hidden border transition-all duration-300 shadow-sm group",
-                  "flex items-center p-3.5 gap-4", // Increased padding slightly
-                  isPremium
-                    ? "bg-gradient-to-r from-emerald-500/10 via-emerald-500/5 to-transparent border-emerald-500/30 dark:border-emerald-500/20"
-                    : cn(
-                      "hover:shadow-md backdrop-blur-sm bg-background/40 hover:bg-background/60", // More subtle standard card
-                      link.baseTint // Permanent tint applied here
-                    )
+                  "flex items-center p-3.5 gap-4",
+                  "hover:shadow-md backdrop-blur-sm bg-background/40 hover:bg-background/60",
+                  link.baseTint
                 )}>
-                  {/* Premium Shine Effect */}
-                  {isPremium && (
-                    <>
-                      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-emerald-500/10 to-transparent translate-x-[-100%] animate-[shimmer_2.5s_infinite] pointer-events-none" />
-                      <div className="absolute top-0 right-0 p-1">
-                        <span className="flex h-2 w-2">
-                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                          <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                        </span>
-                      </div>
-                    </>
-                  )}
-
                   <div
                     className={cn(
                       "w-12 h-12 rounded-2xl flex items-center justify-center text-white shadow-lg transition-transform duration-500 group-hover:scale-110 group-hover:rotate-3",
-                      link.color,
-                      isPremium && "shadow-emerald-500/30 ring-4 ring-emerald-500/10"
+                      link.color
                     )}
                   >
-                    <link.icon className={cn("w-6 h-6", isPremium && "animate-pulse")} />
+                    <link.icon className="w-6 h-6" />
                   </div>
 
                   <div className="flex-1 min-w-0 z-10">
                     <div className="flex flex-col gap-0.5">
-                      <span className={cn(
-                        "font-bold text-base tracking-tight leading-none mb-1",
-                        isPremium
-                          ? "bg-gradient-to-br from-emerald-600 to-teal-600 dark:from-emerald-400 dark:to-teal-300 bg-clip-text text-transparent filter drop-shadow-sm"
-                          : "text-foreground group-hover:text-primary transition-colors"
-                      )}>
+                      <span className="font-bold text-base tracking-tight leading-none mb-1 text-foreground group-hover:text-primary transition-colors">
                         {link.label}
                       </span>
-
-                      <div className="flex items-center gap-2">
-                        {isPremium ? (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/20">
-                            {link.subLabel}
-                          </span>
-                        ) : (
-                          <span className="text-xs text-muted-foreground group-hover:text-foreground/80 transition-colors truncate">
-                            {link.subLabel}
-                          </span>
-                        )}
-                      </div>
+                      <span className="text-xs text-muted-foreground group-hover:text-foreground/80 transition-colors truncate">
+                        {link.subLabel}
+                      </span>
                     </div>
                   </div>
 
-                  <div className={cn(
-                    "w-8 h-8 rounded-full flex items-center justify-center transition-all duration-300",
-                    isPremium
-                      ? "bg-emerald-500 text-white shadow-lg shadow-emerald-500/20 translate-x-0 opacity-100"
-                      : "bg-transparent text-muted-foreground/50 opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 group-hover:bg-primary/10 group-hover:text-primary"
-                  )}>
+                  <div className="w-8 h-8 rounded-full flex items-center justify-center transition-all duration-300 bg-transparent text-muted-foreground/50 opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 group-hover:bg-primary/10 group-hover:text-primary">
                     <ChevronRight className="w-5 h-5" />
                   </div>
                 </Card>
