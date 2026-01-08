@@ -113,6 +113,7 @@ export interface QueuePost {
     // Joined data (optional)
     package?: PostingPackage;
     addon_details?: PostingAddon[];
+    gallery?: string[]; // Virtual field for UI
 }
 
 export interface QueueColumn {
@@ -127,12 +128,28 @@ export interface QueueColumn {
 // Finance/Keuangan Types
 // ============================================
 
+export type TransactionMode = "business" | "personal";
 export type TransactionType = "income" | "expense";
 export type TransactionStatus = "pending" | "paid";
-export type TransactionCategory = "posting" | "boost" | "promo" | "other";
+
+// Business income categories
+export type BusinessIncomeCategory = "posting" | "boost" | "sponsor" | "other_income";
+
+// Business expense categories  
+export type BusinessExpenseCategory = "internet" | "hosting" | "marketing" | "tools" | "other_biz";
+
+// Personal income categories
+export type PersonalIncomeCategory = "salary" | "freelance" | "gift" | "investment" | "other_personal_income";
+
+// Personal expense categories
+export type PersonalExpenseCategory = "food" | "transport" | "shopping" | "bills" | "health" | "entertainment" | "other";
+
+// Combined category type
+export type TransactionCategory = string;
 
 export interface Transaction {
     id: string;
+    mode: TransactionMode;
     type: TransactionType;
     amount: number;
     category: TransactionCategory;
@@ -145,6 +162,20 @@ export interface Transaction {
     payment_method?: "transfer" | "cash" | "ewallet";
     notes?: string;
     created_at: string;
+    updated_at?: string;
+}
+
+export interface FinanceDashboard {
+    total_balance: number;
+    business_income: number;
+    business_expense: number;
+    business_balance: number;
+    personal_income: number;
+    personal_expense: number;
+    personal_balance: number;
+    pending_amount: number;
+    monthly_income: number;
+    monthly_expense: number;
 }
 
 export interface FinanceSummary {
@@ -160,6 +191,35 @@ export interface MonthlyData {
     expense: number;
     posts: number;
 }
+
+// Category display helpers
+export const CATEGORY_CONFIG: Record<TransactionCategory, { label: string; icon: string; color: string }> = {
+    // Business Income
+    posting: { label: "Posting Loker", icon: "📝", color: "violet" },
+    boost: { label: "Boost", icon: "🚀", color: "violet" },
+    sponsor: { label: "Sponsor", icon: "🤝", color: "violet" },
+    other_income: { label: "Lainnya", icon: "💰", color: "violet" },
+    // Business Expense
+    internet: { label: "Internet", icon: "🌐", color: "purple" },
+    hosting: { label: "Hosting", icon: "🖥️", color: "purple" },
+    marketing: { label: "Marketing", icon: "📢", color: "purple" },
+    tools: { label: "Tools", icon: "🛠️", color: "purple" },
+    other_biz: { label: "Bisnis Lain", icon: "💼", color: "purple" },
+    // Personal Income
+    salary: { label: "Gaji", icon: "💵", color: "teal" },
+    freelance: { label: "Freelance", icon: "💻", color: "teal" },
+    gift: { label: "Hadiah", icon: "🎁", color: "teal" },
+    investment: { label: "Investasi", icon: "📈", color: "teal" },
+    other_personal_income: { label: "Lainnya", icon: "💸", color: "teal" },
+    // Personal Expense
+    food: { label: "Makan", icon: "🍔", color: "emerald" },
+    transport: { label: "Transport", icon: "🚗", color: "emerald" },
+    shopping: { label: "Belanja", icon: "🛒", color: "emerald" },
+    bills: { label: "Tagihan", icon: "💡", color: "emerald" },
+    health: { label: "Kesehatan", icon: "💊", color: "emerald" },
+    entertainment: { label: "Hiburan", icon: "🎮", color: "emerald" },
+    other: { label: "Lainnya", icon: "📦", color: "emerald" },
+};
 
 // ============================================
 // Client Database Types

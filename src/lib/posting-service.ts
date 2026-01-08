@@ -1,5 +1,7 @@
 import { createClient } from "@/lib/supabase/client";
 import type { QueuePost, PostingPackage, PostingAddon, QueueStatus } from "@/lib/types";
+import { formatNewLokerMessage, formatStatusChangeMessage, sendTelegramMessage, sendTelegramPhoto } from "./telegram-service";
+import { syncPostingToTransaction } from "./finance-service";
 
 // ============================================
 // Fetch Functions
@@ -51,7 +53,14 @@ export async function getPostings(): Promise<{ data: QueuePost[]; error: string 
             .order("scheduled_date", { ascending: true });
 
         if (error) throw error;
-        return { data: data || [], error: null };
+
+        // Transform pipe-separated urls into gallery array
+        const posts = (data || []).map((post: QueuePost) => ({
+            ...post,
+            gallery: post.poster_url ? post.poster_url.split('|') : []
+        }));
+
+        return { data: posts, error: null };
     } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : "Failed to fetch postings";
         return { data: [], error: errorMessage };
@@ -69,6 +78,12 @@ export async function getPostingById(id: string): Promise<{ data: QueuePost | nu
             .single();
 
         if (error) throw error;
+
+        if (data) {
+            // Transform pipe-separated urls into gallery array
+            (data as QueuePost).gallery = data.poster_url ? data.poster_url.split('|') : [];
+        }
+
         return { data, error: null };
     } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : "Failed to fetch posting";
@@ -80,16 +95,21 @@ export async function getPostingById(id: string): Promise<{ data: QueuePost | nu
 // CRUD Functions
 // ============================================
 
-export async function createPosting(posting: Omit<QueuePost, "id" | "created_at" | "updated_at">): Promise<{ data: QueuePost | null; error: string | null }> {
+export async function createPosting(posting: Omit<QueuePost, "id" | "created_at" | "updated_at" | "gallery"> & { gallery?: string[] }): Promise<{ data: QueuePost | null; error: string | null }> {
     const supabase = createClient();
 
     try {
+        // If gallery exists, join it to poster_url
+        const posterUrl = posting.gallery && posting.gallery.length > 0
+            ? posting.gallery.join('|')
+            : posting.poster_url;
+
         const { data, error } = await supabase
             .from("posting_queue")
             .insert({
                 company_name: posting.company_name,
                 whatsapp_number: posting.whatsapp_number,
-                poster_url: posting.poster_url,
+                poster_url: posterUrl,
                 scheduled_date: posting.scheduled_date,
                 scheduled_time: posting.scheduled_time,
                 package_id: posting.package_id,
@@ -102,6 +122,35 @@ export async function createPosting(posting: Omit<QueuePost, "id" | "created_at"
             .single();
 
         if (error) throw error;
+
+        if (data) {
+            (data as QueuePost).gallery = data.poster_url ? data.poster_url.split('|') : [];
+
+            // Sync to finance if not draft
+            if (data.status !== "draft") {
+                await syncPostingToTransaction({
+                    id: data.id,
+                    company_name: data.company_name,
+                    total_price: data.total_price,
+                    scheduled_date: data.scheduled_date
+                });
+            }
+
+            // Send Telegram Notification
+            try {
+                const message = formatNewLokerMessage(data as QueuePost);
+                const poster = (data as QueuePost).gallery?.[0] || (data as QueuePost).poster_url;
+
+                if (poster) {
+                    await sendTelegramPhoto(poster, message);
+                } else {
+                    await sendTelegramMessage(message);
+                }
+            } catch (err) {
+                console.error("Failed to send telegram notification", err);
+            }
+        }
+
         return { data, error: null };
     } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : "Failed to create posting";
@@ -113,17 +162,53 @@ export async function updatePosting(id: string, posting: Partial<QueuePost>): Pr
     const supabase = createClient();
 
     try {
+        const updateData: any = { ...posting, updated_at: new Date().toISOString() };
+
+        // Handle gallery update
+        if (posting.gallery) {
+            updateData.poster_url = posting.gallery.length > 0 ? posting.gallery.join('|') : null;
+            delete updateData.gallery;
+        }
+
         const { data, error } = await supabase
             .from("posting_queue")
-            .update({
-                ...posting,
-                updated_at: new Date().toISOString(),
-            })
+            .update(updateData)
             .eq("id", id)
             .select()
             .single();
 
         if (error) throw error;
+
+        if (data) {
+            (data as QueuePost).gallery = data.poster_url ? data.poster_url.split('|') : [];
+
+            // Sync to finance if not draft
+            if (data.status !== "draft") {
+                await syncPostingToTransaction({
+                    id: data.id,
+                    company_name: data.company_name,
+                    total_price: data.total_price,
+                    scheduled_date: data.scheduled_date
+                });
+            }
+
+            // Send Telegram Notification (Optional context: only on major updates?)
+            // We'll trust the user wants reports on "updates" too if status is relevant
+            try {
+                if (data.status !== "draft") {
+                    const message = formatNewLokerMessage(data as QueuePost);
+                    const poster = (data as QueuePost).gallery?.[0] || (data as QueuePost).poster_url;
+
+                    // Differentiate update vs new? For simplicity, we resend the info card.
+                    if (poster) {
+                        await sendTelegramPhoto(poster, message + "\n\n(Updated)");
+                    }
+                }
+            } catch (err) {
+                console.error("Failed to send telegram notification", err);
+            }
+        }
+
         return { data, error: null };
     } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : "Failed to update posting";
@@ -144,6 +229,41 @@ export async function updatePostingStatus(id: string, status: QueueStatus): Prom
             .eq("id", id);
 
         if (error) throw error;
+
+        // Sync to finance if not draft
+        if (status !== "draft") {
+            const { data: posting } = await getPostingById(id);
+            if (posting) {
+                await syncPostingToTransaction({
+                    id: posting.id,
+                    company_name: posting.company_name,
+                    total_price: posting.total_price,
+                    scheduled_date: posting.scheduled_date
+                });
+
+                // Send Telegram Notification
+                try {
+                    const poster = posting.gallery?.[0] || posting.poster_url;
+                    let message = "";
+
+                    if (status === "posted") {
+                        message = `<b>✅ LOKER SUDAH DIPOSTING!</b>\n\n🏢 <b>${posting.company_name}</b> sekarang live.\n\n<a href="${poster}">Lihat Poster</a>`;
+                        if (poster) await sendTelegramPhoto(poster, message);
+                        else await sendTelegramMessage(message);
+                    } else if (status === "queued") {
+                        message = formatNewLokerMessage(posting);
+                        if (poster) await sendTelegramPhoto(poster, message);
+                        else await sendTelegramMessage(message);
+                    } else {
+                        message = formatStatusChangeMessage(posting, "Previous", status);
+                        await sendTelegramMessage(message);
+                    }
+                } catch (err) {
+                    console.error("Failed to send telegram notification", err);
+                }
+            }
+        }
+
         return { success: true, error: null };
     } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : "Failed to update status";

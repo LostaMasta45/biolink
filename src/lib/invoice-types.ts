@@ -2,7 +2,8 @@
 
 export type InvoiceStatus = "draft" | "sent" | "paid" | "cancelled";
 export type DiscountType = "percent" | "nominal";
-export type InvoiceTemplate = "modern" | "professional" | "creative" | "classic" | "elegant" | "dark";
+export type InvoiceTemplate = "modern" | "professional" | "creative" | "classic" | "elegant" | "dark" | "minimalist" | "bold" | "tech" | "geometric";
+export type InvoiceColorTheme = "default" | "blue" | "green" | "purple" | "red" | "orange" | "pink" | "indigo" | "slate";
 
 export interface Client {
     id: string;
@@ -44,6 +45,11 @@ export interface InvoiceData {
     client_phone?: string;
     client_address?: string;
 
+    // Sender info (Optional - defaults to app config if empty)
+    sender_name?: string;
+    sender_address?: string;
+    sender_contact?: string;
+
     // Dates
     invoice_date: string;
     due_date?: string;
@@ -68,7 +74,11 @@ export interface InvoiceData {
 
     // Template & Status
     template: InvoiceTemplate;
+    color_theme?: InvoiceColorTheme;
     status: InvoiceStatus;
+
+    // Logo
+    logo_url?: string;
 
     // Notes
     notes?: string;
@@ -87,6 +97,22 @@ export const INVOICE_TEMPLATES: { id: InvoiceTemplate; name: string; description
     { id: "classic", name: "Classic", description: "Traditional invoice design" },
     { id: "elegant", name: "Elegant", description: "Sophisticated with subtle patterns" },
     { id: "dark", name: "Dark Mode", description: "Dark themed invoice" },
+    { id: "minimalist", name: "Minimalist", description: "Ultra-clean, whitespace focused" },
+    { id: "bold", name: "Bold Impact", description: "High contrast, strong typography" },
+    { id: "tech", name: "Tech / Neo", description: "Monospace font, grid lines" },
+    { id: "geometric", name: "Geometric", description: "Asymmetric layout with shapes" },
+];
+
+export const INVOICE_THEMES: { id: InvoiceColorTheme; name: string; color: string; hex: string }[] = [
+    { id: "default", name: "Default", color: "bg-slate-500", hex: "#64748b" },
+    { id: "blue", name: "Blue", color: "bg-blue-600", hex: "#2563eb" },
+    { id: "green", name: "Green", color: "bg-emerald-600", hex: "#059669" },
+    { id: "purple", name: "Purple", color: "bg-purple-600", hex: "#9333ea" },
+    { id: "red", name: "Red", color: "bg-red-600", hex: "#dc2626" },
+    { id: "orange", name: "Orange", color: "bg-orange-600", hex: "#ea580c" },
+    { id: "pink", name: "Pink", color: "bg-pink-600", hex: "#db2777" },
+    { id: "indigo", name: "Indigo", color: "bg-indigo-600", hex: "#4f46e5" },
+    { id: "slate", name: "Slate", color: "bg-slate-800", hex: "#1e293b" },
 ];
 
 export const INVOICE_STATUSES: { id: InvoiceStatus; name: string; color: string }[] = [

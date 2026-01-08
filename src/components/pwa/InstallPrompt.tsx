@@ -52,6 +52,7 @@ export function InstallPrompt() {
             {/* iOS Guide Modal */}
             {showIOSGuide && (
                 <motion.div
+                    key="ios-guide"
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
@@ -127,6 +128,7 @@ export function InstallPrompt() {
 
             {/* Install Banner */}
             <motion.div
+                key="install-banner"
                 initial={{ opacity: 0, y: 50 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: 50 }}

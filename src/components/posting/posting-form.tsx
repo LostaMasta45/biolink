@@ -33,9 +33,9 @@ export function PostingForm({ open, onOpenChange, packages, addons, editData, on
     const [notes, setNotes] = useState("");
 
     // Poster state
-    const [posterFile, setPosterFile] = useState<File | null>(null);
-    const [posterPreview, setPosterPreview] = useState<string | null>(null);
-    const [existingPosterUrl, setExistingPosterUrl] = useState<string | null>(null);
+    const [posterFiles, setPosterFiles] = useState<File[]>([]);
+    const [posterPreviews, setPosterPreviews] = useState<string[]>([]);
+    const [existingGallery, setExistingGallery] = useState<string[]>([]);
 
     // UI state
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -51,7 +51,16 @@ export function PostingForm({ open, onOpenChange, packages, addons, editData, on
             setSelectedPackageId(editData.package_id);
             setSelectedAddons(editData.addons || []);
             setNotes(editData.notes || "");
-            setExistingPosterUrl(editData.poster_url || null);
+
+            // Handle existing gallery
+            if (editData.gallery && editData.gallery.length > 0) {
+                setExistingGallery(editData.gallery);
+            } else if (editData.poster_url) {
+                // Fallback for old single url data
+                setExistingGallery([editData.poster_url]);
+            } else {
+                setExistingGallery([]);
+            }
         } else {
             resetForm();
         }
@@ -65,9 +74,9 @@ export function PostingForm({ open, onOpenChange, packages, addons, editData, on
         setSelectedPackageId(3);
         setSelectedAddons([]);
         setNotes("");
-        setPosterFile(null);
-        setPosterPreview(null);
-        setExistingPosterUrl(null);
+        setPosterFiles([]);
+        setPosterPreviews([]);
+        setExistingGallery([]);
     };
 
     // Calculate total price
@@ -80,25 +89,37 @@ export function PostingForm({ open, onOpenChange, packages, addons, editData, on
 
     // Handle file selection
     const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (file) {
-            if (file.size > 5 * 1024 * 1024) {
-                toast.error("Ukuran file maksimal 5MB");
+        const files = Array.from(e.target.files || []);
+
+        const validFiles: File[] = [];
+        const newPreviews: string[] = [];
+
+        files.forEach(file => {
+            // Increased limit to 50MB
+            if (file.size > 50 * 1024 * 1024) {
+                toast.error(`File ${file.name} terlalu besar (max 50MB)`);
                 return;
             }
-            setPosterFile(file);
-            setPosterPreview(URL.createObjectURL(file));
-            setExistingPosterUrl(null);
+            validFiles.push(file);
+            newPreviews.push(URL.createObjectURL(file));
+        });
+
+        if (validFiles.length > 0) {
+            setPosterFiles(prev => [...prev, ...validFiles]);
+            setPosterPreviews(prev => [...prev, ...newPreviews]);
         }
+
+        // Reset input for consistent change events
+        if (fileInputRef.current) fileInputRef.current.value = "";
     };
 
-    const handleRemovePoster = () => {
-        setPosterFile(null);
-        setPosterPreview(null);
-        setExistingPosterUrl(null);
-        if (fileInputRef.current) {
-            fileInputRef.current.value = "";
-        }
+    const handleRemoveNew = (index: number) => {
+        setPosterFiles(prev => prev.filter((_, i) => i !== index));
+        setPosterPreviews(prev => prev.filter((_, i) => i !== index));
+    };
+
+    const handleRemoveExisting = (index: number) => {
+        setExistingGallery(prev => prev.filter((_, i) => i !== index));
     };
 
     // Handle addon toggle
@@ -108,6 +129,20 @@ export function PostingForm({ open, onOpenChange, packages, addons, editData, on
                 ? prev.filter(id => id !== addonId)
                 : [...prev, addonId]
         );
+    };
+
+    // Handle WhatsApp Formatting
+    const handleWhatsappChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        let value = e.target.value.replace(/\D/g, ""); // Remove non-digits
+
+        // Auto-format logic
+        if (value.startsWith("0")) {
+            value = "62" + value.slice(1);
+        } else if (value.startsWith("8")) {
+            value = "62" + value;
+        }
+
+        setWhatsappNumber(value);
     };
 
     // Handle form submit
@@ -129,23 +164,33 @@ export function PostingForm({ open, onOpenChange, packages, addons, editData, on
         setIsSubmitting(true);
 
         try {
-            let posterUrl = existingPosterUrl;
+            // Start with existing gallery
+            const finalGallery = [...existingGallery];
 
-            // Upload new poster if selected
-            if (posterFile) {
-                const { url, error: uploadError } = await uploadPoster(posterFile);
-                if (uploadError) {
-                    toast.error(`Gagal upload poster: ${uploadError}`);
+            // Upload new posters
+            if (posterFiles.length > 0) {
+                const uploadPromises = posterFiles.map(file => uploadPoster(file));
+                const results = await Promise.all(uploadPromises);
+
+                // Check for errors
+                const failed = results.filter(r => r.error);
+                if (failed.length > 0) {
+                    toast.error(`Gagal upload ${failed.length} gambar`);
                     setIsSubmitting(false);
                     return;
                 }
-                posterUrl = url;
+
+                // Collect successful URLs
+                results.forEach(r => {
+                    if (r.url) finalGallery.push(r.url);
+                });
             }
 
             const postingData = {
                 company_name: companyName.trim(),
                 whatsapp_number: whatsappNumber.trim(),
-                poster_url: posterUrl || undefined,
+                gallery: finalGallery,
+                poster_url: undefined, // Let service handle joining
                 scheduled_date: scheduledDate,
                 scheduled_time: scheduledTime,
                 package_id: selectedPackageId,
@@ -215,62 +260,81 @@ export function PostingForm({ open, onOpenChange, packages, addons, editData, on
                                     Nomor WhatsApp
                                 </Label>
                                 <Input
-                                    placeholder="081234567890"
+                                    placeholder="6281234567890"
                                     value={whatsappNumber}
-                                    onChange={(e) => setWhatsappNumber(e.target.value)}
+                                    onChange={handleWhatsappChange}
                                 />
                             </div>
                         </div>
 
                         {/* Poster Upload */}
-                        <div className="space-y-2">
+                        <div className="space-y-4">
                             <Label className="flex items-center gap-2">
                                 <Upload className="w-4 h-4" />
                                 Poster Lowongan
                             </Label>
-                            <div
-                                className={cn(
-                                    "relative border-2 border-dashed rounded-xl transition-colors",
-                                    "hover:border-primary/50 hover:bg-primary/5",
-                                    posterPreview || existingPosterUrl ? "border-primary" : "border-muted-foreground/30"
-                                )}
-                            >
-                                {posterPreview || existingPosterUrl ? (
-                                    <div className="relative aspect-[4/3] max-h-[300px] overflow-hidden rounded-lg">
+
+                            {/* Gallery Grid */}
+                            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                                {/* Existing & New Previews */}
+                                {[...(existingGallery || []), ...posterPreviews].map((url, index) => (
+                                    <div key={index} className="relative aspect-square rounded-xl overflow-hidden border bg-muted group">
                                         {/* eslint-disable-next-line @next/next/no-img-element */}
                                         <img
-                                            src={posterPreview || existingPosterUrl || ""}
-                                            alt="Poster preview"
-                                            className="w-full h-full object-contain bg-muted"
+                                            src={url}
+                                            alt={`Poster ${index + 1}`}
+                                            className="w-full h-full object-cover transition-transform group-hover:scale-105"
                                         />
-                                        <Button
-                                            type="button"
-                                            variant="destructive"
-                                            size="icon"
-                                            className="absolute top-2 right-2 h-8 w-8"
-                                            onClick={handleRemovePoster}
-                                        >
-                                            <X className="w-4 h-4" />
-                                        </Button>
+                                        <div className="absolute inset-x-0 bottom-0 p-2 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex justify-end">
+                                            <Button
+                                                type="button"
+                                                variant="destructive"
+                                                size="icon"
+                                                className="h-8 w-8 rounded-full"
+                                                onClick={() => {
+                                                    // Determine if it's an existing URL or a new file preview
+                                                    const existingCount = existingGallery?.length || 0;
+                                                    if (index < existingCount) {
+                                                        handleRemoveExisting(index);
+                                                    } else {
+                                                        handleRemoveNew(index - existingCount);
+                                                    }
+                                                }}
+                                            >
+                                                <X className="w-4 h-4" />
+                                            </Button>
+                                        </div>
                                     </div>
-                                ) : (
-                                    <label className="flex flex-col items-center justify-center py-10 cursor-pointer">
-                                        <Upload className="w-10 h-10 text-muted-foreground/50 mb-3" />
-                                        <span className="text-sm text-muted-foreground">
-                                            Klik atau drag & drop untuk upload
-                                        </span>
-                                        <span className="text-xs text-muted-foreground/70 mt-1">
-                                            PNG, JPG, max 5MB
-                                        </span>
-                                        <input
-                                            ref={fileInputRef}
-                                            type="file"
-                                            accept="image/*"
-                                            className="hidden"
-                                            onChange={handleFileSelect}
-                                        />
-                                    </label>
-                                )}
+                                ))}
+
+                                {/* Add Button */}
+                                <label className={cn(
+                                    "relative aspect-square rounded-xl border-2 border-dashed flex flex-col items-center justify-center cursor-pointer transition-all",
+                                    "hover:border-primary/50 hover:bg-primary/5 border-muted-foreground/30",
+                                    (existingGallery?.length || 0) + posterFiles.length === 0 ? "col-span-2 md:col-span-3 aspect-[3/1]" : ""
+                                )}>
+                                    <div className="flex flex-col items-center gap-2 p-4 text-center">
+                                        <div className="p-3 bg-muted rounded-full">
+                                            <Upload className="w-6 h-6 text-muted-foreground" />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <p className="text-sm font-medium">
+                                                {(existingGallery?.length || 0) + posterFiles.length === 0 ? "Upload Poster" : "Tambah Poster"}
+                                            </p>
+                                            <p className="text-xs text-muted-foreground">
+                                                PNG, JPG (Max 5MB)
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <input
+                                        ref={fileInputRef}
+                                        type="file"
+                                        accept="image/*"
+                                        multiple
+                                        className="hidden"
+                                        onChange={handleFileSelect}
+                                    />
+                                </label>
                             </div>
                         </div>
 

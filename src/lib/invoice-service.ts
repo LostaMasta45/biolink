@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/client";
 import type { InvoiceData, InvoiceItemData, Client, BankAccount } from "./invoice-types";
+import { formatInvoiceMessage, sendTelegramMessage } from "./telegram-service";
 
 // ============================================
 // INVOICE SERVICES
@@ -7,6 +8,7 @@ import type { InvoiceData, InvoiceItemData, Client, BankAccount } from "./invoic
 
 export async function saveInvoice(invoice: InvoiceData): Promise<{ data: InvoiceData | null; error: string | null }> {
     const supabase = createClient();
+    const isUpdate = !!invoice.id;
 
     try {
         // First, save the invoice
@@ -19,6 +21,9 @@ export async function saveInvoice(invoice: InvoiceData): Promise<{ data: Invoice
                 client_name: invoice.client_name,
                 client_phone: invoice.client_phone,
                 client_address: invoice.client_address,
+                sender_name: invoice.sender_name,
+                sender_address: invoice.sender_address,
+                sender_contact: invoice.sender_contact,
                 invoice_date: invoice.invoice_date,
                 due_date: invoice.due_date,
                 subtotal: invoice.subtotal,
@@ -33,9 +38,11 @@ export async function saveInvoice(invoice: InvoiceData): Promise<{ data: Invoice
                 bank_account_number: invoice.bank_account_number,
                 bank_account_name: invoice.bank_account_name,
                 template: invoice.template,
+                color_theme: invoice.color_theme,
                 status: invoice.status,
                 notes: invoice.notes,
                 terms: invoice.terms,
+                logo_url: invoice.logo_url,
             })
             .select()
             .single();
@@ -56,6 +63,14 @@ export async function saveInvoice(invoice: InvoiceData): Promise<{ data: Invoice
 
             const { error: itemsError } = await supabase.from("invoice_items").insert(itemsToInsert);
             if (itemsError) throw itemsError;
+        }
+
+        // Send Telegram Notification
+        try {
+            const message = formatInvoiceMessage({ ...invoice, id: invoiceResult?.id }, isUpdate);
+            await sendTelegramMessage(message);
+        } catch (err) {
+            console.error("Failed to send telegram notification for invoice", err);
         }
 
         return { data: { ...invoice, id: invoiceResult?.id }, error: null };

@@ -1,285 +1,908 @@
 "use client";
 
-import { useState } from "react";
-import { motion } from "framer-motion";
+import { useState, useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import {
-    ArrowLeft,
     Plus,
     TrendingUp,
     TrendingDown,
     Wallet,
-    Calendar,
-    Filter,
+    Building2,
+    Home,
     Download,
-    MoreHorizontal,
+    RefreshCw,
+    Search,
+    Filter,
+    X,
+    Edit3,
+    Trash2,
+    MoreVertical,
+    Calendar,
+    ArrowUpRight,
+    ArrowDownRight,
+    Clock,
+    CheckCircle2,
+    PieChart,
+    BarChart3,
+    ArrowRightLeft,
+    ChevronDown,
+    Check
 } from "lucide-react";
-import Link from "next/link";
-import { formatRupiah, formatDateShort } from "@/lib/utils";
-import type { Transaction, TransactionCategory } from "@/lib/types";
+import { formatRupiah } from "@/lib/utils";
+import type {
+    Transaction,
+    TransactionMode,
+    TransactionType,
+    TransactionCategory,
+    FinanceDashboard,
+    BusinessIncomeCategory,
+    BusinessExpenseCategory,
+    PersonalIncomeCategory,
+    PersonalExpenseCategory,
+} from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from "@/components/ui/table";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue
+} from "@/components/ui/select";
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogFooter,
+} from "@/components/ui/dialog";
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+    DropdownMenuSeparator,
+    DropdownMenuLabel,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Textarea } from "@/components/ui/textarea";
+import {
+    getTransactions,
+    getFinanceDashboard,
+    getMonthlyData,
+    createTransaction,
+    updateTransaction,
+    deleteTransaction,
+    getCategoryIcon,
+    getCategoryLabel,
+    type TransactionFilters,
+} from "@/lib/finance-service";
+import toast from "react-hot-toast";
 
-// Mock data
-const mockTransactions: Transaction[] = [
-    {
-        id: "1",
-        type: "income",
-        amount: 75000,
-        category: "posting",
-        description: "Posting loker",
-        client: "PT Maju Jaya",
-        date: "2024-12-19",
-        status: "paid",
-        payment_method: "transfer",
-        created_at: new Date().toISOString(),
-    },
-    {
-        id: "2",
-        type: "income",
-        amount: 50000,
-        category: "posting",
-        description: "Posting loker",
-        client: "CV Berkah Sejahtera",
-        date: "2024-12-18",
-        status: "pending",
-        created_at: new Date().toISOString(),
-    },
-    {
-        id: "3",
-        type: "income",
-        amount: 100000,
-        category: "promo",
-        description: "Paket promo 1 minggu",
-        client: "PT XYZ Indonesia",
-        date: "2024-12-17",
-        status: "paid",
-        payment_method: "ewallet",
-        created_at: new Date().toISOString(),
-    },
-    {
-        id: "4",
-        type: "income",
-        amount: 25000,
-        category: "boost",
-        description: "Boost post",
-        client: "Toko Makmur",
-        date: "2024-12-16",
-        status: "paid",
-        payment_method: "cash",
-        created_at: new Date().toISOString(),
-    },
+// ============================================
+// CONFIGURATION
+// ============================================
+
+const BUSINESS_INCOME_CATEGORIES: { value: BusinessIncomeCategory; label: string; icon: string }[] = [
+    { value: "posting", label: "Posting Loker", icon: "📝" },
+    { value: "boost", label: "Boost Iklan", icon: "🚀" },
+    { value: "sponsor", label: "Sponsorship", icon: "🤝" },
+    { value: "other_income", label: "Lainnya", icon: "💰" },
 ];
 
-const mockMonthlyData = [
-    { month: "Jul", income: 450000 },
-    { month: "Aug", income: 620000 },
-    { month: "Sep", income: 580000 },
-    { month: "Oct", income: 750000 },
-    { month: "Nov", income: 890000 },
-    { month: "Dec", income: 850000 },
+const BUSINESS_EXPENSE_CATEGORIES: { value: BusinessExpenseCategory; label: string; icon: string }[] = [
+    { value: "internet", label: "Internet", icon: "🌐" },
+    { value: "hosting", label: "Server/Hosting", icon: "🖥️" },
+    { value: "marketing", label: "Marketing", icon: "📢" },
+    { value: "tools", label: "Software Tools", icon: "🛠️" },
+    { value: "other_biz", label: "Operasional Lain", icon: "💼" },
 ];
+
+const PERSONAL_INCOME_CATEGORIES: { value: PersonalIncomeCategory; label: string; icon: string }[] = [
+    { value: "salary", label: "Gaji/Upah", icon: "💵" },
+    { value: "freelance", label: "Freelance", icon: "💻" },
+    { value: "gift", label: "Hadiah/Bonus", icon: "🎁" },
+    { value: "investment", label: "Investasi", icon: "📈" },
+    { value: "other_personal_income", label: "Lainnya", icon: "💸" },
+];
+
+const PERSONAL_EXPENSE_CATEGORIES: { value: PersonalExpenseCategory; label: string; icon: string }[] = [
+    { value: "food", label: "Makan & Minum", icon: "🍔" },
+    { value: "transport", label: "Transportasi", icon: "🚗" },
+    { value: "shopping", label: "Belanja", icon: "🛒" },
+    { value: "bills", label: "Tagihan Rutin", icon: "💡" },
+    { value: "health", label: "Kesehatan", icon: "💊" },
+    { value: "entertainment", label: "Hiburan", icon: "🎮" },
+    { value: "other", label: "Lainnya", icon: "📦" },
+];
+
+// ============================================
+// COMPONENT
+// ============================================
 
 export default function KeuanganPage() {
-    const [transactions] = useState<Transaction[]>(mockTransactions);
-    const [filterStatus, setFilterStatus] = useState<"all" | "paid" | "pending">(
-        "all"
-    );
+    const [transactions, setTransactions] = useState<Transaction[]>([]);
+    const [dashboard, setDashboard] = useState<FinanceDashboard | null>(null);
+    const [monthlyData, setMonthlyData] = useState<{ month: string; income: number; expense: number }[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
 
-    const totalIncome = transactions
-        .filter((t) => t.type === "income" && t.status === "paid")
-        .reduce((sum, t) => sum + t.amount, 0);
+    // UI State
+    const [activeTab, setActiveTab] = useState<"dashboard" | "business" | "personal">("dashboard");
+    const [searchQuery, setSearchQuery] = useState("");
+    const [filterType, setFilterType] = useState<TransactionType | "all">("all");
+    const [filterStatus, setFilterStatus] = useState<"all" | "paid" | "pending">("all");
 
-    const monthlyIncome = transactions
-        .filter(
-            (t) =>
-                t.type === "income" &&
-                t.status === "paid" &&
-                new Date(t.date).getMonth() === new Date().getMonth()
-        )
-        .reduce((sum, t) => sum + t.amount, 0);
+    // Form State
+    const [formOpen, setFormOpen] = useState(false);
+    const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
+    const [formMode, setFormMode] = useState<TransactionMode>("business");
+    const [formType, setFormType] = useState<TransactionType>("income");
+    const [formAmount, setFormAmount] = useState("");
+    const [formCategory, setFormCategory] = useState<TransactionCategory>("posting");
+    const [formDescription, setFormDescription] = useState("");
+    const [formDate, setFormDate] = useState(new Date().toISOString().split("T")[0]);
+    const [formStatus, setFormStatus] = useState<"paid" | "pending">("paid");
+    const [formClient, setFormClient] = useState("");
 
-    const pendingAmount = transactions
-        .filter((t) => t.status === "pending")
-        .reduce((sum, t) => sum + t.amount, 0);
+    // New Category State
+    const [isAddingCategory, setIsAddingCategory] = useState(false);
+    const [newCategoryName, setNewCategoryName] = useState("");
 
-    const filteredTransactions = transactions.filter((t) => {
-        if (filterStatus === "all") return true;
-        return t.status === filterStatus;
+    const [deleteId, setDeleteId] = useState<string | null>(null);
+
+    // Initial Load
+    useEffect(() => {
+        loadData();
+    }, []);
+
+    const loadData = async () => {
+        setIsLoading(true);
+        try {
+            const [txRes, dashRes, monthRes] = await Promise.all([
+                getTransactions(),
+                getFinanceDashboard(),
+                getMonthlyData(6),
+            ]);
+
+            if (txRes.error) toast.error(txRes.error);
+            setTransactions(txRes.data);
+            setDashboard(dashRes.data);
+            setMonthlyData(monthRes.data);
+        } catch (err) {
+            console.error(err);
+            toast.error("Gagal memuat data");
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    // Filter Logic
+    const filteredTransactions = transactions.filter(t => {
+        if (activeTab === "business" && t.mode !== "business") return false;
+        if (activeTab === "personal" && t.mode !== "personal") return false;
+
+        if (searchQuery) {
+            const query = searchQuery.toLowerCase();
+            if (!t.description?.toLowerCase().includes(query) &&
+                !t.client?.toLowerCase().includes(query) &&
+                !getCategoryLabel(t.category).toLowerCase().includes(query)) {
+                return false;
+            }
+        }
+
+        if (filterType !== "all" && t.type !== filterType) return false;
+        if (filterStatus !== "all" && t.status !== filterStatus) return false;
+
+        return true;
     });
 
-    const maxIncome = Math.max(...mockMonthlyData.map((d) => d.income));
+    const getFormCategories = () => {
+        let defaultCats: { value: string; label: string; icon: string }[] = [];
+
+        if (formMode === "business") {
+            defaultCats = formType === "income" ? BUSINESS_INCOME_CATEGORIES : BUSINESS_EXPENSE_CATEGORIES;
+        } else {
+            defaultCats = formType === "income" ? PERSONAL_INCOME_CATEGORIES : PERSONAL_EXPENSE_CATEGORIES;
+        }
+
+        // Find used categories from existing transactions
+        const usedCats = new Set<string>();
+        transactions.forEach(t => {
+            if (t.mode === formMode && t.type === formType) {
+                usedCats.add(t.category);
+            }
+        });
+
+        // Filter out those that are already in default lists to avoid duplicates
+        const defaultValues = new Set(defaultCats.map(c => c.value));
+        const dynamicCats = Array.from(usedCats)
+            .filter(c => !defaultValues.has(c))
+            .map(c => ({ value: c, label: c, icon: "✨" }));
+
+        return [...defaultCats, ...dynamicCats];
+    };
+
+    const handleAddCategory = () => {
+        if (!newCategoryName.trim()) {
+            setIsAddingCategory(false);
+            return;
+        }
+        setFormCategory(newCategoryName.trim());
+        setIsAddingCategory(false);
+        setNewCategoryName("");
+    };
+
+    const handleFormSubmit = async () => {
+        if (!formAmount || Number(formAmount) <= 0) {
+            toast.error("Masukkan jumlah yang valid");
+            return;
+        }
+
+        try {
+            const payload = {
+                mode: formMode,
+                type: formType,
+                amount: Number(formAmount),
+                category: formCategory,
+                description: formDescription,
+                date: formDate,
+                status: formStatus,
+                client: formClient || undefined,
+            };
+
+            if (editingTransaction) {
+                const { error } = await updateTransaction(editingTransaction.id, payload);
+                if (error) throw new Error(error);
+                toast.success("Transaksi diperbarui!");
+            } else {
+                const { error } = await createTransaction(payload);
+                if (error) throw new Error(error);
+                toast.success("Transaksi ditambahkan!");
+            }
+
+            setFormOpen(false);
+            resetForm();
+            loadData();
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : "Gagal menyimpan");
+        }
+    };
+
+    const resetForm = () => {
+        setEditingTransaction(null);
+        setFormAmount("");
+        setFormDescription("");
+        setFormDate(new Date().toISOString().split("T")[0]);
+        setFormStatus("paid");
+        setFormClient("");
+        // Reset category based on current mode/type defaults
+        if (formMode === "business") setFormCategory(formType === "income" ? "posting" : "internet");
+        else setFormCategory(formType === "income" ? "salary" : "food");
+    };
+
+    const handleDelete = async () => {
+        if (!deleteId) return;
+        const { error } = await deleteTransaction(deleteId);
+        if (error) toast.error(error);
+        else {
+            toast.success("Transaksi dihapus");
+            loadData();
+        }
+        setDeleteId(null);
+    };
+
+    const maxChartValue = Math.max(...monthlyData.map(d => Math.max(d.income, d.expense)), 1);
 
     return (
-        <div className="space-y-6">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="space-y-8 animate-in fade-in duration-500 pb-20">
+            {/* Header Section */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
-                    <h1 className="text-3xl font-bold tracking-tight">Keuangan</h1>
-                    <p className="text-muted-foreground">
-                        Laporan pemasukan dan arus kas
+                    <h1 className="text-3xl md:text-4xl font-bold tracking-tight bg-gradient-to-r from-foreground to-foreground/60 bg-clip-text text-transparent">
+                        Keuangan
+                    </h1>
+                    <p className="text-sm md:text-base text-muted-foreground mt-1">
+                        Monitoring arus kas bisnis dan pengeluaran personal
                     </p>
                 </div>
-                <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-                    <Button variant="outline" className="flex-1 sm:flex-none">
-                        <Download className="mr-2 h-4 w-4" /> Export
+                <div className="flex flex-wrap items-center gap-2">
+                    <Button variant="outline" size="sm" onClick={loadData} disabled={isLoading} className="h-9 flex-1 sm:flex-none">
+                        <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
+                        Sync
                     </Button>
-                    <Dialog>
-                        <DialogTrigger asChild>
-                            <Button className="flex-1 sm:flex-none">
-                                <Plus className="mr-2 h-4 w-4" /> Catat Transaksi
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button variant="outline" size="sm" className="h-9 flex-1 sm:flex-none">
+                                <Download className="w-4 h-4 mr-2" /> Export
                             </Button>
-                        </DialogTrigger>
-                        <DialogContent>
-                            <DialogHeader>
-                                <DialogTitle>Catat Transaksi Baru</DialogTitle>
-                            </DialogHeader>
-                            <div className="space-y-4 py-4">
-                                <div className="space-y-2">
-                                    <Label>Jenis</Label>
-                                    <Select defaultValue="income">
-                                        <SelectTrigger>
-                                            <SelectValue />
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                            <DropdownMenuItem>Export CSV</DropdownMenuItem>
+                            <DropdownMenuItem>Export PDF</DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                    <Button onClick={() => { resetForm(); setFormOpen(true); }} className="h-9 bg-primary hover:bg-primary/90 shadow-lg shadow-primary/20 flex-1 sm:flex-none w-full sm:w-auto">
+                        <Plus className="w-4 h-4 mr-2" /> Transaksi Baru
+                    </Button>
+                </div>
+            </div>
+
+            {/* Custom Tabs - Fit to screen on mobile */}
+            <div className="w-full">
+                <div className="flex items-center bg-muted/50 p-1 rounded-xl w-full sm:w-fit border border-border/50">
+                    {(["dashboard", "business", "personal"] as const).map((tab) => (
+                        <button
+                            key={tab}
+                            onClick={() => setActiveTab(tab)}
+                            className={`
+                                relative flex-1 sm:flex-none px-2 sm:px-6 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all duration-200 z-10 text-center
+                                ${activeTab === tab ? "text-foreground" : "text-muted-foreground hover:text-foreground/80"}
+                            `}
+                        >
+                            {activeTab === tab && (
+                                <motion.div
+                                    layoutId="activeTab"
+                                    className="absolute inset-0 bg-background shadow-sm rounded-lg border border-border/50"
+                                    transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
+                                />
+                            )}
+                            <span className="relative z-10 flex items-center justify-center gap-1.5 sm:gap-2 whitespace-nowrap">
+                                {tab === "dashboard" && <PieChart className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
+                                {tab === "business" && <Building2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
+                                {tab === "personal" && <Home className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
+                                {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                            </span>
+                        </button>
+                    ))}
+                </div>
+            </div>
+
+            <AnimatePresence mode="wait">
+                {activeTab === "dashboard" && (
+                    <motion.div
+                        key="dashboard"
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -10 }}
+                        className="space-y-6"
+                    >
+                        {/* Bento Grid Stats */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                            {/* Total Card */}
+                            <Card className="col-span-1 md:col-span-2 relative overflow-hidden bg-gradient-to-br from-violet-600 to-indigo-700 border-none text-white shadow-xl shadow-indigo-500/20">
+                                <CardContent className="p-6 relative z-10">
+                                    <div className="flex justify-between items-start mb-6 md:mb-8">
+                                        <div>
+                                            <p className="text-indigo-100 font-medium mb-1 text-sm md:text-base">Total Saldo Bersih</p>
+                                            <h2 className="text-3xl md:text-4xl font-bold tracking-tight">
+                                                {formatRupiah(dashboard?.total_balance || 0)}
+                                            </h2>
+                                        </div>
+                                        <div className="p-3 bg-white/10 backdrop-blur-md rounded-2xl">
+                                            <Wallet className="w-6 h-6 text-white" />
+                                        </div>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-3 md:gap-4">
+                                        <div className="bg-white/10 backdrop-blur-sm rounded-xl p-3">
+                                            <div className="flex items-center gap-2 text-indigo-100 mb-1 text-xs md:text-sm">
+                                                <TrendingUp className="w-3 h-3 md:w-4 md:h-4" /> Pemasukan
+                                            </div>
+                                            <p className="text-base md:text-lg font-semibold truncate">
+                                                {formatRupiah((dashboard?.business_income || 0) + (dashboard?.personal_income || 0))}
+                                            </p>
+                                        </div>
+                                        <div className="bg-white/10 backdrop-blur-sm rounded-xl p-3">
+                                            <div className="flex items-center gap-2 text-indigo-100 mb-1 text-xs md:text-sm">
+                                                <TrendingDown className="w-3 h-3 md:w-4 md:h-4" /> Pengeluaran
+                                            </div>
+                                            <p className="text-base md:text-lg font-semibold truncate">
+                                                {formatRupiah((dashboard?.business_expense || 0) + (dashboard?.personal_expense || 0))}
+                                            </p>
+                                        </div>
+                                    </div>
+                                </CardContent>
+                                {/* Decorative Circles */}
+                                <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none" />
+                                <div className="absolute bottom-0 left-0 w-48 h-48 bg-black/10 rounded-full blur-2xl translate-y-1/2 -translate-x-1/2 pointer-events-none" />
+                            </Card>
+
+                            {/* Business Status */}
+                            <Card className="relative overflow-hidden group hover:shadow-lg transition-all border-violet-200/50 dark:border-violet-800/50 bg-gradient-to-br from-white to-violet-50/50 dark:from-background dark:to-violet-900/10">
+                                <CardContent className="p-6">
+                                    <div className="flex justify-between items-start mb-4">
+                                        <div className="p-3 bg-violet-100 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400 rounded-xl">
+                                            <Building2 className="w-6 h-6" />
+                                        </div>
+                                        <Badge variant="outline" className="border-violet-200 text-violet-700 bg-violet-50">Bisnis</Badge>
+                                    </div>
+                                    <p className="text-muted-foreground text-sm font-medium">Saldo Bisnis</p>
+                                    <h3 className="text-2xl font-bold text-foreground mt-1 mb-2">
+                                        {formatRupiah(dashboard?.business_balance || 0)}
+                                    </h3>
+                                    <div className="h-1.5 w-full bg-violet-100 dark:bg-violet-900/30 rounded-full overflow-hidden">
+                                        <div className="h-full bg-violet-500 rounded-full" style={{ width: '70%' }} />
+                                    </div>
+                                    <div className="flex justify-between mt-2 text-xs text-muted-foreground">
+                                        <span>Income: {formatRupiah(dashboard?.business_income || 0)}</span>
+                                    </div>
+                                </CardContent>
+                            </Card>
+
+                            {/* Personal Status */}
+                            <Card className="relative overflow-hidden group hover:shadow-lg transition-all border-emerald-200/50 dark:border-emerald-800/50 bg-gradient-to-br from-white to-emerald-50/50 dark:from-background dark:to-emerald-900/10">
+                                <CardContent className="p-6">
+                                    <div className="flex justify-between items-start mb-4">
+                                        <div className="p-3 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 rounded-xl">
+                                            <Home className="w-6 h-6" />
+                                        </div>
+                                        <Badge variant="outline" className="border-emerald-200 text-emerald-700 bg-emerald-50">Personal</Badge>
+                                    </div>
+                                    <p className="text-muted-foreground text-sm font-medium">Saldo Personal</p>
+                                    <h3 className="text-2xl font-bold text-foreground mt-1 mb-2">
+                                        {formatRupiah(dashboard?.personal_balance || 0)}
+                                    </h3>
+                                    <div className="h-1.5 w-full bg-emerald-100 dark:bg-emerald-900/30 rounded-full overflow-hidden">
+                                        <div className="h-full bg-emerald-500 rounded-full" style={{ width: '45%' }} />
+                                    </div>
+                                    <div className="flex justify-between mt-2 text-xs text-muted-foreground">
+                                        <span>Expense: {formatRupiah(dashboard?.personal_expense || 0)}</span>
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        </div>
+
+                        <div className="grid lg:grid-cols-3 gap-6">
+                            {/* Chart Section */}
+                            <Card className="lg:col-span-2 shadow-sm relative overflow-hidden">
+                                <CardHeader>
+                                    <CardTitle className="flex items-center gap-2 text-lg">
+                                        <BarChart3 className="w-5 h-5 text-muted-foreground" />
+                                        Analitik Keuangan
+                                    </CardTitle>
+                                    <CardDescription>Perbandingan pemasukan dan pengeluaran 6 bulan terakhir</CardDescription>
+                                </CardHeader>
+                                <CardContent className="p-0 sm:p-6">
+                                    <div className="h-[250px] w-full overflow-x-auto px-4 pb-4">
+                                        <div className="h-full flex items-end justify-between gap-4 min-w-[500px] sm:min-w-0">
+                                            {monthlyData.map((data, i) => (
+                                                <div key={i} className="flex-1 flex flex-col items-center gap-2 group relative min-w-[40px]">
+                                                    <div className="w-full flex gap-1 items-end justify-center h-full relative">
+                                                        {/* Income Bar */}
+                                                        <div className="w-full max-w-[24px] bg-indigo-500/10 dark:bg-indigo-500/20 rounded-t-sm relative group-hover:bg-indigo-500/20 transition-all duration-300 h-full overflow-hidden">
+                                                            <motion.div
+                                                                initial={{ height: 0 }}
+                                                                animate={{ height: `${(data.income / maxChartValue) * 100}%` }}
+                                                                transition={{ delay: i * 0.1, duration: 1, ease: "easeOut" }}
+                                                                className="absolute bottom-0 w-full bg-indigo-500 rounded-t-sm"
+                                                            />
+                                                        </div>
+                                                        {/* Expense Bar */}
+                                                        <div className="w-full max-w-[24px] bg-rose-500/10 dark:bg-rose-500/20 rounded-t-sm relative group-hover:bg-rose-500/20 transition-all duration-300 h-full overflow-hidden">
+                                                            <motion.div
+                                                                initial={{ height: 0 }}
+                                                                animate={{ height: `${(data.expense / maxChartValue) * 100}%` }}
+                                                                transition={{ delay: i * 0.1 + 0.1, duration: 1, ease: "easeOut" }}
+                                                                className="absolute bottom-0 w-full bg-rose-500 rounded-t-sm"
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                    <span className="text-xs font-medium text-muted-foreground">{data.month}</span>
+
+                                                    {/* Tooltip */}
+                                                    <div className="absolute -top-12 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-popover border text-popover-foreground text-xs p-2 rounded-lg shadow-lg pointer-events-none whitespace-nowrap z-50">
+                                                        <div className="flex gap-3">
+                                                            <span className="text-indigo-500">+{formatRupiah(data.income)}</span>
+                                                            <span className="text-rose-500">-{formatRupiah(data.expense)}</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </CardContent>
+                            </Card>
+
+                            {/* Recent Transactions List (Compact) */}
+                            <Card className="shadow-sm flex flex-col">
+                                <CardHeader>
+                                    <div className="flex items-center justify-between">
+                                        <CardTitle className="text-lg">Transaksi Terkini</CardTitle>
+                                        <Button variant="ghost" size="sm" className="text-xs" onClick={() => setActiveTab("business")}>
+                                            Lihat Semua
+                                        </Button>
+                                    </div>
+                                </CardHeader>
+                                <CardContent className="flex-1 overflow-hidden">
+                                    <ScrollArea className="h-[300px] pr-4">
+                                        <div className="space-y-3">
+                                            {transactions.slice(0, 6).map((tx, i) => (
+                                                <motion.div
+                                                    key={tx.id}
+                                                    initial={{ opacity: 0, x: -10 }}
+                                                    animate={{ opacity: 1, x: 0 }}
+                                                    transition={{ delay: i * 0.05 }}
+                                                    className="flex items-center justify-between p-3 rounded-xl bg-muted/40 hover:bg-muted transition-colors border border-transparent hover:border-border/50 group"
+                                                >
+                                                    <div className="flex items-center gap-3">
+                                                        <div className={`p-2 rounded-lg text-lg ${tx.mode === "business" ? "bg-violet-100 text-violet-600 dark:bg-violet-900/30" : "bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30"}`}>
+                                                            {getCategoryIcon(tx.category)}
+                                                        </div>
+                                                        <div className="min-w-0">
+                                                            <p className="font-medium text-sm truncate max-w-[120px]">
+                                                                {tx.description || getCategoryLabel(tx.category)}
+                                                            </p>
+                                                            <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                                                                <Clock className="w-3 h-3" />
+                                                                {new Date(tx.date).toLocaleDateString("id-ID", { day: "numeric", month: "short" })}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <div className="text-right">
+                                                        <p className={`font-semibold text-sm ${tx.type === "income" ? "text-emerald-600" : "text-rose-600"}`}>
+                                                            {tx.type === "income" ? "+" : "-"}{formatRupiah(tx.amount)}
+                                                        </p>
+                                                    </div>
+                                                </motion.div>
+                                            ))}
+                                        </div>
+                                    </ScrollArea>
+                                </CardContent>
+                            </Card>
+                        </div>
+                    </motion.div>
+                )}
+
+                {(activeTab === "business" || activeTab === "personal") && (
+                    <motion.div
+                        key={activeTab}
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -10 }}
+                    >
+                        <Card className="border-none shadow-none bg-transparent">
+                            {/* Toolbar */}
+                            <div className="flex flex-col sm:flex-row gap-4 mb-6 sticky top-0 bg-background/95 backdrop-blur z-20 py-2">
+                                <div className="relative flex-1">
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                                    <Input
+                                        placeholder="Cari transaksi..."
+                                        value={searchQuery}
+                                        onChange={(e) => setSearchQuery(e.target.value)}
+                                        className="pl-10 h-10 bg-muted/40 border-muted-foreground/20"
+                                    />
+                                    {searchQuery && (
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8 text-muted-foreground hover:text-foreground"
+                                            onClick={() => setSearchQuery("")}
+                                        >
+                                            <X className="w-4 h-4" />
+                                        </Button>
+                                    )}
+                                </div>
+                                <div className="flex gap-2">
+                                    <Select value={filterType} onValueChange={(v) => setFilterType(v as any)}>
+                                        <SelectTrigger className="w-[130px] h-10 bg-muted/40 border-muted-foreground/20">
+                                            <div className="flex items-center gap-2">
+                                                <Filter className="w-4 h-4 text-muted-foreground" />
+                                                <SelectValue placeholder="Tipe" />
+                                            </div>
                                         </SelectTrigger>
                                         <SelectContent>
-                                            <SelectItem value="income">Pemasukan</SelectItem>
-                                            <SelectItem value="expense">Pengeluaran</SelectItem>
+                                            <SelectItem value="all">Semua</SelectItem>
+                                            <SelectItem value="income">Income</SelectItem>
+                                            <SelectItem value="expense">Expense</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                    <Select value={filterStatus} onValueChange={(v) => setFilterStatus(v as any)}>
+                                        <SelectTrigger className="w-[130px] h-10 bg-muted/40 border-muted-foreground/20">
+                                            <div className="flex items-center gap-2">
+                                                <CheckCircle2 className="w-4 h-4 text-muted-foreground" />
+                                                <SelectValue placeholder="Status" />
+                                            </div>
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="all">Semua</SelectItem>
+                                            <SelectItem value="paid">Lunas</SelectItem>
+                                            <SelectItem value="pending">Pending</SelectItem>
                                         </SelectContent>
                                     </Select>
                                 </div>
-                                <div className="space-y-2">
-                                    <Label>Jumlah (Rp)</Label>
-                                    <Input type="number" placeholder="0" />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label>Keterangan</Label>
-                                    <Input placeholder="Contoh: Posting Loker PT A" />
-                                </div>
-                                <Button className="w-full">Simpan</Button>
                             </div>
-                        </DialogContent>
-                    </Dialog>
-                </div>
-            </div>
 
-            {/* Stats Grid */}
-            <div className="grid gap-4 md:grid-cols-3">
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Total Pemasukan</CardTitle>
-                        <Wallet className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{formatRupiah(totalIncome)}</div>
-                        <p className="text-xs text-emerald-500 flex items-center mt-1">
-                            <TrendingUp className="mr-1 h-3 w-3" /> +18% dari bulan lalu
-                        </p>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Bulan Ini</CardTitle>
-                        <Calendar className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{formatRupiah(monthlyIncome)}</div>
-                        <p className="text-xs text-muted-foreground mt-1">Desember 2024</p>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Belum Dibayar</CardTitle>
-                        <TrendingDown className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{formatRupiah(pendingAmount)}</div>
-                        <p className="text-xs text-amber-500 mt-1">
-                            {transactions.filter((t) => t.status === "pending").length} transaksi pending
-                        </p>
-                    </CardContent>
-                </Card>
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-7">
-                {/* Chart */}
-                <Card className="col-span-4">
-                    <CardHeader>
-                        <CardTitle>Pendapatan 6 Bulan Terakhir</CardTitle>
-                    </CardHeader>
-                    <CardContent className="pl-2">
-                        <div className="h-[200px] flex items-end justify-between gap-2 px-4">
-                            {mockMonthlyData.map((data, i) => (
-                                <div key={i} className="flex-1 flex flex-col items-center gap-2 group">
-                                    <div
-                                        className="w-full bg-primary/20 group-hover:bg-primary/40 transition-all rounded-t-md relative"
-                                        style={{ height: `${(data.income / maxIncome) * 100}%` }}
-                                    >
-                                        <div className="absolute -top-8 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-popover text-popover-foreground text-xs p-1 rounded shadow pointer-events-none whitespace-nowrap">
-                                            {formatRupiah(data.income)}
+                            {/* Transactions List */}
+                            <div className="grid gap-3">
+                                {filteredTransactions.length === 0 ? (
+                                    <div className="text-center py-20 bg-muted/20 rounded-2xl border border-dashed border-muted-foreground/20">
+                                        <div className="p-4 bg-muted/50 rounded-full w-fit mx-auto mb-4">
+                                            <Wallet className="w-8 h-8 text-muted-foreground/50" />
                                         </div>
+                                        <h3 className="text-lg font-medium text-foreground">Belum ada transaksi</h3>
+                                        <p className="text-muted-foreground">Mulai catat keuanganmu sekarang</p>
+                                        <Button variant="link" onClick={() => { setFormMode(activeTab); resetForm(); setFormOpen(true); }}>
+                                            Tambah Transaksi Baru
+                                        </Button>
                                     </div>
-                                    <span className="text-xs text-muted-foreground">{data.month}</span>
-                                </div>
-                            ))}
-                        </div>
-                    </CardContent>
-                </Card>
-
-                {/* Transactions */}
-                <Card className="col-span-3">
-                    <CardHeader className="flex flex-row items-center justify-between">
-                        <CardTitle>Transaksi Terbaru</CardTitle>
-                        <Select
-                            defaultValue="all"
-                            onValueChange={(val) => setFilterStatus(val as any)}
-                        >
-                            <SelectTrigger className="w-[100px] h-8 text-xs">
-                                <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="all">Semua</SelectItem>
-                                <SelectItem value="paid">Lunas</SelectItem>
-                                <SelectItem value="pending">Pending</SelectItem>
-                            </SelectContent>
-                        </Select>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="overflow-x-auto">
-                            <Table>
-                                <TableBody>
-                                    {filteredTransactions.map((t) => (
-                                        <TableRow key={t.id}>
-                                            <TableCell className="py-3">
-                                                <div className="font-medium">{t.client}</div>
-                                                <div className="text-xs text-muted-foreground">{t.description}</div>
-                                            </TableCell>
-                                            <TableCell className="text-right py-3">
-                                                <div className={`font-medium ${t.type === 'income' ? 'text-emerald-500' : 'text-red-500'}`}>
-                                                    {t.type === 'income' ? '+' : '-'}{formatRupiah(t.amount)}
+                                ) : (
+                                    filteredTransactions.map((tx, index) => (
+                                        <motion.div
+                                            key={tx.id}
+                                            initial={{ opacity: 0, y: 10 }}
+                                            animate={{ opacity: 1, y: 0 }}
+                                            transition={{ delay: index * 0.05 }}
+                                            className="group flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-xl bg-card border border-border/50 hover:border-border hover:shadow-md transition-all duration-200"
+                                        >
+                                            <div className="flex items-start gap-4 mb-3 sm:mb-0">
+                                                <div className={`p-3 rounded-2xl text-2xl ${tx.mode === "business" ? "bg-violet-50 text-violet-600 dark:bg-violet-900/20" : "bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20"}`}>
+                                                    {getCategoryIcon(tx.category)}
                                                 </div>
-                                                <Badge variant={t.status === 'paid' ? 'secondary' : 'warning'} className="text-[10px] h-5 px-1.5 mt-1">
-                                                    {t.status}
-                                                </Badge>
-                                            </TableCell>
-                                        </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
+                                                <div>
+                                                    <div className="flex items-center gap-2">
+                                                        <h4 className="font-semibold text-base">
+                                                            {tx.description || getCategoryLabel(tx.category)}
+                                                        </h4>
+                                                        {tx.status === "pending" && (
+                                                            <Badge variant="outline" className="text-amber-600 border-amber-200 bg-amber-50 h-5 text-[10px]">
+                                                                Pending
+                                                            </Badge>
+                                                        )}
+                                                    </div>
+                                                    <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground mt-1">
+                                                        <span className="flex items-center gap-1">
+                                                            <Calendar className="w-3.5 h-3.5" />
+                                                            {new Date(tx.date).toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })}
+                                                        </span>
+                                                        {tx.client && (
+                                                            <span className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-muted/50 text-xs">
+                                                                <Building2 className="w-3 h-3" />
+                                                                {tx.client}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center justify-between sm:justify-end gap-6 w-full sm:w-auto mt-2 sm:mt-0 pt-2 sm:pt-0 border-t sm:border-t-0">
+                                                <div className="text-left sm:text-right">
+                                                    <p className={`text-lg font-bold ${tx.type === "income" ? "text-emerald-600" : "text-rose-600"}`}>
+                                                        {tx.type === "income" ? "+" : "-"}{formatRupiah(tx.amount)}
+                                                    </p>
+                                                    <p className="text-xs text-muted-foreground capitalize">
+                                                        {getCategoryLabel(tx.category)}
+                                                    </p>
+                                                </div>
+                                                <DropdownMenu>
+                                                    <DropdownMenuTrigger asChild>
+                                                        <Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                            <MoreVertical className="w-4 h-4" />
+                                                        </Button>
+                                                    </DropdownMenuTrigger>
+                                                    <DropdownMenuContent align="end">
+                                                        <DropdownMenuItem onClick={() => {
+                                                            setEditingTransaction(tx);
+                                                            setFormMode(tx.mode);
+                                                            setFormType(tx.type);
+                                                            setFormAmount(tx.amount.toString());
+                                                            setFormCategory(tx.category);
+                                                            setFormDescription(tx.description || "");
+                                                            setFormDate(tx.date);
+                                                            setFormStatus(tx.status);
+                                                            setFormClient(tx.client || "");
+                                                            setFormOpen(true);
+                                                        }}>
+                                                            <Edit3 className="w-4 h-4 mr-2" /> Edit
+                                                        </DropdownMenuItem>
+                                                        <DropdownMenuSeparator />
+                                                        <DropdownMenuItem
+                                                            onClick={() => setDeleteId(tx.id)}
+                                                            className="text-destructive focus:text-destructive"
+                                                        >
+                                                            <Trash2 className="w-4 h-4 mr-2" /> Hapus
+                                                        </DropdownMenuItem>
+                                                    </DropdownMenuContent>
+                                                </DropdownMenu>
+                                            </div>
+                                        </motion.div>
+                                    ))
+                                )}
+                            </div>
+                        </Card>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* Add/Edit Transaction Dialog */}
+            <Dialog open={formOpen} onOpenChange={setFormOpen}>
+                <DialogContent className="sm:max-w-[425px] overflow-hidden p-0 gap-0">
+                    <div className="px-6 py-4 bg-muted/30 border-b">
+                        <DialogTitle className="text-xl">
+                            {editingTransaction ? "Edit Transaksi" : "Tambah Transaksi"}
+                        </DialogTitle>
+                        <p className="text-sm text-muted-foreground mt-1">Isi detail transaksi di bawah ini.</p>
+                    </div>
+
+                    <div className="p-6 space-y-5">
+                        {/* Mode & Type Toggle Group */}
+                        <div className="flex p-1 bg-muted rounded-lg">
+                            <button
+                                type="button"
+                                className={`flex-1 py-1.5 text-sm font-medium rounded-md transition-all ${formMode === "business" ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground/80"}`}
+                                onClick={() => { setFormMode("business"); setFormCategory("posting"); }}
+                            >
+                                💼 Bisnis
+                            </button>
+                            <button
+                                type="button"
+                                className={`flex-1 py-1.5 text-sm font-medium rounded-md transition-all ${formMode === "personal" ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground/80"}`}
+                                onClick={() => { setFormMode("personal"); setFormCategory("food"); }}
+                            >
+                                🏠 Personal
+                            </button>
                         </div>
-                    </CardContent>
-                </Card>
-            </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                            <div
+                                className={`cursor-pointer border-2 rounded-xl p-3 flex flex-col items-center gap-2 transition-all ${formType === "income" ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-950/20" : "border-border hover:border-emerald-200"}`}
+                                onClick={() => { setFormType("income"); setFormCategory(formMode === "business" ? "posting" : "salary"); }}
+                            >
+                                <div className={`p-2 rounded-full ${formType === "income" ? "bg-emerald-500 text-white" : "bg-muted text-muted-foreground"}`}>
+                                    <TrendingUp className="w-4 h-4" />
+                                </div>
+                                <span className={`text-sm font-medium ${formType === "income" ? "text-emerald-700" : "text-muted-foreground"}`}>Pemasukan</span>
+                            </div>
+
+                            <div
+                                className={`cursor-pointer border-2 rounded-xl p-3 flex flex-col items-center gap-2 transition-all ${formType === "expense" ? "border-rose-500 bg-rose-50 dark:bg-rose-950/20" : "border-border hover:border-rose-200"}`}
+                                onClick={() => { setFormType("expense"); setFormCategory(formMode === "business" ? "internet" : "food"); }}
+                            >
+                                <div className={`p-2 rounded-full ${formType === "expense" ? "bg-rose-500 text-white" : "bg-muted text-muted-foreground"}`}>
+                                    <TrendingDown className="w-4 h-4" />
+                                </div>
+                                <span className={`text-sm font-medium ${formType === "expense" ? "text-rose-700" : "text-muted-foreground"}`}>Pengeluaran</span>
+                            </div>
+                        </div>
+
+                        {/* Amount Input */}
+                        <div className="relative">
+                            <Label className="text-xs text-muted-foreground ml-1">Jumlah Uang</Label>
+                            <div className="relative mt-1.5">
+                                <span className="absolute left-3 top-1/2 -translate-y-1/2 font-bold text-muted-foreground">Rp</span>
+                                <Input
+                                    type="number"
+                                    value={formAmount}
+                                    onChange={(e) => setFormAmount(e.target.value)}
+                                    className="pl-10 text-lg font-bold h-12"
+                                    placeholder="0"
+                                />
+                            </div>
+                        </div>
+
+                        {/* Category Grid */}
+                        <div>
+                            <Label className="text-xs text-muted-foreground ml-1 mb-2 block">Kategori</Label>
+                            {isAddingCategory ? (
+                                <div className="flex gap-2 items-center animate-in fade-in zoom-in-95">
+                                    <Input
+                                        value={newCategoryName}
+                                        onChange={(e) => setNewCategoryName(e.target.value)}
+                                        placeholder="Nama kategori baru..."
+                                        className="h-10"
+                                        autoFocus
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter') {
+                                                e.preventDefault();
+                                                handleAddCategory();
+                                            }
+                                        }}
+                                    />
+                                    <Button size="icon" onClick={handleAddCategory} type="button" className="h-10 w-10 shrink-0 bg-emerald-500 hover:bg-emerald-600 text-white">
+                                        <Check className="w-4 h-4" />
+                                    </Button>
+                                    <Button size="icon" variant="ghost" onClick={() => setIsAddingCategory(false)} type="button" className="h-10 w-10 shrink-0 text-muted-foreground hover:text-destructive">
+                                        <X className="w-4 h-4" />
+                                    </Button>
+                                </div>
+                            ) : (
+                                <div className="grid grid-cols-4 gap-2">
+                                    {getFormCategories().map((cat) => (
+                                        <button
+                                            key={cat.value}
+                                            type="button"
+                                            onClick={() => setFormCategory(cat.value)}
+                                            className={`
+                                                flex flex-col items-center justify-center p-2 rounded-lg border transition-all gap-1 h-20
+                                                ${formCategory === cat.value
+                                                    ? "border-primary bg-primary/5 ring-1 ring-primary"
+                                                    : "border-border hover:bg-muted hover:border-muted-foreground/30"
+                                                }
+                                            `}
+                                        >
+                                            <span className="text-2xl">{cat.icon}</span>
+                                            <span className="text-[10px] text-center leading-tight line-clamp-2 text-muted-foreground">
+                                                {cat.label}
+                                            </span>
+                                        </button>
+                                    ))}
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsAddingCategory(true)}
+                                        className="flex flex-col items-center justify-center p-2 rounded-lg border border-dashed border-border hover:border-primary hover:bg-primary/5 transition-all gap-1 h-20 group"
+                                    >
+                                        <div className="p-1.5 rounded-full bg-muted group-hover:bg-primary/20 transition-colors">
+                                            <Plus className="w-4 h-4 text-muted-foreground group-hover:text-primary" />
+                                        </div>
+                                        <span className="text-[10px] text-muted-foreground group-hover:text-primary transition-colors">Tambah</span>
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Extra Fields */}
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-1.5">
+                                <Label className="text-xs text-muted-foreground">Tanggal</Label>
+                                <Input type="date" value={formDate} onChange={(e) => setFormDate(e.target.value)} />
+                            </div>
+                            <div className="space-y-1.5">
+                                <Label className="text-xs text-muted-foreground">Status</Label>
+                                <Select value={formStatus} onValueChange={(v) => setFormStatus(v as any)}>
+                                    <SelectTrigger>
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="paid">✅ Lunas</SelectItem>
+                                        <SelectItem value="pending">⏳ Pending</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        </div>
+
+                        {formMode === "business" && (
+                            <div className="space-y-1.5">
+                                <Label className="text-xs text-muted-foreground">Klien (Opsional)</Label>
+                                <Input placeholder="Nama klien/perusahaan" value={formClient} onChange={(e) => setFormClient(e.target.value)} />
+                            </div>
+                        )}
+
+                        <div className="space-y-1.5">
+                            <Label className="text-xs text-muted-foreground">Catatan</Label>
+                            <Textarea
+                                placeholder="Keterangan transaksi..."
+                                value={formDescription}
+                                onChange={(e) => setFormDescription(e.target.value)}
+                                rows={2}
+                                className="resize-none"
+                            />
+                        </div>
+                    </div>
+
+                    <div className="p-4 bg-muted/30 border-t flex justify-end gap-2">
+                        <Button variant="ghost" onClick={() => setFormOpen(false)}>Batal</Button>
+                        <Button onClick={handleFormSubmit} className="min-w-[100px]">Simpan</Button>
+                    </div>
+                </DialogContent>
+            </Dialog>
+
+            {/* Delete Alert */}
+            <Dialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
+                <DialogContent className="sm:max-w-xs p-6 text-center">
+                    <div className="w-12 h-12 rounded-full bg-red-100 dark:bg-red-900/30 text-red-600 flex items-center justify-center mx-auto mb-4">
+                        <Trash2 className="w-6 h-6" />
+                    </div>
+                    <DialogTitle className="text-lg">Hapus Transaksi?</DialogTitle>
+                    <p className="text-sm text-muted-foreground mt-2 mb-6">
+                        Data yang dihapus tidak dapat dikembalikan lagi.
+                    </p>
+                    <div className="flex justify-center gap-2">
+                        <Button variant="outline" onClick={() => setDeleteId(null)} className="flex-1">Batal</Button>
+                        <Button variant="destructive" onClick={handleDelete} className="flex-1">Hapus</Button>
+                    </div>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

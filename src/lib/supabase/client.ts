@@ -36,5 +36,16 @@ export function createClient() {
         } as any;
     }
 
+    // Debug Mode: Check key validity
+    if (typeof window !== "undefined") {
+        console.log("--- Supabase Client Debug ---");
+        console.log("URL:", supabaseUrl);
+        console.log("Key Exists?", !!supabaseAnonKey);
+        console.log("Key Length:", supabaseAnonKey?.length);
+        console.log("Key Start:", supabaseAnonKey?.substring(0, 5) + "...");
+        console.log("Has Whitespace?", /\s/.test(supabaseAnonKey || ""));
+        console.log("--- End Debug ---");
+    }
+
     return createBrowserClient(supabaseUrl!, supabaseAnonKey!);
 }

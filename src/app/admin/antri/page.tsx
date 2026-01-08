@@ -69,6 +69,7 @@ import {
     deletePosting,
     generateWhatsAppLink,
 } from "@/lib/posting-service";
+import { syncPostingToTransaction } from "@/lib/finance-service";
 import toast from "react-hot-toast";
 
 const columns: { id: QueueStatus; title: string; color: string; bgColor: string }[] = [
@@ -165,6 +166,16 @@ export default function AntriPage() {
                 loadData(); // Revert on error
             } else {
                 toast.success(`Status diubah ke ${status}`);
+
+                // Sync to finance if posted
+                if (status === "posted") {
+                    const { error: syncError } = await syncPostingToTransaction(draggedPost);
+                    if (syncError) {
+                        console.error("Sync error:", syncError);
+                        toast.error(`Gagal sync ke keuangan: ${syncError}`);
+                    }
+                    else toast.success("Transaksi tercatat di keuangan");
+                }
             }
         }
         setDraggedPost(null);
@@ -212,6 +223,19 @@ export default function AntriPage() {
                 cancelled: "Dibatalkan"
             };
             toast.success(`Status: ${statusLabels[newStatus]}`);
+
+            // Sync to finance if posted
+            if (newStatus === "posted") {
+                const post = posts.find(p => p.id === postId);
+                if (post) {
+                    const { error: syncError } = await syncPostingToTransaction(post);
+                    if (syncError) {
+                        console.error("Sync error:", syncError);
+                        toast.error(`Gagal sync ke keuangan: ${syncError}`);
+                    }
+                    else toast.success("Transaksi tercatat di keuangan");
+                }
+            }
         }
     };
 
@@ -521,13 +545,20 @@ export default function AntriPage() {
                                                     className="flex items-center gap-3 p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors cursor-pointer"
                                                     onClick={() => handleEdit(post)}
                                                 >
-                                                    {post.poster_url ? (
-                                                        // eslint-disable-next-line @next/next/no-img-element
-                                                        <img
-                                                            src={post.poster_url}
-                                                            alt=""
-                                                            className="w-12 h-12 rounded-lg object-cover"
-                                                        />
+                                                    {(post.gallery && post.gallery.length > 0) || post.poster_url ? (
+                                                        <div className="relative w-12 h-12 rounded-lg overflow-hidden flex-shrink-0">
+                                                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                                                            <img
+                                                                src={post.gallery?.[0] || post.poster_url || ""}
+                                                                alt=""
+                                                                className="w-full h-full object-cover"
+                                                            />
+                                                            {(post.gallery && post.gallery.length > 1) && (
+                                                                <div className="absolute inset-0 bg-black/40 flex items-center justify-center text-white text-[10px] font-bold">
+                                                                    +{post.gallery.length - 1}
+                                                                </div>
+                                                            )}
+                                                        </div>
                                                     ) : (
                                                         <div className="w-12 h-12 rounded-lg bg-muted flex items-center justify-center">
                                                             <Upload className="w-4 h-4 text-muted-foreground/50" />
@@ -593,143 +624,169 @@ export default function AntriPage() {
                             <ScrollArea className="flex-1 -mx-4 px-4">
                                 <div className="space-y-3 pb-4">
                                     <AnimatePresence mode="popLayout">
-                                        {getPostsByStatus(column.id).map((post, index) => (
-                                            <motion.div
-                                                key={post.id}
-                                                layout
-                                                initial={{ opacity: 0, scale: 0.9 }}
-                                                animate={{ opacity: 1, scale: 1 }}
-                                                exit={{ opacity: 0, scale: 0.9 }}
-                                                transition={{ delay: index * 0.05 }}
-                                                draggable
-                                                onDragStart={() => handleDragStart(post)}
-                                                className={`cursor-grab active:cursor-grabbing ${draggedPost?.id === post.id ? "opacity-50" : ""}`}
-                                            >
-                                                <Card className="hover:shadow-md transition-shadow border-border overflow-hidden">
-                                                    <CardContent className="p-0">
-                                                        {/* Poster Thumbnail - smaller */}
-                                                        <div className="aspect-[3/4] bg-muted relative">
-                                                            {post.poster_url ? (
-                                                                // eslint-disable-next-line @next/next/no-img-element
-                                                                <img
-                                                                    src={post.poster_url}
-                                                                    alt=""
-                                                                    className="w-full h-full object-cover"
-                                                                />
-                                                            ) : (
-                                                                <div className="w-full h-full flex items-center justify-center">
-                                                                    <Upload className="w-8 h-8 text-muted-foreground/30" />
-                                                                </div>
-                                                            )}
-                                                            {/* Drag handle overlay */}
-                                                            <div className="absolute top-2 right-2 p-1 bg-background/80 rounded">
-                                                                <GripVertical className="w-4 h-4 text-muted-foreground" />
-                                                            </div>
-                                                            {/* Price badge on poster */}
-                                                            <div className="absolute bottom-2 right-2 px-2 py-1 bg-primary text-primary-foreground rounded-md text-sm font-bold shadow">
-                                                                {formatRupiah(post.total_price)}
-                                                            </div>
-                                                        </div>
+                                        {getPostsByStatus(column.id)
+                                            .slice(0, column.id === "posted" ? 5 : undefined)
+                                            .map((post, index) => (
+                                                <motion.div
+                                                    key={post.id}
+                                                    layout
+                                                    initial={{ opacity: 0, scale: 0.9 }}
+                                                    animate={{ opacity: 1, scale: 1 }}
+                                                    exit={{ opacity: 0, scale: 0.9 }}
+                                                    transition={{ delay: index * 0.05 }}
+                                                    draggable
+                                                    onDragStart={() => handleDragStart(post)}
+                                                    className={`cursor-grab active:cursor-grabbing ${draggedPost?.id === post.id ? "opacity-50" : ""}`}
+                                                >
+                                                    <Card className="hover:shadow-md transition-shadow border-border overflow-hidden">
+                                                        <CardContent className="p-0">
+                                                            <div className="aspect-[3/4] bg-muted relative group">
+                                                                {(post.gallery && post.gallery.length > 0) || post.poster_url ? (
+                                                                    <>
+                                                                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                                                                        <img
+                                                                            src={post.gallery?.[0] || post.poster_url || ""}
+                                                                            alt=""
+                                                                            className="w-full h-full object-cover"
+                                                                        />
 
-                                                        {/* Content */}
-                                                        <div className="p-3">
-                                                            {/* Company Name */}
-                                                            <h4 className="font-semibold text-sm mb-2">{post.company_name}</h4>
-
-                                                            {/* Info Grid */}
-                                                            <div className="space-y-1.5 text-xs text-muted-foreground mb-3">
-                                                                <div className="flex items-center gap-2">
-                                                                    <Phone className="w-3.5 h-3.5 flex-shrink-0" />
-                                                                    <span>{post.whatsapp_number}</span>
+                                                                        {/* Gallery Count Badge */}
+                                                                        {(post.gallery && post.gallery.length > 1) && (
+                                                                            <div className="absolute bottom-2 left-2 px-2 py-1 bg-black/60 backdrop-blur-sm text-white rounded-md text-xs font-medium flex items-center gap-1">
+                                                                                <LayoutGrid className="w-3 h-3" />
+                                                                                +{post.gallery.length - 1}
+                                                                            </div>
+                                                                        )}
+                                                                    </>
+                                                                ) : (
+                                                                    <div className="w-full h-full flex items-center justify-center">
+                                                                        <Upload className="w-8 h-8 text-muted-foreground/30" />
+                                                                    </div>
+                                                                )}
+                                                                {/* Drag handle overlay */}
+                                                                <div className="absolute top-2 right-2 p-1 bg-background/80 rounded opacity-0 group-hover:opacity-100 transition-opacity">
+                                                                    <GripVertical className="w-4 h-4 text-muted-foreground" />
                                                                 </div>
-                                                                <div className="flex items-center gap-2">
-                                                                    <Calendar className="w-3.5 h-3.5 flex-shrink-0" />
-                                                                    <span>{formatDate(post.scheduled_date)}</span>
-                                                                    <span className="text-muted-foreground/50">•</span>
-                                                                    <Clock className="w-3.5 h-3.5 flex-shrink-0" />
-                                                                    <span>{formatTime(post.scheduled_time)}</span>
-                                                                </div>
-                                                                <div className="flex items-center gap-2">
-                                                                    <Package className="w-3.5 h-3.5 flex-shrink-0" />
-                                                                    <span className="font-medium text-foreground">{getPackageName(post.package_id)}</span>
+                                                                {/* Price badge on poster */}
+                                                                <div className="absolute bottom-2 right-2 px-2 py-1 bg-primary text-primary-foreground rounded-md text-sm font-bold shadow">
+                                                                    {formatRupiah(post.total_price)}
                                                                 </div>
                                                             </div>
 
-                                                            {/* Actions */}
-                                                            <div className="flex items-center gap-1 pt-2 border-t">
-                                                                {/* Quick Status Button */}
-                                                                {getNextStatus(post.status) && (
+                                                            {/* Content */}
+                                                            <div className="p-3">
+                                                                {/* Company Name */}
+                                                                <h4 className="font-semibold text-sm mb-2">{post.company_name}</h4>
+
+                                                                {/* Info Grid */}
+                                                                <div className="space-y-1.5 text-xs text-muted-foreground mb-3">
+                                                                    <div className="flex items-center gap-2">
+                                                                        <Phone className="w-3.5 h-3.5 flex-shrink-0" />
+                                                                        <span>{post.whatsapp_number}</span>
+                                                                    </div>
+                                                                    <div className="flex items-center gap-2">
+                                                                        <Calendar className="w-3.5 h-3.5 flex-shrink-0" />
+                                                                        <span>{formatDate(post.scheduled_date)}</span>
+                                                                        <span className="text-muted-foreground/50">•</span>
+                                                                        <Clock className="w-3.5 h-3.5 flex-shrink-0" />
+                                                                        <span>{formatTime(post.scheduled_time)}</span>
+                                                                    </div>
+                                                                    <div className="flex items-center gap-2">
+                                                                        <Package className="w-3.5 h-3.5 flex-shrink-0" />
+                                                                        <span className="font-medium text-foreground">{getPackageName(post.package_id)}</span>
+                                                                    </div>
+                                                                </div>
+
+                                                                {/* Actions */}
+                                                                <div className="flex items-center gap-1 pt-2 border-t">
+                                                                    {/* Quick Status Button */}
+                                                                    {getNextStatus(post.status) && (
+                                                                        <Button
+                                                                            variant="ghost"
+                                                                            size="sm"
+                                                                            className="flex-1 h-8 text-xs text-blue-600 hover:bg-blue-50 hover:text-blue-700"
+                                                                            onClick={() => handleQuickStatusChange(post.id, getNextStatus(post.status)!)}
+                                                                        >
+                                                                            {post.status === "draft" ? (
+                                                                                <><ArrowRight className="w-3.5 h-3.5 mr-1" /> Antri</>
+                                                                            ) : post.status === "queued" ? (
+                                                                                <><CheckCircle2 className="w-3.5 h-3.5 mr-1" /> Posted</>
+                                                                            ) : null}
+                                                                        </Button>
+                                                                    )}
+                                                                    {post.status === "posted" && (
+                                                                        <div className="flex-1 h-8 flex items-center justify-center text-emerald-600 text-xs font-medium">
+                                                                            ✓ Selesai
+                                                                        </div>
+                                                                    )}
                                                                     <Button
                                                                         variant="ghost"
                                                                         size="sm"
-                                                                        className="flex-1 h-8 text-xs text-blue-600 hover:bg-blue-50 hover:text-blue-700"
-                                                                        onClick={() => handleQuickStatusChange(post.id, getNextStatus(post.status)!)}
+                                                                        className="h-8 w-8 p-0 text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700"
+                                                                        onClick={() => handleWhatsApp(post)}
                                                                     >
-                                                                        {post.status === "draft" ? (
-                                                                            <><ArrowRight className="w-3.5 h-3.5 mr-1" /> Antri</>
-                                                                        ) : post.status === "queued" ? (
-                                                                            <><CheckCircle2 className="w-3.5 h-3.5 mr-1" /> Posted</>
-                                                                        ) : null}
+                                                                        <MessageSquare className="w-4 h-4" />
                                                                     </Button>
-                                                                )}
-                                                                {post.status === "posted" && (
-                                                                    <div className="flex-1 h-8 flex items-center justify-center text-emerald-600 text-xs font-medium">
-                                                                        ✓ Selesai
-                                                                    </div>
-                                                                )}
-                                                                <Button
-                                                                    variant="ghost"
-                                                                    size="sm"
-                                                                    className="h-8 w-8 p-0 text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700"
-                                                                    onClick={() => handleWhatsApp(post)}
-                                                                >
-                                                                    <MessageSquare className="w-4 h-4" />
-                                                                </Button>
-                                                                {/* More Actions Dropdown */}
-                                                                <DropdownMenu>
-                                                                    <DropdownMenuTrigger asChild>
-                                                                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                                                                            <MoreVertical className="w-4 h-4" />
-                                                                        </Button>
-                                                                    </DropdownMenuTrigger>
-                                                                    <DropdownMenuContent align="end">
-                                                                        <DropdownMenuItem onClick={() => handleEdit(post)}>
-                                                                            <Edit3 className="w-4 h-4 mr-2" /> Edit
-                                                                        </DropdownMenuItem>
-                                                                        {post.status !== "draft" && (
-                                                                            <DropdownMenuItem onClick={() => handleQuickStatusChange(post.id, "draft")}>
-                                                                                <FileText className="w-4 h-4 mr-2" /> Ke Draft
+                                                                    {/* More Actions Dropdown */}
+                                                                    <DropdownMenu>
+                                                                        <DropdownMenuTrigger asChild>
+                                                                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                                                                                <MoreVertical className="w-4 h-4" />
+                                                                            </Button>
+                                                                        </DropdownMenuTrigger>
+                                                                        <DropdownMenuContent align="end">
+                                                                            <DropdownMenuItem onClick={() => handleEdit(post)}>
+                                                                                <Edit3 className="w-4 h-4 mr-2" /> Edit
                                                                             </DropdownMenuItem>
-                                                                        )}
-                                                                        {post.status !== "queued" && (
-                                                                            <DropdownMenuItem onClick={() => handleQuickStatusChange(post.id, "queued")}>
-                                                                                <Clock className="w-4 h-4 mr-2" /> Ke Antrian
+                                                                            {post.status !== "draft" && (
+                                                                                <DropdownMenuItem onClick={() => handleQuickStatusChange(post.id, "draft")}>
+                                                                                    <FileText className="w-4 h-4 mr-2" /> Ke Draft
+                                                                                </DropdownMenuItem>
+                                                                            )}
+                                                                            {post.status !== "queued" && (
+                                                                                <DropdownMenuItem onClick={() => handleQuickStatusChange(post.id, "queued")}>
+                                                                                    <Clock className="w-4 h-4 mr-2" /> Ke Antrian
+                                                                                </DropdownMenuItem>
+                                                                            )}
+                                                                            {post.status !== "posted" && (
+                                                                                <DropdownMenuItem onClick={() => handleQuickStatusChange(post.id, "posted")}>
+                                                                                    <CheckCircle2 className="w-4 h-4 mr-2" /> Tandai Posted
+                                                                                </DropdownMenuItem>
+                                                                            )}
+                                                                            <DropdownMenuSeparator />
+                                                                            <DropdownMenuItem onClick={() => handleCopyPosting(post)}>
+                                                                                <Copy className="w-4 h-4 mr-2" /> Duplikat
                                                                             </DropdownMenuItem>
-                                                                        )}
-                                                                        {post.status !== "posted" && (
-                                                                            <DropdownMenuItem onClick={() => handleQuickStatusChange(post.id, "posted")}>
-                                                                                <CheckCircle2 className="w-4 h-4 mr-2" /> Tandai Posted
+                                                                            <DropdownMenuItem
+                                                                                onClick={() => setDeleteId(post.id)}
+                                                                                className="text-destructive focus:text-destructive"
+                                                                            >
+                                                                                <Trash2 className="w-4 h-4 mr-2" /> Hapus
                                                                             </DropdownMenuItem>
-                                                                        )}
-                                                                        <DropdownMenuSeparator />
-                                                                        <DropdownMenuItem onClick={() => handleCopyPosting(post)}>
-                                                                            <Copy className="w-4 h-4 mr-2" /> Duplikat
-                                                                        </DropdownMenuItem>
-                                                                        <DropdownMenuItem
-                                                                            onClick={() => setDeleteId(post.id)}
-                                                                            className="text-destructive focus:text-destructive"
-                                                                        >
-                                                                            <Trash2 className="w-4 h-4 mr-2" /> Hapus
-                                                                        </DropdownMenuItem>
-                                                                    </DropdownMenuContent>
-                                                                </DropdownMenu>
+                                                                        </DropdownMenuContent>
+                                                                    </DropdownMenu>
+                                                                </div>
                                                             </div>
-                                                        </div>
-                                                    </CardContent>
-                                                </Card>
-                                            </motion.div>
-                                        ))}
+                                                        </CardContent>
+                                                    </Card>
+                                                </motion.div>
+                                            ))}
                                     </AnimatePresence>
+
+                                    {/* View History Button for Limit */}
+                                    {column.id === "posted" && getPostsByStatus(column.id).length > 5 && (
+                                        <Button
+                                            variant="outline"
+                                            className="w-full text-xs h-9 bg-background/50 hover:bg-background border-dashed"
+                                            onClick={() => {
+                                                setViewMode("list");
+                                                setStatusFilter("posted");
+                                            }}
+                                        >
+                                            <List className="w-3.5 h-3.5 mr-2" />
+                                            Lihat Semua Riwayat ({getPostsByStatus(column.id).length})
+                                        </Button>
+                                    )}
 
                                     {getPostsByStatus(column.id).length === 0 && (
                                         <div className="flex flex-col items-center justify-center h-32 text-muted-foreground border-2 border-dashed border-border rounded-lg bg-card/50">
@@ -765,14 +822,21 @@ export default function AntriPage() {
                             {filteredPosts.map((post) => (
                                 <TableRow key={post.id}>
                                     <TableCell>
-                                        <div className="w-12 h-12 rounded-md overflow-hidden bg-muted">
-                                            {post.poster_url ? (
-                                                // eslint-disable-next-line @next/next/no-img-element
-                                                <img
-                                                    src={post.poster_url}
-                                                    alt=""
-                                                    className="w-full h-full object-cover"
-                                                />
+                                        <div className="w-12 h-12 rounded-md overflow-hidden bg-muted relative">
+                                            {(post.gallery && post.gallery.length > 0) || post.poster_url ? (
+                                                <>
+                                                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                                                    <img
+                                                        src={post.gallery?.[0] || post.poster_url || ""}
+                                                        alt=""
+                                                        className="w-full h-full object-cover"
+                                                    />
+                                                    {(post.gallery && post.gallery.length > 1) && (
+                                                        <div className="absolute inset-0 bg-black/40 flex items-center justify-center text-white text-[10px] font-bold">
+                                                            +{post.gallery.length - 1}
+                                                        </div>
+                                                    )}
+                                                </>
                                             ) : (
                                                 <div className="w-full h-full flex items-center justify-center">
                                                     <Upload className="w-4 h-4 text-muted-foreground/30" />

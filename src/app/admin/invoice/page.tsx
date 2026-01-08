@@ -69,11 +69,12 @@ import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
 import toast from "react-hot-toast";
 
-import type { InvoiceData, InvoiceItemData, InvoiceTemplate, InvoiceStatus, DiscountType, BankAccount } from "@/lib/invoice-types";
-import { INVOICE_TEMPLATES, INVOICE_STATUSES } from "@/lib/invoice-types";
+import type { InvoiceData, InvoiceItemData, InvoiceTemplate, InvoiceStatus, DiscountType, BankAccount, InvoiceColorTheme } from "@/lib/invoice-types";
+import { INVOICE_TEMPLATES, INVOICE_STATUSES, INVOICE_THEMES } from "@/lib/invoice-types";
 import { saveInvoice, getBankAccounts, getInvoices, getInvoiceById, deleteInvoice } from "@/lib/invoice-service";
 import { InvoicePreview } from "@/components/invoice/invoice-preview";
 import { PrintableInvoice } from "@/components/invoice/printable-invoice";
+import { cn } from "@/lib/utils";
 
 
 const defaultItems: InvoiceItemData[] = [
@@ -98,7 +99,13 @@ export default function InvoicePage() {
     const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().split("T")[0]);
     const [dueDate, setDueDate] = useState("");
     const [items, setItems] = useState<InvoiceItemData[]>(defaultItems);
+
     const [notes, setNotes] = useState("Pembayaran via Transfer BCA/Dana/GoPay\nKonfirmasi ke WhatsApp Admin setelah transfer.");
+
+    // Sender state
+    const [senderName, setSenderName] = useState("InfoLokerJombang");
+    const [senderContact, setSenderContact] = useState("@infolokerjombang");
+    const [senderAddress, setSenderAddress] = useState("Jombang, Jawa Timur");
 
     // Invoice number - now editable
     const [invoiceNumber, setInvoiceNumber] = useState(generateInvoiceNumber(1));
@@ -106,6 +113,7 @@ export default function InvoicePage() {
 
     // Template & Status
     const [template, setTemplate] = useState<InvoiceTemplate>("modern");
+    const [colorTheme, setColorTheme] = useState<InvoiceColorTheme>("default");
     const [status, setStatus] = useState<InvoiceStatus>("draft");
 
     // Discount & Tax
@@ -129,6 +137,20 @@ export default function InvoicePage() {
     const [previewInvoice, setPreviewInvoice] = useState<InvoiceData | null>(null);
     const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
+
+    // Logo state
+    const [logoUrl, setLogoUrl] = useState("/profile.png");
+
+    const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                setLogoUrl(reader.result as string);
+            };
+            reader.readAsDataURL(file);
+        }
+    };
 
     useEffect(() => {
         loadBankAccounts();
@@ -192,9 +214,14 @@ export default function InvoicePage() {
         bank_name: showBankAccount ? selectedBank?.bank_name : undefined,
         bank_account_number: showBankAccount ? selectedBank?.account_number : undefined,
         bank_account_name: showBankAccount ? selectedBank?.account_name : undefined,
+        sender_name: senderName,
+        sender_address: senderAddress,
+        sender_contact: senderContact,
         template,
+        color_theme: colorTheme,
         status,
         notes,
+        logo_url: logoUrl,
     };
 
     const addItem = () => {
@@ -220,12 +247,19 @@ export default function InvoicePage() {
         setInvoiceNumber(generateInvoiceNumber(Math.floor(Math.random() * 1000)));
         setEditingInvoiceId(null);
         setTemplate("modern");
+        setColorTheme("default");
         setStatus("draft");
         setDiscountType("nominal");
         setDiscountValue(0);
         setTaxEnabled(false);
         setTaxPercent(11);
+        setTaxEnabled(false);
+        setTaxPercent(11);
         setShowBankAccount(true);
+        setSenderName("InfoLokerJombang");
+        setSenderContact("@infolokerjombang");
+        setSenderAddress("Jombang, Jawa Timur");
+        setLogoUrl("/profile.png");
         const defaultBank = bankAccounts.find(b => b.is_default) || bankAccounts[0];
         setSelectedBank(defaultBank);
     };
@@ -271,11 +305,16 @@ export default function InvoicePage() {
         setItems(data.items.length > 0 ? data.items : defaultItems);
         setNotes(data.notes || "");
         setTemplate(data.template);
+        setColorTheme(data.color_theme || "default");
         setStatus(data.status);
         setDiscountType(data.discount_type);
         setDiscountValue(data.discount_value);
         setTaxEnabled(data.tax_enabled);
+        setTaxEnabled(data.tax_enabled);
         setTaxPercent(data.tax_percent);
+        setSenderName(data.sender_name || "InfoLokerJombang");
+        setSenderContact(data.sender_contact || "@infolokerjombang");
+        setSenderAddress(data.sender_address || "Jombang, Jawa Timur");
 
         // Bank account
         if (data.bank_name) {
@@ -287,6 +326,9 @@ export default function InvoicePage() {
         } else {
             setShowBankAccount(false);
         }
+
+        // Logo
+        setLogoUrl(data.logo_url || "/profile.png");
 
         // Switch to form tab
         setActiveTab("form");
@@ -341,11 +383,16 @@ export default function InvoicePage() {
         setItems(data.items.length > 0 ? data.items.map(item => ({ ...item, id: Date.now().toString() + Math.random() })) : defaultItems);
         setNotes(data.notes || "");
         setTemplate(data.template);
+        setColorTheme(data.color_theme || "default");
         setStatus("draft"); // Reset status to draft
         setDiscountType(data.discount_type);
         setDiscountValue(data.discount_value);
         setTaxEnabled(data.tax_enabled);
+        setTaxEnabled(data.tax_enabled);
         setTaxPercent(data.tax_percent);
+        setSenderName(data.sender_name || "InfoLokerJombang");
+        setSenderContact(data.sender_contact || "@infolokerjombang");
+        setSenderAddress(data.sender_address || "Jombang, Jawa Timur");
 
         // Bank account
         if (data.bank_name) {
@@ -357,6 +404,9 @@ export default function InvoicePage() {
         } else {
             setShowBankAccount(false);
         }
+
+        // Logo
+        setLogoUrl(data.logo_url || "/profile.png");
 
         // Switch to form tab
         setActiveTab("form");
@@ -492,7 +542,7 @@ InfoLokerJombang
                             <div class="content">
                                 <div class="header">
                                     <div class="logo">
-                                        <img src="/profile.png" alt="Logo" />
+                                        <img src="${logoUrl}" alt="Logo" />
                                     </div>
                                     <div style="text-align: right;">
                                         <div class="title">INVOICE</div>
@@ -776,9 +826,78 @@ InfoLokerJombang
                             {/* Client Info */}
                             <Card>
                                 <CardHeader className="pb-3">
-                                    <CardTitle className="text-base">Info Klien</CardTitle>
+                                    <div className="flex items-center justify-between">
+                                        <CardTitle className="text-base flex items-center gap-2">
+                                            <Building2 className="w-4 h-4" /> Informasi Pengirim (Dari)
+                                        </CardTitle>
+                                    </div>
                                 </CardHeader>
-                                <CardContent className="space-y-3">
+                                <CardContent className="space-y-4">
+                                    <div className="space-y-2">
+                                        <Label>Nama Pengirim / Bisnis</Label>
+                                        <Input
+                                            placeholder="InfoLokerJombang"
+                                            value={senderName}
+                                            onChange={(e) => setSenderName(e.target.value)}
+                                        />
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className="space-y-2">
+                                            <Label>Kontak (IG/WA/Email)</Label>
+                                            <Input
+                                                placeholder="@infolokerjombang"
+                                                value={senderContact}
+                                                onChange={(e) => setSenderContact(e.target.value)}
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label>Alamat Singkat</Label>
+                                            <Input
+                                                placeholder="Jombang, Jawa Timur"
+                                                value={senderAddress}
+                                                onChange={(e) => setSenderAddress(e.target.value)}
+                                            />
+                                        </div>
+                                    </div>
+                                </CardContent>
+                            </Card>
+
+                            <Card>
+                                <CardHeader className="pb-3">
+                                    <div className="flex items-center justify-between">
+                                        <CardTitle className="text-base">Info Klien</CardTitle>
+                                        <div className="flex items-center gap-2">
+                                            <Label htmlFor="logo-upload" className="cursor-pointer text-xs text-muted-foreground hover:text-primary transition-colors flex items-center gap-1">
+                                                <FileImage className="w-3 h-3" />
+                                                Ganti Logo
+                                            </Label>
+                                            <Input
+                                                id="logo-upload"
+                                                type="file"
+                                                accept="image/*"
+                                                className="hidden"
+                                                onChange={handleLogoUpload}
+                                            />
+                                        </div>
+                                    </div>
+                                </CardHeader>
+                                <CardContent className="space-y-4">
+                                    {/* Logo Preview (Optional, helpful for user to see what they uploaded) */}
+                                    {logoUrl !== "/profile.png" && (
+                                        <div className="flex items-center gap-4 mb-2 p-3 bg-slate-50 border rounded-lg">
+                                            <div className="relative w-12 h-12 bg-white rounded-md border overflow-hidden shrink-0">
+                                                <img src={logoUrl} alt="Logo Preview" className="w-full h-full object-cover" />
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-sm font-medium truncate">Custom Logo Uploaded</p>
+                                                <p className="text-xs text-muted-foreground">Akan tampil di invoice</p>
+                                            </div>
+                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-red-500" onClick={() => setLogoUrl("/profile.png")}>
+                                                <X className="w-4 h-4" />
+                                            </Button>
+                                        </div>
+                                    )}
+
                                     <div className="flex items-center gap-2">
                                         <Building2 className="w-5 h-5 text-muted-foreground shrink-0" />
                                         <Input
@@ -933,6 +1052,36 @@ InfoLokerJombang
                         </TabsContent>
 
                         <TabsContent value="template" className="space-y-4 m-0">
+                            {/* Color Theme Selector */}
+                            <Card>
+                                <CardHeader className="pb-3">
+                                    <CardTitle className="text-base flex items-center gap-2">
+                                        <div className="w-4 h-4 rounded-full" style={{ backgroundColor: INVOICE_THEMES.find(t => t.id === colorTheme)?.hex || '#059669' }}></div>
+                                        Warna Tema
+                                    </CardTitle>
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="grid grid-cols-5 sm:grid-cols-9 gap-3">
+                                        {INVOICE_THEMES.map((theme) => (
+                                            <button
+                                                key={theme.id}
+                                                onClick={() => setColorTheme(theme.id)}
+                                                className={cn(
+                                                    "aspect-square rounded-full flex items-center justify-center transition-all border-2",
+                                                    colorTheme === theme.id ? "border-primary scale-110 shadow-md" : "border-transparent hover:scale-110"
+                                                )}
+                                                style={{ backgroundColor: theme.hex }}
+                                                title={theme.name}
+                                            >
+                                                {colorTheme === theme.id && <Check className="w-4 h-4 text-white drop-shadow-md" />}
+                                            </button>
+                                        ))}
+                                    </div>
+                                    <p className="text-xs text-muted-foreground mt-3">
+                                        Pilih warna untuk menyesuaikan tampilan invoice dengan brand Anda.
+                                    </p>
+                                </CardContent>
+                            </Card>
                             <Card>
                                 <CardHeader className="pb-3">
                                     <CardTitle className="text-base flex items-center gap-2">
@@ -945,11 +1094,14 @@ InfoLokerJombang
                                             <button
                                                 key={t.id}
                                                 onClick={() => setTemplate(t.id)}
-                                                className={`p-4 rounded-xl border-2 text-left transition-all ${template === t.id ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"}`}
+                                                className={`p-4 rounded-xl border-2 text-left transition-all relative overflow-hidden group ${template === t.id ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"}`}
                                             >
-                                                <div className="font-medium">{t.name}</div>
-                                                <div className="text-xs text-muted-foreground">{t.description}</div>
-                                                {template === t.id && <Check className="w-4 h-4 text-primary mt-2" />}
+                                                <div className="font-medium relative z-10">{t.name}</div>
+                                                <div className="text-xs text-muted-foreground relative z-10">{t.description}</div>
+                                                {template === t.id && <Check className="w-4 h-4 text-primary mt-2 relative z-10" />}
+
+                                                {/* Hover effect gradient */}
+                                                <div className={`absolute inset-0 bg-gradient-to-br from-transparent to-${colorTheme}-500/10 opacity-0 group-hover:opacity-100 transition-opacity`}></div>
                                             </button>
                                         ))}
                                     </div>
@@ -1180,7 +1332,7 @@ InfoLokerJombang
                                                     marginBottom: '-650px' // Compensate for scaled height (1123 * 0.42 ≈ 472, negative margin = 1123 - 472)
                                                 }}
                                             >
-                                                <InvoicePreview invoice={invoiceData} template={template} />
+                                                <InvoicePreview invoice={invoiceData} template={template} customLogoUrl={logoUrl} />
                                             </div>
                                         </div>
                                     </div>
@@ -1255,7 +1407,7 @@ InfoLokerJombang
                                         }}
                                         ref={invoiceRef}
                                     >
-                                        <InvoicePreview invoice={invoiceData} template={template} />
+                                        <InvoicePreview invoice={invoiceData} template={template} customLogoUrl={logoUrl} />
                                     </div>
                                 </div>
                             </CardContent>
