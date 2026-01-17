@@ -71,7 +71,7 @@ import toast from "react-hot-toast";
 
 import type { InvoiceData, InvoiceItemData, InvoiceTemplate, InvoiceStatus, DiscountType, BankAccount, InvoiceColorTheme } from "@/lib/invoice-types";
 import { INVOICE_TEMPLATES, INVOICE_STATUSES, INVOICE_THEMES } from "@/lib/invoice-types";
-import { saveInvoice, getBankAccounts, getInvoices, getInvoiceById, deleteInvoice } from "@/lib/invoice-service";
+import { saveInvoice, getBankAccounts, getInvoices, getInvoiceById, deleteInvoice, uploadInvoiceLogo, getInvoiceLogos } from "@/lib/invoice-service";
 import { InvoicePreview } from "@/components/invoice/invoice-preview";
 import { PrintableInvoice } from "@/components/invoice/printable-invoice";
 import { cn } from "@/lib/utils";
@@ -140,20 +140,41 @@ export default function InvoicePage() {
 
     // Logo state
     const [logoUrl, setLogoUrl] = useState("/profile.png");
+    const [savedLogos, setSavedLogos] = useState<string[]>([]);
+    const [isUploadingLogo, setIsUploadingLogo] = useState(false);
 
-    const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (file) {
-            const reader = new FileReader();
-            reader.onloadend = () => {
-                setLogoUrl(reader.result as string);
-            };
-            reader.readAsDataURL(file);
+            setIsUploadingLogo(true);
+            const { url, error } = await uploadInvoiceLogo(file);
+            setIsUploadingLogo(false);
+
+            if (error) {
+                toast.error(`Gagal upload logo: ${error}`);
+                // Fallback to local preview
+                const reader = new FileReader();
+                reader.onloadend = () => {
+                    setLogoUrl(reader.result as string);
+                };
+                reader.readAsDataURL(file);
+            } else if (url) {
+                setLogoUrl(url);
+                // Refresh saved logos list
+                loadSavedLogos();
+                toast.success("Logo berhasil diupload!");
+            }
         }
+    };
+
+    const loadSavedLogos = async () => {
+        const { data } = await getInvoiceLogos();
+        setSavedLogos(data);
     };
 
     useEffect(() => {
         loadBankAccounts();
+        loadSavedLogos();
     }, []);
 
     // Load history when tab changes
@@ -447,10 +468,25 @@ InfoLokerJombang
         try {
             // Generate pure HTML string for invoice (no external CSS dependencies)
             const generateInvoiceHTML = () => {
+                // Dynamic color palettes based on selected colorTheme
+                const THEME_PALETTES: Record<string, { primary: string; secondary: string; accent: string; light: string; dark: string; text: string }> = {
+                    default: { primary: '#059669', secondary: '#10b981', accent: '#34d399', light: '#ecfdf5', dark: '#064e3b', text: '#059669' },
+                    blue: { primary: '#2563eb', secondary: '#3b82f6', accent: '#60a5fa', light: '#eff6ff', dark: '#1e3a8a', text: '#2563eb' },
+                    green: { primary: '#059669', secondary: '#10b981', accent: '#34d399', light: '#ecfdf5', dark: '#064e3b', text: '#059669' },
+                    purple: { primary: '#9333ea', secondary: '#a855f7', accent: '#c084fc', light: '#faf5ff', dark: '#581c87', text: '#9333ea' },
+                    red: { primary: '#dc2626', secondary: '#ef4444', accent: '#f87171', light: '#fef2f2', dark: '#7f1d1d', text: '#dc2626' },
+                    orange: { primary: '#ea580c', secondary: '#f97316', accent: '#fb923c', light: '#fff7ed', dark: '#7c2d12', text: '#ea580c' },
+                    pink: { primary: '#db2777', secondary: '#ec4899', accent: '#f472b6', light: '#fdf2f8', dark: '#831843', text: '#db2777' },
+                    indigo: { primary: '#4f46e5', secondary: '#6366f1', accent: '#818cf8', light: '#eef2ff', dark: '#312e81', text: '#4f46e5' },
+                    slate: { primary: '#1e293b', secondary: '#334155', accent: '#475569', light: '#f8fafc', dark: '#0f172a', text: '#1e293b' },
+                };
+
+                const palette = THEME_PALETTES[colorTheme] || THEME_PALETTES.default;
+
                 const colors = {
-                    emerald600: '#059669',
-                    emerald50: '#ecfdf5',
-                    emerald100: '#d1fae5',
+                    primary: palette.primary,
+                    light: palette.light,
+                    lightBorder: palette.secondary + '20',
                     slate50: '#f8fafc',
                     slate100: '#f1f5f9',
                     slate200: '#e2e8f0',
@@ -491,28 +527,28 @@ InfoLokerJombang
                             .watermark span {
                                 font-size: 128px; font-weight: 700;
                                 transform: rotate(-12deg); opacity: 0.05;
-                                color: ${colors.emerald600};
+                                color: ${colors.primary};
                             }
                             .content { position: relative; z-index: 10; }
                             .header {
                                 display: flex; justify-content: space-between; align-items: flex-start;
-                                margin-bottom: 48px; border-bottom: 1px solid ${colors.emerald100}; padding-bottom: 32px;
+                                margin-bottom: 48px; border-bottom: 1px solid ${colors.light}; padding-bottom: 32px;
                             }
                             .logo { width: 96px; height: 96px; border-radius: 16px; overflow: hidden; }
                             .logo img { width: 100%; height: 100%; object-fit: cover; }
-                            .title { font-size: 32px; font-weight: 800; color: ${colors.emerald600}; text-transform: uppercase; letter-spacing: -0.025em; }
+                            .title { font-size: 32px; font-weight: 800; color: ${colors.primary}; text-transform: uppercase; letter-spacing: -0.025em; }
                             .meta { color: ${colors.slate500}; font-size: 14px; font-weight: 500; margin-top: 8px; text-align: right; }
                             .meta p { margin: 4px 0; }
                             .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; margin-bottom: 40px; }
                             .from-label, .to-label { font-size: 12px; font-weight: 700; opacity: 0.4; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.05em; }
                             .from-name, .to-name { font-weight: 700; font-size: 18px; margin-bottom: 4px; }
                             .info-sub { opacity: 0.7; font-size: 14px; }
-                            .bill-to { background: ${colors.emerald50}; padding: 24px; border-radius: 12px; border: 1px solid ${colors.emerald100}; }
+                            .bill-to { background: ${colors.light}; padding: 24px; border-radius: 12px; border: 1px solid ${colors.lightBorder}; }
                             table { width: 100%; border-collapse: collapse; margin-bottom: 32px; }
-                            th { background: ${colors.emerald600}; color: ${colors.white}; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700; padding: 16px; text-align: left; }
+                            th { background: ${colors.primary}; color: ${colors.white}; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700; padding: 16px; text-align: left; }
                             th.center { text-align: center; }
                             th.right { text-align: right; }
-                            td { padding: 16px; border-bottom: 1px solid ${colors.emerald50}; }
+                            td { padding: 16px; border-bottom: 1px solid ${colors.light}; }
                             td.center { text-align: center; opacity: 0.8; }
                             td.right { text-align: right; }
                             td.bold { font-weight: 700; }
@@ -532,7 +568,7 @@ InfoLokerJombang
                             .total-row span:last-child { font-weight: 600; }
                             .grand-total { padding-top: 16px; margin-top: 8px; border-top: 1px solid rgba(0,0,0,0.1); display: flex; justify-content: space-between; align-items: flex-end; }
                             .grand-label { color: ${colors.slate500}; font-weight: 500; }
-                            .grand-value { font-size: 24px; font-weight: 700; color: ${colors.emerald600}; }
+                            .grand-value { font-size: 24px; font-weight: 700; color: ${colors.primary}; }
                             .footer-msg { color: ${colors.slate400}; font-size: 12px; margin-top: 48px; padding-top: 32px; border-top: 1px solid ${colors.slate100}; text-align: center; }
                         </style>
                     </head>
@@ -556,9 +592,9 @@ InfoLokerJombang
                                 <div class="info-grid">
                                     <div>
                                         <div class="from-label">Dari</div>
-                                        <div class="from-name">InfoLokerJombang</div>
-                                        <div class="info-sub">@infolokerjombang</div>
-                                        <div class="info-sub">Jombang, Jawa Timur</div>
+                                        <div class="from-name">${senderName || "InfoLokerJombang"}</div>
+                                        <div class="info-sub">${senderContact || "@infolokerjombang"}</div>
+                                        <div class="info-sub">${senderAddress || "Jombang, Jawa Timur"}</div>
                                     </div>
                                     <div class="bill-to">
                                         <div class="to-label">Kepada</div>
@@ -630,7 +666,7 @@ InfoLokerJombang
                                     </div>
                                 </div>
                                 <div class="footer-msg">
-                                    Terima kasih atas kepercayaan Anda bekerja sama dengan InfoLokerJombang.
+                                    Terima kasih atas kepercayaan Anda bekerja sama dengan ${senderName || "InfoLokerJombang"}.
                                 </div>
                             </div>
                         </div>
@@ -682,15 +718,15 @@ InfoLokerJombang
                 const imgWidth = 210;
                 const imgHeight = (canvas.height * imgWidth) / canvas.width;
                 pdf.addImage(imgData, "PNG", 0, 0, imgWidth, imgHeight);
-                // Generate filename: ClientName-InvoiceNumber@infolokerjombang
-                const safeClientName = (clientName || "Invoice").replace(/[^a-zA-Z0-9\s-]/g, "").replace(/\s+/g, "_").substring(0, 50);
-                const fileName = `${safeClientName}-${invoiceNumber}@infolokerjombang`;
+                // Generate filename: InvoiceNumber_SenderName
+                const safeSenderName = (senderName || "Invoice").replace(/[^a-zA-Z0-9\s-]/g, "").replace(/\s+/g, "_").substring(0, 30);
+                const fileName = `${invoiceNumber}_${safeSenderName}`;
                 pdf.save(`${fileName}.pdf`);
             } else {
                 const link = document.createElement("a");
-                // Generate filename: ClientName-InvoiceNumber@infolokerjombang
-                const safeClientName = (clientName || "Invoice").replace(/[^a-zA-Z0-9\s-]/g, "").replace(/\s+/g, "_").substring(0, 50);
-                const fileName = `${safeClientName}-${invoiceNumber}@infolokerjombang`;
+                // Generate filename: InvoiceNumber_SenderName
+                const safeSenderName = (senderName || "Invoice").replace(/[^a-zA-Z0-9\s-]/g, "").replace(/\s+/g, "_").substring(0, 30);
+                const fileName = `${invoiceNumber}_${safeSenderName}`;
                 link.download = `${fileName}.${format === "jpeg" ? "jpg" : "png"}`;
                 link.href = canvas.toDataURL(format === "jpeg" ? "image/jpeg" : "image/png", 0.95);
                 link.click();
@@ -864,39 +900,9 @@ InfoLokerJombang
 
                             <Card>
                                 <CardHeader className="pb-3">
-                                    <div className="flex items-center justify-between">
-                                        <CardTitle className="text-base">Info Klien</CardTitle>
-                                        <div className="flex items-center gap-2">
-                                            <Label htmlFor="logo-upload" className="cursor-pointer text-xs text-muted-foreground hover:text-primary transition-colors flex items-center gap-1">
-                                                <FileImage className="w-3 h-3" />
-                                                Ganti Logo
-                                            </Label>
-                                            <Input
-                                                id="logo-upload"
-                                                type="file"
-                                                accept="image/*"
-                                                className="hidden"
-                                                onChange={handleLogoUpload}
-                                            />
-                                        </div>
-                                    </div>
+                                    <CardTitle className="text-base">Info Klien</CardTitle>
                                 </CardHeader>
                                 <CardContent className="space-y-4">
-                                    {/* Logo Preview (Optional, helpful for user to see what they uploaded) */}
-                                    {logoUrl !== "/profile.png" && (
-                                        <div className="flex items-center gap-4 mb-2 p-3 bg-slate-50 border rounded-lg">
-                                            <div className="relative w-12 h-12 bg-white rounded-md border overflow-hidden shrink-0">
-                                                <img src={logoUrl} alt="Logo Preview" className="w-full h-full object-cover" />
-                                            </div>
-                                            <div className="flex-1 min-w-0">
-                                                <p className="text-sm font-medium truncate">Custom Logo Uploaded</p>
-                                                <p className="text-xs text-muted-foreground">Akan tampil di invoice</p>
-                                            </div>
-                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-red-500" onClick={() => setLogoUrl("/profile.png")}>
-                                                <X className="w-4 h-4" />
-                                            </Button>
-                                        </div>
-                                    )}
 
                                     <div className="flex items-center gap-2">
                                         <Building2 className="w-5 h-5 text-muted-foreground shrink-0" />
@@ -1212,6 +1218,84 @@ InfoLokerJombang
                                             Info rekening tidak akan ditampilkan di invoice.
                                         </p>
                                     )}
+                                </CardContent>
+                            </Card>
+
+                            {/* Logo */}
+                            <Card>
+                                <CardHeader className="pb-3">
+                                    <CardTitle className="text-base flex items-center gap-2">
+                                        <FileImage className="w-4 h-4" /> Logo Invoice
+                                    </CardTitle>
+                                </CardHeader>
+                                <CardContent className="space-y-4">
+                                    {/* Current Logo Preview */}
+                                    <div className="flex items-center gap-4">
+                                        <div className="w-16 h-16 rounded-xl border overflow-hidden bg-muted flex items-center justify-center">
+                                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                                            <img src={logoUrl} alt="Logo" className="w-full h-full object-cover" />
+                                        </div>
+                                        <div className="flex-1">
+                                            <Label htmlFor="logo-upload" className="cursor-pointer">
+                                                <div className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-dashed hover:bg-muted transition-colors">
+                                                    {isUploadingLogo ? (
+                                                        <>
+                                                            <Loader2 className="w-4 h-4 animate-spin" />
+                                                            <span>Uploading...</span>
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            <FileImage className="w-4 h-4" />
+                                                            <span>Upload Logo Baru</span>
+                                                        </>
+                                                    )}
+                                                </div>
+                                            </Label>
+                                            <input
+                                                id="logo-upload"
+                                                type="file"
+                                                accept="image/*"
+                                                onChange={handleLogoUpload}
+                                                className="hidden"
+                                                disabled={isUploadingLogo}
+                                            />
+                                            <p className="text-xs text-muted-foreground mt-1">
+                                                PNG, JPG max 2MB
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    {/* Saved Logos Grid */}
+                                    {savedLogos.length > 0 && (
+                                        <div>
+                                            <Label className="text-sm text-muted-foreground mb-2 block">Pilih dari logo tersimpan:</Label>
+                                            <div className="grid grid-cols-5 sm:grid-cols-8 gap-2">
+                                                {savedLogos.map((url, index) => (
+                                                    <button
+                                                        key={index}
+                                                        onClick={() => setLogoUrl(url)}
+                                                        className={cn(
+                                                            "w-full aspect-square rounded-lg border-2 overflow-hidden transition-all hover:opacity-80",
+                                                            logoUrl === url ? "border-primary ring-2 ring-primary/20" : "border-border"
+                                                        )}
+                                                    >
+                                                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                                                        <img src={url} alt={`Logo ${index + 1}`} className="w-full h-full object-cover" />
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Reset to Default */}
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => setLogoUrl("/profile.png")}
+                                        className="text-muted-foreground"
+                                    >
+                                        Reset ke Logo Default
+                                    </Button>
                                 </CardContent>
                             </Card>
                         </TabsContent>

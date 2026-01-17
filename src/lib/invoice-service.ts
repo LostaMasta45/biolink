@@ -11,41 +11,55 @@ export async function saveInvoice(invoice: InvoiceData): Promise<{ data: Invoice
     const isUpdate = !!invoice.id;
 
     try {
-        // First, save the invoice
-        const { data: invoiceResult, error: invoiceError } = await supabase
-            .from("invoices")
-            .upsert({
-                id: invoice.id,
-                invoice_number: invoice.invoice_number,
-                client_id: invoice.client_id,
-                client_name: invoice.client_name,
-                client_phone: invoice.client_phone,
-                client_address: invoice.client_address,
-                sender_name: invoice.sender_name,
-                sender_address: invoice.sender_address,
-                sender_contact: invoice.sender_contact,
-                invoice_date: invoice.invoice_date,
-                due_date: invoice.due_date,
-                subtotal: invoice.subtotal,
-                discount_type: invoice.discount_type,
-                discount_value: invoice.discount_value,
-                discount_amount: invoice.discount_amount,
-                tax_enabled: invoice.tax_enabled,
-                tax_percent: invoice.tax_percent,
-                tax_amount: invoice.tax_amount,
-                total: invoice.total,
-                bank_name: invoice.bank_name,
-                bank_account_number: invoice.bank_account_number,
-                bank_account_name: invoice.bank_account_name,
-                template: invoice.template,
-                color_theme: invoice.color_theme,
-                status: invoice.status,
-                notes: invoice.notes,
-                terms: invoice.terms,
-                logo_url: invoice.logo_url,
-            })
-            .select()
-            .single();
+        // Build the invoice payload - only include id if it exists (for updates)
+        // This allows Supabase to auto-generate a new UUID for new invoices
+        const invoicePayload: Record<string, unknown> = {
+            invoice_number: invoice.invoice_number,
+            client_id: invoice.client_id,
+            client_name: invoice.client_name,
+            client_phone: invoice.client_phone,
+            client_address: invoice.client_address,
+            sender_name: invoice.sender_name,
+            sender_address: invoice.sender_address,
+            sender_contact: invoice.sender_contact,
+            invoice_date: invoice.invoice_date,
+            due_date: invoice.due_date,
+            subtotal: invoice.subtotal,
+            discount_type: invoice.discount_type,
+            discount_value: invoice.discount_value,
+            discount_amount: invoice.discount_amount,
+            tax_enabled: invoice.tax_enabled,
+            tax_percent: invoice.tax_percent,
+            tax_amount: invoice.tax_amount,
+            total: invoice.total,
+            bank_name: invoice.bank_name,
+            bank_account_number: invoice.bank_account_number,
+            bank_account_name: invoice.bank_account_name,
+            template: invoice.template,
+            color_theme: invoice.color_theme,
+            status: invoice.status,
+            notes: invoice.notes,
+            terms: invoice.terms,
+            logo_url: invoice.logo_url,
+        };
+
+        // Only include id for updates to avoid conflicts when creating new invoices
+        if (isUpdate && invoice.id) {
+            invoicePayload.id = invoice.id;
+        }
+
+        // Save the invoice - use insert for new, upsert for updates
+        const { data: invoiceResult, error: invoiceError } = isUpdate
+            ? await supabase
+                .from("invoices")
+                .upsert(invoicePayload)
+                .select()
+                .single()
+            : await supabase
+                .from("invoices")
+                .insert(invoicePayload)
+                .select()
+                .single();
 
         if (invoiceError) throw invoiceError;
 
@@ -196,6 +210,70 @@ export async function getBankAccounts(): Promise<{ data: BankAccount[]; error: s
         return { data: data || [], error: null };
     } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : "Failed to fetch bank accounts";
+        return { data: [], error: errorMessage };
+    }
+}
+
+// ============================================
+// LOGO STORAGE SERVICES
+// ============================================
+
+export async function uploadInvoiceLogo(file: File): Promise<{ url: string | null; error: string | null }> {
+    const supabase = createClient();
+
+    try {
+        // Generate unique filename
+        const fileExt = file.name.split(".").pop();
+        const fileName = `logo-${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+
+        // Upload to Supabase Storage
+        const { error: uploadError } = await supabase.storage
+            .from("invoice-logos")
+            .upload(fileName, file, {
+                cacheControl: "3600",
+                upsert: false,
+            });
+
+        if (uploadError) throw uploadError;
+
+        // Get public URL
+        const { data: { publicUrl } } = supabase.storage
+            .from("invoice-logos")
+            .getPublicUrl(fileName);
+
+        return { url: publicUrl, error: null };
+    } catch (error: unknown) {
+        const errorMessage = error instanceof Error ? error.message : "Failed to upload logo";
+        return { url: null, error: errorMessage };
+    }
+}
+
+export async function getInvoiceLogos(): Promise<{ data: string[]; error: string | null }> {
+    const supabase = createClient();
+
+    try {
+        const { data, error } = await supabase.storage
+            .from("invoice-logos")
+            .list("", {
+                limit: 50,
+                sortBy: { column: "created_at", order: "desc" },
+            });
+
+        if (error) throw error;
+
+        // Build public URLs for each file
+        const urls = (data || [])
+            .filter((file: { name: string }) => file.name && !file.name.startsWith("."))
+            .map((file: { name: string }) => {
+                const { data: { publicUrl } } = supabase.storage
+                    .from("invoice-logos")
+                    .getPublicUrl(file.name);
+                return publicUrl;
+            });
+
+        return { data: urls, error: null };
+    } catch (error: unknown) {
+        const errorMessage = error instanceof Error ? error.message : "Failed to fetch logos";
         return { data: [], error: errorMessage };
     }
 }
