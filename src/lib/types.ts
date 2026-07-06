@@ -130,7 +130,7 @@ export interface QueueColumn {
 
 export type TransactionMode = "business" | "personal";
 export type TransactionType = "income" | "expense";
-export type TransactionStatus = "pending" | "paid";
+export type TransactionStatus = "pending" | "paid" | "expired" | "failed";
 
 // Business income categories
 export type BusinessIncomeCategory = "posting" | "boost" | "sponsor" | "other_income";

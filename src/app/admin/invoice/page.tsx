@@ -26,7 +26,7 @@ import {
     Hash,
     Copy,
 } from "lucide-react";
-import { formatRupiah, formatDate, generateInvoiceNumber } from "@/lib/utils";
+import { formatRupiah, formatDate, generateInvoiceNumber, getTodayWIB } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -96,7 +96,7 @@ export default function InvoicePage() {
     const [clientName, setClientName] = useState("");
     const [clientPhone, setClientPhone] = useState("");
     const [clientAddress, setClientAddress] = useState("");
-    const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().split("T")[0]);
+    const [invoiceDate, setInvoiceDate] = useState(getTodayWIB());
     const [dueDate, setDueDate] = useState("");
     const [items, setItems] = useState<InvoiceItemData[]>(defaultItems);
 
@@ -261,7 +261,7 @@ export default function InvoicePage() {
         setClientName("");
         setClientPhone("");
         setClientAddress("");
-        setInvoiceDate(new Date().toISOString().split("T")[0]);
+        setInvoiceDate(getTodayWIB());
         setDueDate("");
         setItems(defaultItems);
         setNotes("Pembayaran via Transfer BCA/Dana/GoPay\nKonfirmasi ke WhatsApp Admin setelah transfer.");
@@ -399,7 +399,7 @@ export default function InvoicePage() {
         setClientName(data.client_name);
         setClientPhone(data.client_phone || "");
         setClientAddress(data.client_address || "");
-        setInvoiceDate(new Date().toISOString().split("T")[0]); // Reset to today
+        setInvoiceDate(getTodayWIB()); // Reset to today
         setDueDate(""); // Reset due date
         setItems(data.items.length > 0 ? data.items.map(item => ({ ...item, id: Date.now().toString() + Math.random() })) : defaultItems);
         setNotes(data.notes || "");

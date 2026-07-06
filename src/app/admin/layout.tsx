@@ -17,6 +17,7 @@ import {
     Settings,
     Bell,
     Database,
+    CreditCard,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { Button } from "@/components/ui/button";
@@ -33,6 +34,7 @@ const navItems = [
     { href: "/admin/antri", icon: ListTodo, label: "Antrian Posting" },
     { href: "/admin/database", icon: Database, label: "Database" },
     { href: "/admin/keuangan", icon: Wallet, label: "Keuangan" },
+    { href: "/admin/pembayaran", icon: CreditCard, label: "Pembayaran" },
 ];
 
 export default function AdminLayout({

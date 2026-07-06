@@ -28,9 +28,10 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { formatRupiah } from "@/lib/utils";
+import { formatRupiah, getTodayWIB } from "@/lib/utils";
 import { getPostings, getPackages } from "@/lib/posting-service";
-import type { QueuePost, PostingPackage } from "@/lib/types";
+import { getTransactions } from "@/lib/finance-service";
+import type { QueuePost, PostingPackage, Transaction } from "@/lib/types";
 import toast from "react-hot-toast";
 
 const container = {
@@ -51,6 +52,7 @@ const item = {
 export default function AdminDashboard() {
     const [posts, setPosts] = useState<QueuePost[]>([]);
     const [packages, setPackages] = useState<PostingPackage[]>([]);
+    const [transactions, setTransactions] = useState<Transaction[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [calendarMonth, setCalendarMonth] = useState(new Date());
 
@@ -61,12 +63,14 @@ export default function AdminDashboard() {
     const loadData = async () => {
         setIsLoading(true);
         try {
-            const [postsRes, packagesRes] = await Promise.all([
+            const [postsRes, packagesRes, transRes] = await Promise.all([
                 getPostings(),
                 getPackages(),
+                getTransactions(),
             ]);
             if (postsRes.data) setPosts(postsRes.data);
             if (packagesRes.data) setPackages(packagesRes.data);
+            if (transRes.data) setTransactions(transRes.data);
         } catch (err) {
             console.error(err);
             toast.error("Gagal memuat data");
@@ -86,16 +90,16 @@ export default function AdminDashboard() {
     }, []);
 
     // Date helpers
-    const today = new Date().toISOString().split("T")[0];
+    const today = getTodayWIB();
     const currentMonth = new Date().getMonth();
     const currentYear = new Date().getFullYear();
     const lastMonth = currentMonth === 0 ? 11 : currentMonth - 1;
     const lastMonthYear = currentMonth === 0 ? currentYear - 1 : currentYear;
 
     // Computed Stats
-    const todayRevenue = posts
-        .filter(p => p.scheduled_date === today)
-        .reduce((sum, p) => sum + p.total_price, 0);
+    const todayRevenue = transactions
+        .filter(t => t.date.split("T")[0] === today && t.type === "income" && t.status === "paid")
+        .reduce((sum, t) => sum + t.amount, 0);
 
     const totalCompleted = posts.filter(p => p.status === "posted").length;
 
@@ -103,13 +107,20 @@ export default function AdminDashboard() {
         const d = new Date(p.scheduled_date);
         return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
     });
-    const thisMonthRevenue = thisMonthPosts.reduce((sum, p) => sum + p.total_price, 0);
 
-    const lastMonthPosts = posts.filter(p => {
-        const d = new Date(p.scheduled_date);
+    const thisMonthTransactions = transactions.filter(t => {
+        if (t.type !== "income" || t.status !== "paid") return false;
+        const d = new Date(t.date);
+        return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+    });
+    const thisMonthRevenue = thisMonthTransactions.reduce((sum, t) => sum + t.amount, 0);
+
+    const lastMonthTransactions = transactions.filter(t => {
+        if (t.type !== "income" || t.status !== "paid") return false;
+        const d = new Date(t.date);
         return d.getMonth() === lastMonth && d.getFullYear() === lastMonthYear;
     });
-    const lastMonthRevenue = lastMonthPosts.reduce((sum, p) => sum + p.total_price, 0);
+    const lastMonthRevenue = lastMonthTransactions.reduce((sum, t) => sum + t.amount, 0);
     const revenueChange = lastMonthRevenue > 0
         ? Math.round(((thisMonthRevenue - lastMonthRevenue) / lastMonthRevenue) * 100)
         : thisMonthRevenue > 0 ? 100 : 0;
@@ -121,13 +132,13 @@ export default function AdminDashboard() {
             const d = new Date();
             d.setDate(d.getDate() - i);
             const dateStr = d.toISOString().split("T")[0];
-            const dayRevenue = posts
-                .filter(p => p.scheduled_date === dateStr)
-                .reduce((sum, p) => sum + p.total_price, 0);
+            const dayRevenue = transactions
+                .filter(t => t.date.split("T")[0] === dateStr && t.type === "income" && t.status === "paid")
+                .reduce((sum, t) => sum + t.amount, 0);
             result.push({ date: dateStr, revenue: dayRevenue });
         }
         return result;
-    }, [posts]);
+    }, [transactions]);
     const maxRevenue = Math.max(...last7DaysRevenue.map(d => d.revenue), 1);
 
     const overduePosts = posts.filter(p =>

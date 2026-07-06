@@ -1,16 +1,16 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Plus_Jakarta_Sans, JetBrains_Mono } from "next/font/google";
 import { Toaster } from "react-hot-toast";
 import { ThemeProvider } from "@/components/theme-provider";
 import { PWAProvider } from "@/components/pwa";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const jakarta = Plus_Jakarta_Sans({
+  variable: "--font-geist-sans", // keeping the variable name so we don't break tailwind config if it relies on this
   subsets: ["latin"],
 });
 
-const geistMono = Geist_Mono({
+const jetbrains = JetBrains_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
 });
@@ -55,7 +55,7 @@ export default function RootLayout({
   return (
     <html lang="id" suppressHydrationWarning>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${jakarta.variable} ${jetbrains.variable} antialiased`}
         suppressHydrationWarning
       >
         <ThemeProvider

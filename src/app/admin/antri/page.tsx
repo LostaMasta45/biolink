@@ -45,7 +45,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
-import { formatRupiah } from "@/lib/utils";
+import { formatRupiah, getTodayWIB, getTomorrowWIB } from "@/lib/utils";
 import type { QueuePost, QueueStatus, PostingPackage, PostingAddon } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -264,14 +264,11 @@ export default function AntriPage() {
 
     // Copy/Duplicate posting
     const handleCopyPosting = async (post: QueuePost) => {
-        const tomorrow = new Date();
-        tomorrow.setDate(tomorrow.getDate() + 1);
-
         const newPost = {
             company_name: post.company_name + " (Copy)",
             whatsapp_number: post.whatsapp_number,
             poster_url: post.poster_url,
-            scheduled_date: tomorrow.toISOString().split("T")[0],
+            scheduled_date: getTomorrowWIB(),
             scheduled_time: post.scheduled_time,
             package_id: post.package_id,
             addons: post.addons,
@@ -309,7 +306,7 @@ export default function AntriPage() {
     };
 
     // Computed statistics
-    const today = new Date().toISOString().split("T")[0];
+    const today = getTodayWIB();
     const stats = {
         total: posts.length,
         pending: posts.filter(p => p.status === "draft" || p.status === "queued").length,
@@ -534,7 +531,7 @@ export default function AntriPage() {
                                                     {getPostsByDate()[date].length} posting
                                                 </p>
                                             </div>
-                                            {date === new Date().toISOString().split("T")[0] && (
+                                            {date === getTodayWIB() && (
                                                 <Badge className="ml-auto bg-emerald-500">Hari Ini</Badge>
                                             )}
                                         </div>

@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { cn, formatRupiah } from "@/lib/utils";
+import { cn, formatRupiah, getTodayWIB } from "@/lib/utils";
 import type { PostingPackage, PostingAddon, QueuePost } from "@/lib/types";
 import { uploadPoster, createPosting, updatePosting, calculateTotalPrice } from "@/lib/posting-service";
 import toast from "react-hot-toast";
@@ -69,7 +69,7 @@ export function PostingForm({ open, onOpenChange, packages, addons, editData, on
     const resetForm = () => {
         setCompanyName("");
         setWhatsappNumber("");
-        setScheduledDate(new Date().toISOString().split("T")[0]);
+        setScheduledDate(getTodayWIB());
         setScheduledTime("10:00");
         setSelectedPackageId(3);
         setSelectedAddons([]);

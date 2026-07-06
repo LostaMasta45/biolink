@@ -19,7 +19,8 @@ import {
   MessageCircle,
   Sparkles,
   ArrowLeft,
-  Share2
+  Share2,
+  CreditCard
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -41,6 +42,16 @@ const profile = {
 };
 
 const links = [
+  {
+    id: "payment",
+    label: "BAYAR PASANG LOKER",
+    subLabel: "Bayar cepat via QRIS",
+    url: "/payment",
+    icon: CreditCard,
+    color: "bg-violet-600",
+    baseTint: "border-violet-500/30 bg-violet-500/5",
+    textHover: "group-hover:text-violet-600 dark:group-hover:text-violet-400"
+  },
   {
     id: "wa-pasang",
     label: "PASANG LOWONGAN KERJA",
