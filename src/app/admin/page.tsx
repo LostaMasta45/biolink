@@ -21,7 +21,8 @@ import {
     Zap,
     MoreVertical,
     ChevronLeft,
-    ChevronRight
+    ChevronRight,
+    QrCode
 } from "lucide-react";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -118,7 +119,7 @@ export default function AdminDashboard() {
     const lastMonthTransactions = transactions.filter(t => {
         if (t.type !== "income" || t.status !== "paid") return false;
         const d = new Date(t.date);
-        return d.getMonth() === lastMonth && d.getFullYear() === lastMonthYear;
+        return d.getMonth() === lastMonth && d.getMonth() === lastMonthYear;
     });
     const lastMonthRevenue = lastMonthTransactions.reduce((sum, t) => sum + t.amount, 0);
     const revenueChange = lastMonthRevenue > 0
@@ -487,7 +488,8 @@ export default function AdminDashboard() {
                             <CardContent className="grid grid-cols-2 gap-3">
                                 {[
                                     { title: "Invoice", href: "/admin/invoice", icon: FileText, color: "bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400" },
-                                    { title: "Posting", href: "/admin/antri", icon: ListTodo, color: "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400" },
+                                    { title: "QRIS", href: "/admin/qris", icon: QrCode, color: "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400" },
+                                    { title: "Posting", href: "/admin/antri", icon: ListTodo, color: "bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400" },
                                     { title: "Keuangan", href: "/admin/keuangan", icon: Wallet, color: "bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400" },
                                     { title: "Biolink", href: "/admin/biolink", icon: ArrowUpRight, color: "bg-pink-100 dark:bg-pink-900/30 text-pink-600 dark:text-pink-400" },
                                 ].map((action, i) => {

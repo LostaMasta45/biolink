@@ -18,6 +18,7 @@ import {
     Bell,
     Database,
     CreditCard,
+    QrCode,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { Button } from "@/components/ui/button";
@@ -35,6 +36,7 @@ const navItems = [
     { href: "/admin/database", icon: Database, label: "Database" },
     { href: "/admin/keuangan", icon: Wallet, label: "Keuangan" },
     { href: "/admin/pembayaran", icon: CreditCard, label: "Pembayaran" },
+    { href: "/admin/qris", icon: QrCode, label: "QRIS" },
 ];
 
 export default function AdminLayout({

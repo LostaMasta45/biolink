@@ -347,197 +347,124 @@ export function QrisDisplay({
             </div>
 
             {/* Mobile View */}
-            <div className="flex md:hidden flex-col items-center pb-20">
-                {/* Status Header */}
-                <AnimatePresence mode="wait">
-                    {status === "PENDING" && (
-                        <motion.div
-                            key="pending"
-                            initial={{ opacity: 0, y: -10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: -10 }}
-                            className="flex items-center gap-2 mb-6 px-4 py-2 rounded-full bg-amber-50"
-                        >
-                            <div className="relative">
-                                <Loader2 className="w-4 h-4 text-amber-500 animate-spin" />
-                            </div>
-                            <span className="text-sm font-semibold text-amber-600">
-                                Menunggu Pembayaran...
-                            </span>
-                        </motion.div>
-                    )}
-                    {status === "PAID" && (
-                        <motion.div
-                            key="paid"
-                            initial={{ opacity: 0, scale: 0.8 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            className="flex items-center gap-2 mb-6 px-4 py-2 rounded-full bg-emerald-50"
-                        >
-                            <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                            <span className="text-sm font-semibold text-emerald-600">
-                                Pembayaran Berhasil! ✅
-                            </span>
-                        </motion.div>
-                    )}
-                    {status === "EXPIRED" && (
-                        <motion.div
-                            key="expired"
-                            initial={{ opacity: 0, scale: 0.8 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            className="flex items-center gap-2 mb-6 px-4 py-2 rounded-full bg-red-50"
-                        >
-                            <XCircle className="w-4 h-4 text-red-500" />
-                            <span className="text-sm font-semibold text-red-600">
-                                Pembayaran Expired
-                            </span>
-                        </motion.div>
-                    )}
-                </AnimatePresence>
-
-                {/* Amount Display */}
-                <div className="text-center mb-6">
-                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Total Pembayaran</p>
-                    <div className="flex items-start justify-center gap-1">
-                        <span className="text-lg font-bold text-slate-400 mt-1">Rp</span>
-                        <span className="text-4xl font-black tracking-tight text-slate-800">
-                            {totalAmount.toLocaleString("id-ID")}
-                        </span>
+            {/* Mobile Native View (Full Screen - Green E-Wallet Style) */}
+            <div className="flex md:hidden fixed inset-0 z-[100] bg-[#00a550] flex-col font-sans">
+                {/* Header (Diabaikan saat download) */}
+                <div className="flex justify-between items-center px-6 pt-12 pb-6 text-white relative z-10" data-html2canvas-ignore="true">
+                    <div className="flex items-center gap-3">
+                        {status === "PENDING" && (
+                            <>
+                                <Loader2 className="w-5 h-5 animate-spin" />
+                                <span className="font-bold text-lg">Menunggu Pembayaran</span>
+                            </>
+                        )}
+                        {status === "PAID" && (
+                            <>
+                                <CheckCircle2 className="w-5 h-5" />
+                                <span className="font-bold text-lg">Pembayaran Berhasil</span>
+                            </>
+                        )}
+                        {status === "EXPIRED" && (
+                            <>
+                                <XCircle className="w-5 h-5" />
+                                <span className="font-bold text-lg">Pembayaran Kadaluarsa</span>
+                            </>
+                        )}
                     </div>
+                    <ShieldCheck className="w-6 h-6 opacity-90" />
                 </div>
-
-                {/* QR Code Container */}
-                <motion.div
-                    ref={cardRef}
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    className={cn(
-                        "w-full max-w-[280px] mx-auto rounded-[2rem] p-1 relative overflow-hidden shadow-xl flex flex-col mb-2",
-                        status === "PAID"
-                            ? "bg-gradient-to-br from-emerald-400 to-emerald-600 shadow-emerald-500/25"
-                            : status === "EXPIRED"
-                                ? "bg-gradient-to-br from-red-400 to-red-600 shadow-red-500/25"
-                                : "bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 shadow-purple-500/25"
-                    )}
-                >
-                    <div className="w-full h-full bg-white dark:bg-slate-950 rounded-[1.8rem] p-4 flex flex-col relative overflow-hidden">
-                        <div className={cn(
-                            "absolute top-0 right-0 w-24 h-24 opacity-10 rounded-bl-full -mr-4 -mt-4",
-                            status === "PAID" ? "bg-gradient-to-br from-emerald-400 to-emerald-600" :
-                            status === "EXPIRED" ? "bg-gradient-to-br from-red-400 to-red-600" :
-                            "bg-gradient-to-br from-indigo-500 to-purple-500"
-                        )}></div>
-                        <div className={cn(
-                            "absolute bottom-0 left-0 w-28 h-28 opacity-10 rounded-tr-full -ml-8 -mb-8",
-                            status === "PAID" ? "bg-gradient-to-tr from-emerald-600 to-emerald-400" :
-                            status === "EXPIRED" ? "bg-gradient-to-tr from-red-600 to-red-400" :
-                            "bg-gradient-to-tr from-pink-500 to-purple-500"
-                        )}></div>
-                        
-                        <div className="flex-1 flex flex-col items-center justify-center relative z-10 w-full min-h-0 py-1">
-                            <div className={cn(
-                                "w-8 h-8 rounded-full flex items-center justify-center mb-3 text-white shadow-lg shrink-0",
-                                status === "PAID" ? "bg-gradient-to-br from-emerald-400 to-emerald-600 shadow-emerald-500/25" :
-                                status === "EXPIRED" ? "bg-gradient-to-br from-red-400 to-red-600 shadow-red-500/25" :
-                                "bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 shadow-purple-500/25"
-                            )}>
-                                {status === "PAID" ? <CheckCircle2 className="w-4 h-4" /> : 
-                                 status === "EXPIRED" ? <XCircle className="w-4 h-4" /> :
-                                 <Wallet className="w-4 h-4" />}
-                            </div>
-                            
-                            <h2 className="text-base font-black text-slate-800 dark:text-slate-100 mb-4 text-center tracking-tight shrink-0 flex items-center justify-center gap-1 flex-wrap">
-                                Scan Untuk <span className={cn(
-                                    "bg-clip-text text-transparent bg-gradient-to-r",
-                                    status === "PAID" ? "from-emerald-400 to-emerald-600" :
-                                    status === "EXPIRED" ? "from-red-400 to-red-600" :
-                                    "from-indigo-500 via-purple-500 to-pink-500"
-                                )}>Membayar</span>
-                            </h2>
-                            
-                            <div className={cn(
-                                "p-1 rounded-[1.3rem] shadow-xl w-full aspect-square flex items-center justify-center shrink-0",
-                                status === "PAID" ? "bg-gradient-to-br from-emerald-400 to-emerald-600 shadow-emerald-500/25" :
-                                status === "EXPIRED" ? "bg-gradient-to-br from-red-400 to-red-600 shadow-red-500/25" :
-                                "bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 shadow-purple-500/25"
-                            )}>
-                                <div className="p-2.5 w-full h-full bg-white dark:bg-slate-900 rounded-[1.1rem] flex items-center justify-center relative">
-                                    {qrSrc ? (
-                                        <img
-                                            src={qrSrc}
-                                            alt="QRIS Payment"
-                                            className={cn(
-                                                "w-full h-full object-contain rounded-lg",
-                                                status !== "PENDING" && "opacity-30 blur-sm"
-                                            )}
-                                        />
-                                    ) : (
-                                        <div className="w-full h-full rounded-lg bg-muted flex items-center justify-center">
-                                            <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-                                        </div>
-                                    )}
-                                    
-                                    {status === "PAID" && (
-                                        <motion.div
-                                            initial={{ opacity: 0, scale: 0.5 }}
-                                            animate={{ opacity: 1, scale: 1 }}
-                                            className="absolute inset-0 flex items-center justify-center"
-                                        >
-                                            <div className="bg-emerald-500 rounded-full p-3 shadow-xl shadow-emerald-500/50">
-                                                <CheckCircle2 className="w-10 h-10 text-white" />
-                                            </div>
-                                        </motion.div>
-                                    )}
-                                    {status === "EXPIRED" && (
-                                        <motion.div
-                                            initial={{ opacity: 0, scale: 0.5 }}
-                                            animate={{ opacity: 1, scale: 1 }}
-                                            className="absolute inset-0 flex items-center justify-center"
-                                        >
-                                            <div className="bg-red-500 rounded-full p-3 shadow-xl shadow-red-500/50">
-                                                <XCircle className="w-10 h-10 text-white" />
-                                            </div>
-                                        </motion.div>
-                                    )}
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <div className="relative z-10 bg-slate-50 dark:bg-slate-900/80 backdrop-blur-md rounded-xl p-3 w-full text-center mt-4 border border-slate-100 dark:border-slate-800 shrink-0">
-                            <h3 className="font-extrabold text-slate-900 dark:text-white text-sm tracking-tight uppercase truncate">infolokerjombang</h3>
-                            <div className={cn(
-                                "flex items-center justify-center gap-1 mt-0.5",
-                                status === "PAID" ? "text-emerald-600 dark:text-emerald-400" :
-                                status === "EXPIRED" ? "text-red-600 dark:text-red-400" :
-                                "text-pink-600 dark:text-pink-400"
-                            )}>
-                                <Instagram className="w-3.5 h-3.5" />
-                                <span className="text-xs font-semibold tracking-wide truncate">@infolokerjombang</span>
-                            </div>
-                        </div>
-                        
-                        <button
-                            data-html2canvas-ignore="true"
-                            onClick={handleDownload}
-                            disabled={isDownloading || status !== "PENDING"}
-                            title="Download QR"
-                            className="absolute bottom-3 right-3 p-2 bg-slate-900/50 hover:bg-slate-900/80 backdrop-blur-md text-white rounded-full shadow-lg transition-all active:scale-95 disabled:opacity-0 disabled:pointer-events-none z-50 flex items-center justify-center"
-                        >
-                            {isDownloading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-                        </button>
-                    </div>
-                </motion.div>
-
-                {/* Timer */}
+                
+                {/* Timer Display */}
                 {status === "PENDING" && (
-                    <div className="mt-8 flex items-center gap-2 px-4 py-2 rounded-full bg-slate-100 text-slate-500 text-sm font-medium">
-                        <Clock className="w-4 h-4" />
-                        <span>Berlaku hingga</span>
-                        <span className={cn(
-                            "font-bold font-mono ml-1",
-                            parseInt(timeLeft.split(":")[0]) < 5 ? "text-red-500" : "text-slate-800"
-                        )}>{timeLeft}</span>
+                    <div className="text-center text-white/90 text-sm font-medium mb-4 z-10" data-html2canvas-ignore="true">
+                        Selesaikan dalam <span className="font-bold font-mono">{timeLeft}</span>
                     </div>
                 )}
+                
+                {/* Floating Content Card */}
+                <div 
+                    ref={cardRef}
+                    className="flex-1 bg-white rounded-t-[32px] pt-14 px-6 pb-8 flex flex-col items-center relative shadow-[0_-10px_20px_rgba(0,0,0,0.1)] mt-8"
+                >
+                    {/* Floating Avatar */}
+                    <div className="absolute -top-12 left-1/2 -translate-x-1/2 w-24 h-24 bg-white rounded-full p-2 shadow-lg">
+                        <div className="w-full h-full bg-slate-100 rounded-full overflow-hidden flex items-center justify-center">
+                            <img src="/logo-infoloker.png" alt="Logo" className="w-12 h-12 object-contain" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+                        </div>
+                    </div>
+                    
+                    <h2 className="text-2xl font-bold text-slate-800 mb-1 tracking-tight">infolokerjombang</h2>
+                    <p className="text-slate-500 text-sm font-semibold mb-6 bg-slate-100 px-4 py-1.5 rounded-full">Rp {totalAmount.toLocaleString("id-ID")}</p>
+                    
+                    <div className="w-full max-w-[280px] aspect-square flex items-center justify-center p-5 rounded-[32px] border-2 border-slate-100 bg-white mb-6 shadow-sm relative overflow-hidden">
+                        {qrSrc ? (
+                            <img
+                                src={qrSrc}
+                                alt="QRIS Payment"
+                                className={cn(
+                                    "w-full h-full object-contain rounded-lg",
+                                    status !== "PENDING" && "opacity-30 blur-sm"
+                                )}
+                            />
+                        ) : (
+                            <div className="w-full h-full rounded-lg bg-slate-50 flex items-center justify-center">
+                                <Loader2 className="w-8 h-8 animate-spin text-emerald-500" />
+                            </div>
+                        )}
+                        
+                        {status === "PAID" && (
+                            <div className="absolute inset-0 flex items-center justify-center bg-white/40 backdrop-blur-[2px]">
+                                <div className="bg-emerald-500 rounded-full p-4 shadow-xl shadow-emerald-500/50">
+                                    <CheckCircle2 className="w-12 h-12 text-white" />
+                                </div>
+                            </div>
+                        )}
+                        {status === "EXPIRED" && (
+                            <div className="absolute inset-0 flex items-center justify-center bg-white/40 backdrop-blur-[2px]">
+                                <div className="bg-red-500 rounded-full p-4 shadow-xl shadow-red-500/50">
+                                    <XCircle className="w-12 h-12 text-white" />
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Penjelasan / Instruksi Scan */}
+                    <div className="w-full bg-emerald-50 rounded-2xl p-5 mb-auto border border-emerald-100/80">
+                        <h3 className="text-emerald-800 font-bold text-sm mb-3 flex items-center gap-2">
+                            <span className="w-6 h-6 bg-emerald-200 rounded-full flex items-center justify-center text-emerald-800 text-xs">ℹ</span>
+                            Cara Pembayaran
+                        </h3>
+                        <ol className="text-emerald-700/80 text-xs space-y-2.5 font-medium leading-relaxed pl-1">
+                            <li className="flex gap-2">
+                                <span className="font-bold">1.</span>
+                                <span>Buka aplikasi e-Wallet atau M-Banking Anda (Gopay, OVO, BCA, dll).</span>
+                            </li>
+                            <li className="flex gap-2">
+                                <span className="font-bold">2.</span>
+                                <span>Pilih opsi <strong>Scan QRIS</strong>.</span>
+                            </li>
+                            <li className="flex gap-2">
+                                <span className="font-bold">3.</span>
+                                <span>Arahkan kamera ke QR Code di atas, atau masukkan gambar QR ini dari galeri.</span>
+                            </li>
+                            <li className="flex gap-2">
+                                <span className="font-bold">4.</span>
+                                <span>Pastikan nama merchant adalah <strong>infolokerjombang</strong>.</span>
+                            </li>
+                        </ol>
+                    </div>
+                    
+                    {/* Tombol Simpan */}
+                    <button 
+                        data-html2canvas-ignore="true"
+                        onClick={handleDownload}
+                        disabled={isDownloading || status !== "PENDING"}
+                        className="w-full mt-6 bg-[#00a550] hover:bg-[#008c44] text-white py-4 rounded-[20px] font-bold text-base flex justify-center items-center gap-2 shadow-lg shadow-emerald-500/30 active:scale-[0.98] transition-all disabled:opacity-50 disabled:shadow-none"
+                    >
+                        {isDownloading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Download className="w-5 h-5" />} 
+                        {isDownloading ? "Menyimpan QR..." : "Simpan QR Code"}
+                    </button>
+                </div>
             </div>
         </>
     );

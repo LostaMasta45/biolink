@@ -50,12 +50,65 @@ function PaymentContent() {
 
     useEffect(() => {
         setIsClient(true);
+        let hasActivePayment = false;
+
+        // Restore form data
+        const savedForm = localStorage.getItem("ilj_payment_form");
+        if (savedForm) {
+            try {
+                const parsed = JSON.parse(savedForm);
+                if (parsed.customerName) setCustomerName(parsed.customerName);
+                if (parsed.customerWhatsapp) setCustomerWhatsapp(parsed.customerWhatsapp);
+                if (parsed.customerCompany) setCustomerCompany(parsed.customerCompany);
+                if (parsed.selectedPackage) setSelectedPackage(parsed.selectedPackage);
+                if (parsed.selectedAddons) setSelectedAddons(parsed.selectedAddons);
+            } catch (e) {}
+        }
+
+        // Restore payment data
+        const savedPayment = localStorage.getItem("ilj_active_payment");
+        if (savedPayment) {
+            try {
+                const parsedPayment = JSON.parse(savedPayment);
+                const expiry = new Date(parsedPayment.expired_at).getTime();
+                if (expiry > Date.now()) {
+                    setPaymentData(parsedPayment);
+                    setStep(3);
+                    hasActivePayment = true;
+                } else {
+                    localStorage.removeItem("ilj_active_payment");
+                }
+            } catch (e) {}
+        }
+
         const pkgId = searchParams.get("package");
         if (pkgId && PAYMENT_PACKAGES.find(p => p.id === Number(pkgId))) {
             setSelectedPackage(Number(pkgId));
-            setStep(2); // Auto proceed to step 2 if package pre-selected
+            if (!hasActivePayment) setStep(2); // Auto proceed to step 2 if package pre-selected
         }
     }, [searchParams]);
+
+    // Save form data to cache
+    useEffect(() => {
+        if (!isClient) return;
+        localStorage.setItem("ilj_payment_form", JSON.stringify({
+            customerName,
+            customerWhatsapp,
+            customerCompany,
+            selectedPackage,
+            selectedAddons
+        }));
+    }, [customerName, customerWhatsapp, customerCompany, selectedPackage, selectedAddons, isClient]);
+
+    // Save payment data to cache
+    useEffect(() => {
+        if (!isClient) return;
+        if (paymentData) {
+            localStorage.setItem("ilj_active_payment", JSON.stringify(paymentData));
+        } else {
+            localStorage.removeItem("ilj_active_payment");
+        }
+    }, [paymentData, isClient]);
 
     if (!isClient) return null;
 
@@ -74,6 +127,19 @@ function PaymentContent() {
         if (step === 1 && canProceed) {
             setStep(2);
         } else if (step === 2 && canProceed) {
+            // Reuse active payment if valid and order details haven't changed
+            if (paymentData) {
+                const expiry = new Date(paymentData.expired_at).getTime();
+                if (expiry > Date.now()) {
+                    const isSamePackage = paymentData.package_id === selectedPackage;
+                    const isSameAddons = JSON.stringify(paymentData.addons) === JSON.stringify(selectedAddons);
+                    if (isSamePackage && isSameAddons) {
+                        setStep(3);
+                        return;
+                    }
+                }
+            }
+
             setIsLoading(true);
             try {
                 const res = await fetch("/api/payment/create", {
@@ -90,7 +156,12 @@ function PaymentContent() {
                 
                 const data = await res.json();
                 if (data.success && data.data) {
-                    setPaymentData(data.data);
+                    const paymentToSave = {
+                        ...data.data,
+                        package_id: selectedPackage,
+                        addons: selectedAddons,
+                    };
+                    setPaymentData(paymentToSave);
                     setStep(3);
                 } else {
                     throw new Error(data.error || "Gagal membuat pembayaran");
@@ -320,57 +391,45 @@ function PaymentContent() {
                     </main>
                 </div>
 
-                {/* Mobile Success View (Premium Native App Style) */}
-                <div className="md:hidden min-h-screen bg-slate-50 flex flex-col relative text-slate-800 font-sans">
-                    {/* Header Premium (Soft Dark Green) */}
-                    <div className="bg-[#0b411d] pt-10 pb-20 px-6 relative overflow-hidden">
-                        <div className="absolute top-0 right-0 w-32 h-32 bg-[#0d5023] rounded-full blur-3xl opacity-50 -translate-y-10 translate-x-10" />
-                        <div className="absolute bottom-0 left-0 w-24 h-24 bg-[#05220f] rounded-full blur-2xl opacity-40 translate-y-10 -translate-x-5" />
-
-                        <div className="flex items-center justify-between relative z-10">
-                            <div className="w-10" /> {/* Spacer */}
-                            <div className="flex items-center justify-center">
-                                <img src="/logo-infoloker.png" alt="Logo" className="h-8 w-auto object-contain drop-shadow-[0_2px_10px_rgba(255,255,255,0.2)]" />
-                            </div>
-                            <div className="w-10" /> {/* Spacer */}
+                {/* Mobile Success View (Premium Native App Style - Green E-Wallet) */}
+                <div className="md:hidden min-h-screen bg-[#00a550] flex flex-col font-sans relative">
+                    <div className="flex justify-center pt-12 pb-8 text-white">
+                        <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center border-2 border-white/40">
+                            <CheckCircle2 className="w-10 h-10 text-white" />
                         </div>
                     </div>
+                    
+                    {/* Floating Content Card */}
+                    <div className="flex-1 bg-white rounded-t-[32px] px-6 pt-10 pb-8 flex flex-col relative shadow-[0_-10px_20px_rgba(0,0,0,0.1)]">
+                        <h2 className="text-2xl font-bold text-slate-800 text-center mb-2 tracking-tight">Pembayaran Berhasil!</h2>
+                        <p className="text-slate-500 text-sm text-center font-medium mb-8">Terima kasih, pesanan Anda telah kami terima.</p>
 
-                    <div className="flex-1 bg-slate-50 rounded-t-[2.5rem] px-5 pt-8 pb-10 w-full flex flex-col items-center relative z-10 shadow-[0_-20px_50px_rgba(0,0,0,0.15)] -mt-10">
-                        {/* Success Icon */}
-                        <div className="w-20 h-20 bg-[#0b411d] rounded-[1.5rem] flex items-center justify-center text-white shadow-xl shadow-[#0b411d]/30 -mt-16 mb-6 rotate-3 border-4 border-white">
-                            <CheckCircle2 className="w-10 h-10 -rotate-3" />
-                        </div>
-                        
-                        <h2 className="text-2xl font-black text-slate-800 mb-1 tracking-tight">Pembayaran Berhasil!</h2>
-                        <p className="text-slate-500 text-sm mb-8 text-center px-4 font-medium">Terima kasih, pesanan Anda telah kami terima dengan baik.</p>
-
-                        <div className="w-full bg-white rounded-[1.5rem] p-5 shadow-[0_5px_20px_-5px_rgba(0,0,0,0.05)] mb-6 border border-slate-100">
+                        <div className="w-full bg-slate-50 rounded-[20px] p-5 mb-8 border border-slate-100">
                             <div className="flex justify-between items-center mb-4">
                                 <span className="text-slate-400 text-sm font-medium">Order ID</span>
-                                <button onClick={copyOrderId} className="flex items-center gap-2 bg-slate-50 px-2 py-1 rounded-md active:scale-95 transition-transform">
+                                <button onClick={copyOrderId} className="flex items-center gap-1.5 active:scale-95 transition-transform">
                                     <span className="text-slate-800 font-bold text-sm">{orderId}</span>
-                                    {copied ? <CheckCircle2 className="w-3.5 h-3.5 text-[#0b411d]" /> : <Copy className="w-3.5 h-3.5 text-slate-400" />}
+                                    {copied ? <CheckCircle2 className="w-3.5 h-3.5 text-[#00a550]" /> : <Copy className="w-3.5 h-3.5 text-slate-400" />}
                                 </button>
                             </div>
                             <div className="flex justify-between items-center mb-4">
                                 <span className="text-slate-400 text-sm font-medium">Paket</span>
-                                <span className="text-slate-800 font-bold text-sm bg-slate-50 text-[#0b411d] px-2 py-0.5 rounded-md">{packageName}</span>
+                                <span className="text-slate-800 font-bold text-sm bg-emerald-50 text-emerald-700 px-2.5 py-0.5 rounded-md">{packageName}</span>
                             </div>
                             <div className="flex justify-between items-center border-t border-dashed border-slate-200 pt-4 mt-2">
                                 <span className="text-slate-500 text-sm font-bold">Total Bayar</span>
-                                <span className="text-[#9a181e] font-black text-xl">Rp {amount.toLocaleString("id-ID")}</span>
+                                <span className="text-[#00a550] font-black text-xl">Rp {amount.toLocaleString("id-ID")}</span>
                             </div>
                         </div>
 
-                        <div className="w-full space-y-3 mt-auto pt-4">
+                        <div className="w-full space-y-3 mt-auto">
                             <a href={waLink} target="_blank" rel="noopener noreferrer" className="block">
-                                <Button size="lg" className="w-full rounded-full font-bold bg-[#9a181e] hover:bg-[#7d1318] text-white h-14 shadow-lg shadow-[#9a181e]/20 text-[15px] active:scale-95 transition-transform">
+                                <Button size="lg" className="w-full rounded-[20px] font-bold bg-[#00a550] hover:bg-[#008c44] text-white h-14 shadow-lg shadow-emerald-500/30 text-[15px] active:scale-[0.98] transition-all">
                                     <MessageCircle className="w-5 h-5 mr-2" /> Konfirmasi ke Admin
                                 </Button>
                             </a>
                             <Link href="/" className="block">
-                                <Button variant="ghost" size="lg" className="w-full rounded-full font-bold h-14 text-slate-500 bg-slate-100 hover:bg-slate-200 active:scale-95 transition-transform">
+                                <Button variant="ghost" size="lg" className="w-full rounded-[20px] font-bold h-14 text-slate-500 bg-slate-100 hover:bg-slate-200 active:scale-[0.98] transition-all">
                                     Kembali ke Beranda
                                 </Button>
                             </Link>

@@ -14,7 +14,8 @@ import {
     Menu,
     Settings,
     LogOut,
-    ChevronUp
+    ChevronUp,
+    QrCode,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -171,6 +172,11 @@ export function MobileNav() {
                                             <DropdownMenuItem asChild className="cursor-pointer">
                                                 <Link href="/admin/database" className="flex items-center gap-2">
                                                     <Database className="w-4 h-4" /> Database
+                                                </Link>
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem asChild className="cursor-pointer">
+                                                <Link href="/admin/qris" className="flex items-center gap-2">
+                                                    <QrCode className="w-4 h-4" /> QRIS
                                                 </Link>
                                             </DropdownMenuItem>
                                             <DropdownMenuItem asChild className="cursor-pointer">

@@ -20,7 +20,8 @@ import {
   Sparkles,
   ArrowLeft,
   Share2,
-  CreditCard
+  CreditCard,
+  AtSign
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -113,6 +114,26 @@ const links = [
     baseTint: "border-fuchsia-500/20 bg-fuchsia-500/5 dark:bg-fuchsia-500/10",
     textHover: "text-fuchsia-600/90 dark:text-fuchsia-400/90 group-hover:text-fuchsia-600 dark:group-hover:text-fuchsia-400"
   },
+  {
+    id: "telegram",
+    label: "GRUP TELEGRAM",
+    subLabel: "Join Komunitas Telegram",
+    url: "https://t.me/infolokerjombangreal",
+    icon: Send,
+    color: "bg-sky-500",
+    baseTint: "border-sky-500/20 bg-sky-500/5 dark:bg-sky-500/10",
+    textHover: "text-sky-600/90 dark:text-sky-400/90 group-hover:text-sky-600 dark:group-hover:text-sky-400"
+  },
+  {
+    id: "threads",
+    label: "THREADS OFFICIAL",
+    subLabel: "@infolokerjombang",
+    url: "https://threads.com/@infolokerjombang",
+    icon: AtSign,
+    color: "bg-neutral-800 dark:bg-neutral-700",
+    baseTint: "border-neutral-500/20 bg-neutral-500/5 dark:bg-neutral-500/10",
+    textHover: "text-neutral-800/90 dark:text-neutral-300/90 group-hover:text-neutral-800 dark:group-hover:text-neutral-300"
+  },
 ];
 
 const highlights = [
@@ -158,7 +179,7 @@ const NativeHeader = () => (
 
 export default function Home() {
   const { isNativeApp } = usePlatform();
-  const [stats, setStats] = useState({ posts: "9.800+", followers: "205rb" });
+  const [stats, setStats] = useState({ posts: "10.000++", followers: "213.000" });
 
   useEffect(() => {
     // Fetch Instagram stats from API
@@ -320,7 +341,7 @@ export default function Home() {
               >
                 <Verified className="w-4 h-4" />
               </motion.div>
-              <span className="font-bold text-lg leading-tight text-foreground">200++</span>
+              <span className="font-bold text-lg leading-tight text-foreground">250++</span>
               <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mt-0.5">Perusahaan</span>
             </div>
           </motion.div>
