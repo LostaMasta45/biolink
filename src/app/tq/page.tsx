@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { CheckCircle2, ChevronRight, MessageCircle, Home, FileText, Smartphone, RefreshCcw } from "lucide-react";
+import { CheckCircle2, ChevronRight, MessageCircle, Home, FileText, Smartphone, RefreshCcw, Clock, ShieldCheck, Zap } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
@@ -14,43 +14,104 @@ export default function ThankYouPage() {
         <motion.div 
             key="style1"
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="md:hidden min-h-screen bg-[#00a550] flex flex-col font-sans relative overflow-hidden"
+            className="md:hidden min-h-screen bg-[#00a550] flex flex-col font-sans relative overflow-x-hidden"
         >
             {/* Background elements */}
             <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/4 pointer-events-none" />
             <div className="absolute top-1/4 left-0 w-48 h-48 bg-[#008c44] rounded-full blur-2xl -translate-x-1/2 pointer-events-none" />
             
             {/* Header */}
-            <div className="flex justify-center items-center px-6 pt-12 pb-8 text-white relative z-10">
+            <div className="flex justify-center items-center px-6 pt-12 pb-16 text-white relative z-10">
                 <span className="font-bold text-lg tracking-tight">Status Pembayaran</span>
             </div>
             
             {/* Floating Content Card */}
-            <div className="flex-1 bg-[#f8fafc] rounded-t-[32px] pt-16 px-6 pb-8 flex flex-col items-center relative shadow-[0_-20px_40px_rgba(0,0,0,0.15)] z-20">
+            <div className="flex-1 bg-[#f8fafc] rounded-t-[32px] pt-20 px-6 pb-8 flex flex-col items-center relative shadow-[0_-20px_40px_rgba(0,0,0,0.15)] z-20">
                 {/* Floating Success Icon */}
-                <div className="absolute -top-14 left-1/2 -translate-x-1/2 w-28 h-28 bg-white rounded-full p-2.5 shadow-xl">
-                    <div className="w-full h-full bg-[#00a550] rounded-full flex items-center justify-center relative overflow-hidden">
-                        <motion.div 
-                            initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring", delay: 0.2 }}
-                            className="absolute inset-0 bg-emerald-400/30"
-                        />
-                        <CheckCircle2 className="w-14 h-14 text-white relative z-10" strokeWidth={2.5} />
-                    </div>
+                <div className="absolute -top-14 left-1/2 -translate-x-1/2 w-28 h-28 z-30">
+                    <motion.div 
+                        initial={{ scale: 0, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        transition={{ type: "spring", bounce: 0.5, delay: 0.1 }}
+                        className="w-full h-full bg-white rounded-full p-2.5 shadow-xl"
+                    >
+                        <div className="w-full h-full bg-[#00a550] rounded-full flex items-center justify-center relative overflow-hidden">
+                            <motion.div 
+                                animate={{ scale: [1, 2], opacity: [0.5, 0] }}
+                                transition={{ duration: 2, repeat: Infinity, ease: "easeOut" }}
+                                className="absolute inset-0 bg-white/60 rounded-full"
+                            />
+                            <motion.div
+                                animate={{ scale: [1, 1.1, 1] }}
+                                transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+                            >
+                                <CheckCircle2 className="w-14 h-14 text-white relative z-10" strokeWidth={2.5} />
+                            </motion.div>
+                        </div>
+                    </motion.div>
                 </div>
                 
                 <motion.h2 
                     initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.3 }}
-                    className="text-2xl font-black text-slate-800 mb-2 tracking-tight text-center"
+                    className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-br from-slate-800 to-slate-500 mb-3 tracking-tight text-center leading-tight"
                 >
-                    Pembayaran Berhasil!
+                    Pembayaran Diproses
                 </motion.h2>
                 
-                <motion.p 
-                    initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.4 }}
-                    className="text-slate-500 text-sm font-medium mb-8 text-center max-w-[260px] leading-relaxed"
+                <motion.div 
+                    initial="hidden" animate="visible"
+                    variants={{
+                        hidden: { opacity: 0 },
+                        visible: { opacity: 1, transition: { staggerChildren: 0.15, delayChildren: 0.4 } }
+                    }}
+                    className="w-full mb-8 space-y-4"
                 >
-                    Terima kasih, pembayaran Anda telah kami terima dan pesanan Anda sedang kami proses.
-                </motion.p>
+                    <motion.p 
+                        variants={{ hidden: { opacity: 0, y: 15 }, visible: { opacity: 1, y: 0 } }}
+                        className="text-slate-500 text-[13.5px] font-medium text-center mb-6 max-w-[280px] mx-auto leading-relaxed"
+                    >
+                        Terima kasih telah mempercayakan publikasi lowongan perusahaan Anda kepada Infolokerjombang.
+                    </motion.p>
+
+                    <motion.div 
+                        variants={{ hidden: { opacity: 0, x: -20 }, visible: { opacity: 1, x: 0 } }}
+                        className="bg-white border border-slate-100 shadow-sm rounded-2xl p-4 flex gap-3 text-left"
+                    >
+                        <div className="mt-0.5 w-7 h-7 rounded-full bg-blue-50 flex items-center justify-center shrink-0">
+                            <Clock className="w-4 h-4 text-blue-500" />
+                        </div>
+                        <p className="text-slate-600 text-[13px] leading-relaxed">
+                            <strong className="text-slate-800 block mb-0.5">Sedang Kami Cek</strong>
+                            Data dan pembayaran sudah diterima. Tim akan segera menghubungi via WhatsApp untuk jadwal tayang.
+                        </p>
+                    </motion.div>
+
+                    <motion.div 
+                        variants={{ hidden: { opacity: 0, x: -20 }, visible: { opacity: 1, x: 0 } }}
+                        className="bg-white border border-slate-100 shadow-sm rounded-2xl p-4 flex gap-3 text-left"
+                    >
+                        <div className="mt-0.5 w-7 h-7 rounded-full bg-amber-50 flex items-center justify-center shrink-0">
+                            <ShieldCheck className="w-4 h-4 text-amber-500" />
+                        </div>
+                        <p className="text-slate-600 text-[13px] leading-relaxed">
+                            <strong className="text-slate-800 block mb-0.5">Simpan Bukti</strong>
+                            Mohon simpan bukti pembayaran untuk berjaga-jaga ya.
+                        </p>
+                    </motion.div>
+
+                    <motion.div 
+                        variants={{ hidden: { opacity: 0, x: -20 }, visible: { opacity: 1, x: 0 } }}
+                        className="bg-white border border-slate-100 shadow-sm rounded-2xl p-4 flex gap-3 text-left"
+                    >
+                        <div className="mt-0.5 w-7 h-7 rounded-full bg-emerald-50 flex items-center justify-center shrink-0">
+                            <Zap className="w-4 h-4 text-emerald-500" />
+                        </div>
+                        <p className="text-slate-600 text-[13px] leading-relaxed">
+                            <strong className="text-slate-800 block mb-0.5">Siap Tampil</strong>
+                            Lowongan kamu akan segera menjangkau ribuan pencari kerja di Jombang.
+                        </p>
+                    </motion.div>
+                </motion.div>
                 
                 {/* Receipt Card */}
                 <motion.div 
@@ -68,7 +129,7 @@ export default function ThankYouPage() {
                         </div>
                         <div className="flex justify-between items-center">
                             <span className="text-slate-400 text-xs font-medium">Metode</span>
-                            <span className="text-slate-700 text-xs font-bold">QRIS (KlikQRIS)</span>
+                            <span className="text-slate-700 text-xs font-bold">QRIS</span>
                         </div>
                         <div className="flex justify-between items-center">
                             <span className="text-slate-400 text-xs font-medium">ID Transaksi</span>

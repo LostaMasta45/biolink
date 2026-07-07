@@ -395,17 +395,17 @@ export default function InvoicePage() {
 
         // Load data into form but with new invoice number and reset ID
         setEditingInvoiceId(null); // Not editing, creating new
-        setInvoiceNumber(generateInvoiceNumber(Math.floor(Math.random() * 1000))); // Generate new number
+        setInvoiceNumber(data.invoice_number); // Keep original invoice number
         setClientName(data.client_name);
         setClientPhone(data.client_phone || "");
         setClientAddress(data.client_address || "");
-        setInvoiceDate(getTodayWIB()); // Reset to today
-        setDueDate(""); // Reset due date
+        setInvoiceDate(data.invoice_date); // Keep original date
+        setDueDate(data.due_date || ""); // Keep original due date
         setItems(data.items.length > 0 ? data.items.map(item => ({ ...item, id: Date.now().toString() + Math.random() })) : defaultItems);
         setNotes(data.notes || "");
         setTemplate(data.template);
         setColorTheme(data.color_theme || "default");
-        setStatus("draft"); // Reset status to draft
+        setStatus(data.status); // Keep original status
         setDiscountType(data.discount_type);
         setDiscountValue(data.discount_value);
         setTaxEnabled(data.tax_enabled);

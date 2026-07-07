@@ -41,6 +41,7 @@ export async function saveInvoice(invoice: InvoiceData): Promise<{ data: Invoice
             notes: invoice.notes,
             terms: invoice.terms,
             logo_url: invoice.logo_url,
+            updated_at: new Date().toISOString(),
         };
 
         // Only include id for updates to avoid conflicts when creating new invoices
@@ -101,7 +102,7 @@ export async function getInvoices(): Promise<{ data: InvoiceData[]; error: strin
         const { data, error } = await supabase
             .from("invoices")
             .select("*")
-            .order("created_at", { ascending: false });
+            .order("updated_at", { ascending: false, nullsFirst: false });
 
         if (error) throw error;
         return { data: data || [], error: null };

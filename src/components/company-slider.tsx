@@ -156,7 +156,7 @@ export function CompanySlider() {
                     <div className="text-center mb-4 cursor-pointer group select-none">
                         <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-secondary/50 hover:bg-secondary/80 transition-all border border-transparent hover:border-border/50">
                             <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-widest group-hover:text-foreground transition-colors">
-                                Telah Dipercaya oleh 200+ Perusahaan
+                                Telah Dipercaya oleh 250++ Perusahaan
                             </h3>
                             <ChevronRight className="w-3 h-3 text-muted-foreground group-hover:text-primary transition-all opacity-50 group-hover:opacity-100 group-hover:translate-x-0.5" />
                         </div>

@@ -77,50 +77,73 @@ export default function AdminQRISPage() {
 
             {/* Summary Cards */}
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Total Pendapatan (Paid)</CardTitle>
-                        <Wallet className="h-4 w-4 text-emerald-500" />
+                <Card className="bg-emerald-600 border-none shadow-md relative overflow-hidden group text-white">
+                    <div className="absolute -right-4 -top-4 opacity-10 group-hover:opacity-20 group-hover:scale-110 transition-all duration-500">
+                        <Wallet className="h-24 w-24 text-white" />
+                    </div>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
+                        <CardTitle className="font-bold tracking-tight text-sm text-emerald-50">Total Pendapatan (Paid)</CardTitle>
+                        <div className="p-2 bg-white/20 rounded-full">
+                            <Wallet className="h-4 w-4 text-white" />
+                        </div>
                     </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold text-emerald-600">{formatRupiah(summary.totalRevenue)}</div>
-                        <p className="text-xs text-muted-foreground mt-1">
-                            Dari {summary.paidCount} transaksi berhasil
+                    <CardContent className="relative z-10">
+                        <div className="text-3xl font-black tracking-tight">{formatRupiah(summary.totalRevenue)}</div>
+                        <p className="text-xs font-medium text-emerald-100 mt-1.5 flex items-center gap-1.5">
+                            <CheckCircle2 className="w-3.5 h-3.5" /> Dari {summary.paidCount} transaksi berhasil
                         </p>
                     </CardContent>
                 </Card>
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Menunggu Pembayaran</CardTitle>
-                        <Clock className="h-4 w-4 text-amber-500" />
+                
+                <Card className="bg-amber-500 border-none shadow-md relative overflow-hidden group text-white">
+                    <div className="absolute -right-4 -top-4 opacity-10 group-hover:opacity-20 group-hover:scale-110 transition-all duration-500">
+                        <Clock className="h-24 w-24 text-white" />
+                    </div>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
+                        <CardTitle className="font-bold tracking-tight text-sm text-amber-50">Menunggu Pembayaran</CardTitle>
+                        <div className="p-2 bg-white/20 rounded-full">
+                            <Clock className="h-4 w-4 text-white" />
+                        </div>
                     </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold text-amber-600">{summary.pendingCount}</div>
-                        <p className="text-xs text-muted-foreground mt-1">
+                    <CardContent className="relative z-10">
+                        <div className="text-3xl font-black tracking-tight">{summary.pendingCount}</div>
+                        <p className="text-xs font-medium text-amber-100 mt-1.5">
                             Transaksi pending (belum bayar)
                         </p>
                     </CardContent>
                 </Card>
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Transaksi Gagal</CardTitle>
-                        <XCircle className="h-4 w-4 text-red-500" />
+                
+                <Card className="bg-red-500 border-none shadow-md relative overflow-hidden group text-white">
+                    <div className="absolute -right-4 -top-4 opacity-10 group-hover:opacity-20 group-hover:scale-110 transition-all duration-500">
+                        <XCircle className="h-24 w-24 text-white" />
+                    </div>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
+                        <CardTitle className="font-bold tracking-tight text-sm text-red-50">Transaksi Gagal</CardTitle>
+                        <div className="p-2 bg-white/20 rounded-full">
+                            <XCircle className="h-4 w-4 text-white" />
+                        </div>
                     </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold text-red-600">{summary.expiredCount}</div>
-                        <p className="text-xs text-muted-foreground mt-1">
+                    <CardContent className="relative z-10">
+                        <div className="text-3xl font-black tracking-tight">{summary.expiredCount}</div>
+                        <p className="text-xs font-medium text-red-100 mt-1.5">
                             Transaksi kedaluwarsa
                         </p>
                     </CardContent>
                 </Card>
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Total Transaksi</CardTitle>
-                        <Hash className="h-4 w-4 text-blue-500" />
+                
+                <Card className="bg-blue-600 border-none shadow-md relative overflow-hidden group text-white">
+                    <div className="absolute -right-4 -top-4 opacity-10 group-hover:opacity-20 group-hover:scale-110 transition-all duration-500">
+                        <Hash className="h-24 w-24 text-white" />
+                    </div>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
+                        <CardTitle className="font-bold tracking-tight text-sm text-blue-50">Total Transaksi</CardTitle>
+                        <div className="p-2 bg-white/20 rounded-full">
+                            <Hash className="h-4 w-4 text-white" />
+                        </div>
                     </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold text-blue-600">{summary.totalCount}</div>
-                        <p className="text-xs text-muted-foreground mt-1">
+                    <CardContent className="relative z-10">
+                        <div className="text-3xl font-black tracking-tight">{summary.totalCount}</div>
+                        <p className="text-xs font-medium text-blue-100 mt-1.5">
                             Total invoice QRIS yang digenerate
                         </p>
                     </CardContent>

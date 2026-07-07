@@ -12,8 +12,8 @@ interface InstagramStats {
 
 // Default/fallback stats
 const DEFAULT_STATS: InstagramStats = {
-    posts: "9.800+",
-    followers: "205rb",
+    posts: "10.000+",
+    followers: "213.000",
 };
 
 export async function GET() {

@@ -43,16 +43,7 @@ const profile = {
 };
 
 const links = [
-  {
-    id: "payment",
-    label: "BAYAR PASANG LOKER",
-    subLabel: "Bayar cepat via QRIS",
-    url: "/payment",
-    icon: CreditCard,
-    color: "bg-violet-600",
-    baseTint: "border-violet-500/30 bg-violet-500/5",
-    textHover: "group-hover:text-violet-600 dark:group-hover:text-violet-400"
-  },
+
   {
     id: "wa-pasang",
     label: "PASANG LOWONGAN KERJA",
@@ -145,9 +136,9 @@ const highlights = [
 
 const BackgroundGlow = () => (
   <div className="fixed inset-0 overflow-hidden pointer-events-none -z-10">
-    <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-blue-500/20 rounded-full blur-[100px] animate-pulse" />
-    <div className="absolute top-[20%] right-[-10%] w-[40%] h-[40%] bg-purple-500/20 rounded-full blur-[100px] animate-pulse delay-1000" />
-    <div className="absolute bottom-[-10%] left-[20%] w-[60%] h-[60%] bg-emerald-500/10 rounded-full blur-[100px] animate-pulse delay-2000" />
+    <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-blue-500/20 rounded-full blur-[100px]" />
+    <div className="absolute top-[20%] right-[-10%] w-[40%] h-[40%] bg-purple-500/20 rounded-full blur-[100px]" />
+    <div className="absolute bottom-[-10%] left-[20%] w-[60%] h-[60%] bg-emerald-500/10 rounded-full blur-[100px]" />
   </div>
 );
 
@@ -183,18 +174,18 @@ export default function Home() {
 
   useEffect(() => {
     // Fetch Instagram stats from API
-    const fetchStats = async () => {
-      try {
-        const res = await fetch("/api/instagram-stats");
-        if (res.ok) {
-          const data = await res.json();
-          setStats(data);
-        }
-      } catch (err) {
-        console.error("Failed to fetch Instagram stats", err);
-      }
-    };
-    fetchStats();
+    // const fetchStats = async () => {
+    //   try {
+    //     const res = await fetch("/api/instagram-stats");
+    //     if (res.ok) {
+    //       const data = await res.json();
+    //       setStats(data);
+    //     }
+    //   } catch (err) {
+    //     console.error("Failed to fetch Instagram stats", err);
+    //   }
+    // };
+    // fetchStats();
   }, []);
 
   const containerVars = {
@@ -404,7 +395,7 @@ export default function Home() {
                   className="block group relative"
                 >
                   {/* Outer Glow */}
-                  <div className="absolute -inset-1 bg-gradient-to-r from-emerald-500 via-teal-400 to-emerald-600 rounded-3xl blur-lg opacity-40 group-hover:opacity-70 transition-all duration-500 animate-pulse" />
+                  <div className="absolute -inset-1 bg-gradient-to-r from-emerald-500 via-teal-400 to-emerald-600 rounded-3xl blur-lg opacity-40 group-hover:opacity-70 transition-all duration-500" />
 
                   {/* Main Card */}
                   <div className="relative bg-gradient-to-br from-slate-900 via-emerald-950 to-slate-900 rounded-2xl p-5 border border-emerald-500/30 overflow-hidden shadow-2xl">
@@ -432,7 +423,7 @@ export default function Home() {
                           <Phone className="w-7 h-7 text-white drop-shadow-md" />
                         </div>
                         {/* Pulse Ring */}
-                        <div className="absolute -inset-1 rounded-2xl border-2 border-emerald-400/50 animate-ping opacity-30" />
+                        <div className="absolute -inset-1 rounded-2xl border-2 border-emerald-400/50 opacity-30" />
                       </div>
 
                       {/* Text */}
