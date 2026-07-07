@@ -1,0 +1,297 @@
+            {/* Desktop View */}
+            <div className="hidden md:block min-h-screen bg-background text-foreground transition-colors duration-300">
+                {/* Elegant Background Gradient and Pattern */}
+                <div className="fixed inset-0 pointer-events-none -z-10">
+                    <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-primary/10 via-background to-background dark:from-primary/5 dark:via-background dark:to-background" />
+                    <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:24px_24px] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)] opacity-30 dark:opacity-20" />
+                </div>
+
+                {/* Header */}
+                <header className="sticky top-0 z-50 bg-background/80 backdrop-blur-xl border-b border-border/50 shadow-sm">
+                    <div className="max-w-3xl mx-auto px-4 py-3 flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                            <img 
+                                src="/logo-infoloker.png" 
+                                alt="ILJ Logo" 
+                                className="h-9 sm:h-10 w-auto object-contain drop-shadow-sm shrink-0"
+                                onError={(e) => {
+                                    e.currentTarget.style.display = 'none';
+                                    e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                                }}
+                            />
+                            <span className="hidden font-black text-slate-400 text-xs shrink-0">ILJ</span>
+                            <div>
+                                <h1 className="font-extrabold text-sm text-foreground leading-none tracking-tight hidden sm:block">
+                                    infolokerjombang
+                                </h1>
+                                <p className="text-[10px] text-muted-foreground mt-0.5 font-bold tracking-wide uppercase flex items-center gap-1">
+                                    <ShieldCheck className="w-3 h-3 text-emerald-500" /> Secure Payment
+                                </p>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <ModeToggle />
+                        </div>
+                    </div>
+                </header>
+
+                <main className="max-w-3xl mx-auto px-4 py-6 pb-32">
+                    {/* Step Indicator */}
+                    <div className="mb-8">
+                        <StepIndicator currentStep={step} steps={STEPS} />
+                    </div>
+
+                    <AnimatePresence mode="wait">
+                        {/* ======= STEP 1: Pilih Paket ======= */}
+                        {step === 1 && (
+                            <motion.div
+                                key="step1"
+                                initial={{ opacity: 0, x: 20 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                exit={{ opacity: 0, x: -20 }}
+                            >
+                                {/* Title */}
+                                <div className="text-center mb-8">
+                                    <h2 className="text-2xl font-extrabold text-foreground tracking-tight">
+                                        Pilih Paket
+                                    </h2>
+                                    <p className="text-sm text-muted-foreground mt-1.5 font-medium">
+                                        Pilih paket yang sesuai untuk lowongan kerja Anda
+                                    </p>
+                                </div>
+
+                                {/* Package Cards */}
+                                <motion.div 
+                                    variants={{
+                                        show: { transition: { staggerChildren: 0.1 } }
+                                    }}
+                                    initial="hidden"
+                                    animate="show"
+                                    className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8"
+                                >
+                                    {PAYMENT_PACKAGES.map((p) => (
+                                        <motion.div
+                                            key={p.id}
+                                            variants={{
+                                                hidden: { opacity: 0, y: 20 },
+                                                show: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 300, damping: 24 } }
+                                            }}
+                                        >
+                                            <PackageCard
+                                                pkg={p}
+                                                selected={selectedPackage === p.id}
+                                                onSelect={setSelectedPackage}
+                                            />
+                                        </motion.div>
+                                    ))}
+                                </motion.div>
+
+                                {/* Add-ons Section */}
+                                <motion.div 
+                                    initial={{ opacity: 0, y: 20 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    transition={{ delay: 0.4 }}
+                                    className="mb-6"
+                                >
+                                    <div className="flex items-center gap-2 mb-4">
+                                        <Sparkles className="w-4 h-4 text-primary" />
+                                        <h3 className="font-bold text-foreground">Tambahan (Opsional)</h3>
+                                    </div>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                        {PAYMENT_ADDONS.map((addon) => (
+                                            <AddonToggle
+                                                key={addon.id}
+                                                addon={addon}
+                                                selected={selectedAddons.includes(addon.id)}
+                                                onToggle={toggleAddon}
+                                            />
+                                        ))}
+                                    </div>
+                                </motion.div>
+                            </motion.div>
+                        )}
+
+                        {/* ======= STEP 2: Data Diri ======= */}
+                        {step === 2 && (
+                            <motion.div
+                                key="step2"
+                                initial={{ opacity: 0, x: 20 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                exit={{ opacity: 0, x: -20 }}
+                            >
+                                <div className="max-w-xl mx-auto">
+                                <Card className="p-5 space-y-4 bg-card/40 backdrop-blur-md shadow-md shadow-black/5 dark:shadow-white/5 border-border/40">
+                                    <h2 className="text-lg font-bold text-foreground flex items-center gap-2 mb-2">
+                                        <User className="w-5 h-5 text-primary" /> Informasi Pemesan
+                                    </h2>
+                                    
+                                    {/* Name */}
+                                    <div>
+                                        <label className="flex items-center gap-2 text-xs font-semibold text-foreground mb-1.5">
+                                            <User className="w-3.5 h-3.5 text-blue-500" />
+                                            Nama Lengkap
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={customerName}
+                                            onChange={(e) => setCustomerName(e.target.value)}
+                                            placeholder="Masukkan nama Anda"
+                                            className="w-full px-3.5 py-2.5 rounded-xl border border-border/60 bg-background/50 text-foreground placeholder:text-muted-foreground/70 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all text-sm shadow-sm"
+                                        />
+                                    </div>
+
+                                    {/* WhatsApp */}
+                                    <div>
+                                        <label className="flex items-center gap-2 text-xs font-semibold text-foreground mb-1.5">
+                                            <Phone className="w-3.5 h-3.5 text-emerald-500" />
+                                            Nomor WhatsApp
+                                        </label>
+                                        <input
+                                            type="tel"
+                                            value={customerWhatsapp}
+                                            onChange={(e) => setCustomerWhatsapp(e.target.value)}
+                                            placeholder="08xxxxxxxxxx"
+                                            className="w-full px-3.5 py-2.5 rounded-xl border border-border/60 bg-background/50 text-foreground placeholder:text-muted-foreground/70 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all text-sm shadow-sm"
+                                        />
+                                    </div>
+
+                                    {/* Company */}
+                                    <div>
+                                        <label className="flex items-center gap-2 text-xs font-semibold text-foreground mb-1.5">
+                                            <Building2 className="w-3.5 h-3.5 text-blue-500" />
+                                            Nama Perusahaan / Usaha
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={customerCompany}
+                                            onChange={(e) => setCustomerCompany(e.target.value)}
+                                            placeholder="PT / CV / Toko / Usaha..."
+                                            className="w-full px-3.5 py-2.5 rounded-xl border border-border/60 bg-background/50 text-foreground placeholder:text-muted-foreground/70 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all text-sm shadow-sm"
+                                        />
+                                    </div>
+                                </Card>
+
+                                {/* Order Summary */}
+                                <Card className="p-5 mt-4 bg-muted/30">
+                                    <h4 className="font-bold text-sm text-foreground mb-3">Ringkasan Pesanan</h4>
+                                    <div className="space-y-2 text-sm">
+                                        <div className="flex justify-between">
+                                            <span className="text-muted-foreground">{pkg?.name}</span>
+                                            <span className="font-semibold">Rp {pkg?.price?.toLocaleString("id-ID") || 0}</span>
+                                        </div>
+                                        {PAYMENT_ADDONS
+                                            .filter((a) => selectedAddons.includes(a.id))
+                                            .map((addon) => (
+                                                <div key={addon.id} className="flex justify-between">
+                                                    <span className="text-muted-foreground">{addon.emoji} {addon.name}</span>
+                                                    <span className="font-semibold">Rp {addon.price.toLocaleString("id-ID")}</span>
+                                                </div>
+                                            ))}
+                                        <div className="border-t border-border pt-2 mt-2 flex justify-between">
+                                            <span className="font-bold text-foreground">Total</span>
+                                            <span className="font-extrabold text-primary text-lg">
+                                                Rp {totalPrice.toLocaleString("id-ID")}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </Card>
+                                </div>
+                            </motion.div>
+                        )}
+
+                        {/* ======= STEP 3: Bayar QRIS ======= */}
+                        {step === 3 && paymentData && (
+                            <motion.div
+                                key="step3"
+                                initial={{ opacity: 0, x: 20 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                exit={{ opacity: 0, x: -20 }}
+                            >
+                                <div className="text-center mb-6">
+                                    <h2 className="text-2xl font-extrabold text-foreground">
+                                        Scan & Bayar
+                                    </h2>
+                                    <p className="text-sm text-muted-foreground mt-1">
+                                        Scan QR code dengan e-wallet atau m-banking Anda
+                                    </p>
+                                </div>
+
+                                <QrisDisplay
+                                    orderId={paymentData.order_id}
+                                    totalAmount={paymentData.total_amount}
+                                    qrisImage={paymentData.qris_image}
+                                    qrisUrl={paymentData.qris_url}
+                                    expiredAt={paymentData.expired_at}
+                                    onPaymentSuccess={handlePaymentSuccess}
+                                    onPaymentExpired={handlePaymentExpired}
+                                />
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
+                </main>
+
+                {/* Bottom Bar (Step 1 & 2 only) */}
+                {step < 3 && (
+                    <div className="fixed bottom-0 left-0 right-0 bg-background/80 backdrop-blur-xl border-t border-border/50 p-4 z-50 shadow-[0_-10px_40px_-10px_rgba(0,0,0,0.1)] dark:shadow-[0_-10px_40px_-10px_rgba(0,0,0,0.3)]">
+                        <div className="max-w-3xl mx-auto flex items-center justify-between gap-4">
+                            {/* Price Display */}
+                            <div>
+                                {selectedPackage && (
+                                    <div className="flex flex-col">
+                                        <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-0.5">Total Pembayaran</p>
+                                        <div className="flex items-start gap-1">
+                                            <span className="text-sm font-medium text-slate-500 dark:text-slate-400 mt-1">Rp</span>
+                                            <span className="text-3xl font-medium text-slate-800 dark:text-slate-100">
+                                                {totalPrice.toLocaleString("id-ID")}
+                                            </span>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Action Buttons */}
+                            <div className="flex items-center gap-2">
+                                {step > 1 && (
+                                    <Button
+                                        variant="outline"
+                                        size="lg"
+                                        onClick={handleBack}
+                                        className="rounded-xl"
+                                    >
+                                        <ArrowLeft className="w-4 h-4 mr-1" />
+                                        Kembali
+                                    </Button>
+                                )}
+                                <Button
+                                    size="lg"
+                                    disabled={!canProceed || isLoading}
+                                    onClick={handleNext}
+                                    className={cn(
+                                        "rounded-xl font-bold min-w-[140px]",
+                                        step === 2
+                                            ? "bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white"
+                                            : ""
+                                    )}
+                                >
+                                    {isLoading ? (
+                                        <>
+                                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                            Memproses...
+                                        </>
+                                    ) : step === 2 ? (
+                                        <>
+                                            <CreditCard className="w-4 h-4 mr-2" />
+                                            Bayar Sekarang
+                                        </>
+                                    ) : (
+                                        <>
+                                            Lanjutkan
+                                            <ArrowRight className="w-4 h-4 ml-2" />
+                                        </>
+                                    )}
+                                </Button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </div>

@@ -411,51 +411,120 @@ export function QrisDisplay({
                     initial={{ opacity: 0, scale: 0.95 }}
                     animate={{ opacity: 1, scale: 1 }}
                     className={cn(
-                        "w-full max-w-[280px] mx-auto p-5 rounded-[2rem] relative bg-slate-50 flex flex-col items-center border-2 border-slate-100",
-                        status === "PAID" ? "border-emerald-200 bg-emerald-50/50" :
-                        status === "EXPIRED" ? "border-red-200 bg-red-50/50" : ""
+                        "w-full max-w-[280px] mx-auto rounded-[2rem] p-1 relative overflow-hidden shadow-xl flex flex-col mb-2",
+                        status === "PAID"
+                            ? "bg-gradient-to-br from-emerald-400 to-emerald-600 shadow-emerald-500/25"
+                            : status === "EXPIRED"
+                                ? "bg-gradient-to-br from-red-400 to-red-600 shadow-red-500/25"
+                                : "bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 shadow-purple-500/25"
                     )}
                 >
-                    <div className="w-full aspect-square bg-white rounded-[1.5rem] p-4 shadow-sm relative overflow-hidden flex items-center justify-center">
-                        {qrSrc ? (
-                            <img
-                                src={qrSrc}
-                                alt="QRIS Payment"
-                                className={cn(
-                                    "w-full h-full object-contain mix-blend-multiply",
-                                    status !== "PENDING" && "opacity-30 blur-sm"
-                                )}
-                            />
-                        ) : (
-                            <Loader2 className="w-8 h-8 animate-spin text-slate-300" />
-                        )}
-
-                        {status === "PAID" && (
-                            <div className="absolute inset-0 flex items-center justify-center">
-                                <div className="bg-emerald-500 rounded-full p-4 shadow-lg shadow-emerald-500/30 text-white">
-                                    <CheckCircle2 className="w-12 h-12" />
+                    <div className="w-full h-full bg-white dark:bg-slate-950 rounded-[1.8rem] p-4 flex flex-col relative overflow-hidden">
+                        <div className={cn(
+                            "absolute top-0 right-0 w-24 h-24 opacity-10 rounded-bl-full -mr-4 -mt-4",
+                            status === "PAID" ? "bg-gradient-to-br from-emerald-400 to-emerald-600" :
+                            status === "EXPIRED" ? "bg-gradient-to-br from-red-400 to-red-600" :
+                            "bg-gradient-to-br from-indigo-500 to-purple-500"
+                        )}></div>
+                        <div className={cn(
+                            "absolute bottom-0 left-0 w-28 h-28 opacity-10 rounded-tr-full -ml-8 -mb-8",
+                            status === "PAID" ? "bg-gradient-to-tr from-emerald-600 to-emerald-400" :
+                            status === "EXPIRED" ? "bg-gradient-to-tr from-red-600 to-red-400" :
+                            "bg-gradient-to-tr from-pink-500 to-purple-500"
+                        )}></div>
+                        
+                        <div className="flex-1 flex flex-col items-center justify-center relative z-10 w-full min-h-0 py-1">
+                            <div className={cn(
+                                "w-8 h-8 rounded-full flex items-center justify-center mb-3 text-white shadow-lg shrink-0",
+                                status === "PAID" ? "bg-gradient-to-br from-emerald-400 to-emerald-600 shadow-emerald-500/25" :
+                                status === "EXPIRED" ? "bg-gradient-to-br from-red-400 to-red-600 shadow-red-500/25" :
+                                "bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 shadow-purple-500/25"
+                            )}>
+                                {status === "PAID" ? <CheckCircle2 className="w-4 h-4" /> : 
+                                 status === "EXPIRED" ? <XCircle className="w-4 h-4" /> :
+                                 <Wallet className="w-4 h-4" />}
+                            </div>
+                            
+                            <h2 className="text-base font-black text-slate-800 dark:text-slate-100 mb-4 text-center tracking-tight shrink-0 flex items-center justify-center gap-1 flex-wrap">
+                                Scan Untuk <span className={cn(
+                                    "bg-clip-text text-transparent bg-gradient-to-r",
+                                    status === "PAID" ? "from-emerald-400 to-emerald-600" :
+                                    status === "EXPIRED" ? "from-red-400 to-red-600" :
+                                    "from-indigo-500 via-purple-500 to-pink-500"
+                                )}>Membayar</span>
+                            </h2>
+                            
+                            <div className={cn(
+                                "p-1 rounded-[1.3rem] shadow-xl w-full aspect-square flex items-center justify-center shrink-0",
+                                status === "PAID" ? "bg-gradient-to-br from-emerald-400 to-emerald-600 shadow-emerald-500/25" :
+                                status === "EXPIRED" ? "bg-gradient-to-br from-red-400 to-red-600 shadow-red-500/25" :
+                                "bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 shadow-purple-500/25"
+                            )}>
+                                <div className="p-2.5 w-full h-full bg-white dark:bg-slate-900 rounded-[1.1rem] flex items-center justify-center relative">
+                                    {qrSrc ? (
+                                        <img
+                                            src={qrSrc}
+                                            alt="QRIS Payment"
+                                            className={cn(
+                                                "w-full h-full object-contain rounded-lg",
+                                                status !== "PENDING" && "opacity-30 blur-sm"
+                                            )}
+                                        />
+                                    ) : (
+                                        <div className="w-full h-full rounded-lg bg-muted flex items-center justify-center">
+                                            <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                                        </div>
+                                    )}
+                                    
+                                    {status === "PAID" && (
+                                        <motion.div
+                                            initial={{ opacity: 0, scale: 0.5 }}
+                                            animate={{ opacity: 1, scale: 1 }}
+                                            className="absolute inset-0 flex items-center justify-center"
+                                        >
+                                            <div className="bg-emerald-500 rounded-full p-3 shadow-xl shadow-emerald-500/50">
+                                                <CheckCircle2 className="w-10 h-10 text-white" />
+                                            </div>
+                                        </motion.div>
+                                    )}
+                                    {status === "EXPIRED" && (
+                                        <motion.div
+                                            initial={{ opacity: 0, scale: 0.5 }}
+                                            animate={{ opacity: 1, scale: 1 }}
+                                            className="absolute inset-0 flex items-center justify-center"
+                                        >
+                                            <div className="bg-red-500 rounded-full p-3 shadow-xl shadow-red-500/50">
+                                                <XCircle className="w-10 h-10 text-white" />
+                                            </div>
+                                        </motion.div>
+                                    )}
                                 </div>
                             </div>
-                        )}
-                        {status === "EXPIRED" && (
-                            <div className="absolute inset-0 flex items-center justify-center">
-                                <div className="bg-red-500 rounded-full p-4 shadow-lg shadow-red-500/30 text-white">
-                                    <XCircle className="w-12 h-12" />
-                                </div>
+                        </div>
+                        
+                        <div className="relative z-10 bg-slate-50 dark:bg-slate-900/80 backdrop-blur-md rounded-xl p-3 w-full text-center mt-4 border border-slate-100 dark:border-slate-800 shrink-0">
+                            <h3 className="font-extrabold text-slate-900 dark:text-white text-sm tracking-tight uppercase truncate">infolokerjombang</h3>
+                            <div className={cn(
+                                "flex items-center justify-center gap-1 mt-0.5",
+                                status === "PAID" ? "text-emerald-600 dark:text-emerald-400" :
+                                status === "EXPIRED" ? "text-red-600 dark:text-red-400" :
+                                "text-pink-600 dark:text-pink-400"
+                            )}>
+                                <Instagram className="w-3.5 h-3.5" />
+                                <span className="text-xs font-semibold tracking-wide truncate">@infolokerjombang</span>
                             </div>
-                        )}
+                        </div>
+                        
+                        <button
+                            data-html2canvas-ignore="true"
+                            onClick={handleDownload}
+                            disabled={isDownloading || status !== "PENDING"}
+                            title="Download QR"
+                            className="absolute bottom-3 right-3 p-2 bg-slate-900/50 hover:bg-slate-900/80 backdrop-blur-md text-white rounded-full shadow-lg transition-all active:scale-95 disabled:opacity-0 disabled:pointer-events-none z-50 flex items-center justify-center"
+                        >
+                            {isDownloading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                        </button>
                     </div>
-
-                    <p className="font-bold text-slate-800 text-sm mt-4 uppercase tracking-wider">infolokerjombang</p>
-                    
-                    <button
-                        data-html2canvas-ignore="true"
-                        onClick={handleDownload}
-                        disabled={isDownloading || status !== "PENDING"}
-                        className="absolute -bottom-5 right-6 w-10 h-10 bg-blue-600 text-white rounded-full flex items-center justify-center shadow-lg shadow-blue-600/30 hover:bg-blue-700 transition-colors disabled:opacity-0"
-                    >
-                        {isDownloading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Download className="w-5 h-5" />}
-                    </button>
                 </motion.div>
 
                 {/* Timer */}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
     ShieldCheck, Sparkles, User, Phone, Building2, 
@@ -21,19 +21,19 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 
 const STEPS = [
-    { id: 1, title: "Pilih Paket" },
-    { id: 2, title: "Data Diri" },
-    { id: 3, title: "Pembayaran" },
+    { label: "Pilih Paket", icon: "1" },
+    { label: "Data Diri", icon: "2" },
+    { label: "Pembayaran", icon: "3" },
 ];
 
-export default function PaymentPage() {
+function PaymentContent() {
     const searchParams = useSearchParams();
     const [isClient, setIsClient] = useState(false);
     
     // States
     const [step, setStep] = useState(1);
-    const [selectedPackage, setSelectedPackage] = useState<string | null>(null);
-    const [selectedAddons, setSelectedAddons] = useState<string[]>([]);
+    const [selectedPackage, setSelectedPackage] = useState<number | null>(null);
+    const [selectedAddons, setSelectedAddons] = useState<number[]>([]);
     const [customerName, setCustomerName] = useState("");
     const [customerWhatsapp, setCustomerWhatsapp] = useState("");
     const [customerCompany, setCustomerCompany] = useState("");
@@ -51,8 +51,8 @@ export default function PaymentPage() {
     useEffect(() => {
         setIsClient(true);
         const pkgId = searchParams.get("package");
-        if (pkgId && PAYMENT_PACKAGES.find(p => p.id === pkgId)) {
-            setSelectedPackage(pkgId);
+        if (pkgId && PAYMENT_PACKAGES.find(p => p.id === Number(pkgId))) {
+            setSelectedPackage(Number(pkgId));
             setStep(2); // Auto proceed to step 2 if package pre-selected
         }
     }, [searchParams]);
@@ -64,7 +64,7 @@ export default function PaymentPage() {
     const totalPrice = (pkg?.price || 0) + addonsTotal;
     const canProceed = step === 1 ? !!selectedPackage : (customerName.trim() !== "" && customerWhatsapp.trim() !== "" && customerCompany.trim() !== "");
 
-    const toggleAddon = (id: string) => {
+    const toggleAddon = (id: number) => {
         setSelectedAddons(prev => 
             prev.includes(id) ? prev.filter(a => a !== id) : [...prev, id]
         );
@@ -76,18 +76,28 @@ export default function PaymentPage() {
         } else if (step === 2 && canProceed) {
             setIsLoading(true);
             try {
-                // Mock API Call for Midtrans/Xendit integration
-                await new Promise(resolve => setTimeout(resolve, 1500));
-                setPaymentData({
-                    order_id: `ILJ-${Date.now()}`,
-                    total_amount: totalPrice,
-                    qris_url: "https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=MockQRISData",
-                    qris_image: "https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=MockQRISData",
-                    expired_at: new Date(Date.now() + 15 * 60000).toISOString()
+                const res = await fetch("/api/payment/create", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        customer_name: customerName,
+                        customer_whatsapp: customerWhatsapp,
+                        customer_company: customerCompany,
+                        package_id: selectedPackage,
+                        addons: selectedAddons,
+                    }),
                 });
-                setStep(3);
+                
+                const data = await res.json();
+                if (data.success && data.data) {
+                    setPaymentData(data.data);
+                    setStep(3);
+                } else {
+                    throw new Error(data.error || "Gagal membuat pembayaran");
+                }
             } catch (error) {
                 console.error("Payment error", error);
+                alert(error instanceof Error ? error.message : "Terjadi kesalahan saat memproses pembayaran");
             } finally {
                 setIsLoading(false);
             }
@@ -861,5 +871,13 @@ export default function PaymentPage() {
                 )}
             </div>
         </>
+    );
+}
+
+export default function PaymentPage() {
+    return (
+        <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>}>
+            <PaymentContent />
+        </Suspense>
     );
 }

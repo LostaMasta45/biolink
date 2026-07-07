@@ -61,7 +61,7 @@ export function PackageCard({ pkg, selected, onSelect }: PackageCardProps) {
                             <h3 className="font-extrabold text-foreground tracking-tight text-lg leading-tight">
                                 {pkg.name}
                             </h3>
-                            <p className="text-xs text-muted-foreground font-medium mt-0.5">{pkg.duration}</p>
+                            <p className="text-xs text-muted-foreground font-medium mt-0.5">{pkg.description}</p>
                         </div>
                     </div>
                     <div className={cn(
