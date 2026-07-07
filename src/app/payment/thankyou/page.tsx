@@ -15,6 +15,10 @@ import {
     FileText,
     Download,
     Loader2,
+    Home,
+    Clock,
+    ShieldCheck,
+    Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
