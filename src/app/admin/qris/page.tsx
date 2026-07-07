@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, RefreshCcw, Wallet, CheckCircle2, Clock, XCircle, Search } from "lucide-react";
+import { Loader2, RefreshCcw, Wallet, CheckCircle2, Clock, XCircle, Search, Hash } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { getQRISInvoices, getQRISSummary, type PaymentOrder } from "@/lib/qris-service";
