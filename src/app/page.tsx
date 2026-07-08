@@ -188,20 +188,7 @@ export default function Home() {
     // fetchStats();
   }, []);
 
-  const containerVars = {
-    hidden: { opacity: 0 },
-    visible: {
-      opacity: 1,
-      transition: {
-        staggerChildren: 0.1,
-      },
-    },
-  };
-
-  const itemVars = {
-    hidden: { opacity: 0, y: 10 },
-    visible: { opacity: 1, y: 0 },
-  };
+  // Framer Motion variants removed for links list to improve mobile scroll performance
 
   return (
     <div className="theme-biolink min-h-screen bg-background/50 text-foreground font-sans relative overflow-x-hidden selection:bg-primary/30">
@@ -358,11 +345,9 @@ export default function Home() {
         </motion.div>
 
         {/* Links List - "Content" */}
-        <motion.div
-          variants={containerVars}
-          initial="hidden"
-          animate="visible"
-          className="space-y-3"
+        <div
+          className="space-y-3 animate-in fade-in slide-in-from-bottom-4 duration-700 fill-mode-forwards opacity-0"
+          style={{ animationDelay: '300ms' }}
         >
           <div className="flex items-center gap-2 mb-4">
             <div className="h-[1px] flex-1 bg-border"></div>
@@ -376,32 +361,29 @@ export default function Home() {
             // Special Premium Card for WA Pasang
             if (isPremium) {
               return (
-                <motion.a
+                <a
                   key={link.id}
                   href={link.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  variants={itemVars}
-                  whileHover={{ scale: 1.03, y: -3 }}
-                  whileTap={{ scale: 0.98 }}
-                  className="block group relative"
+                  className="block group relative hover:scale-[1.03] hover:-translate-y-[3px] active:scale-[0.98] transition-transform duration-300 transform-gpu will-change-transform"
                 >
                   {/* Outer Glow */}
-                  <div className="absolute -inset-1 bg-gradient-to-r from-emerald-500 via-teal-400 to-emerald-600 rounded-3xl blur-lg opacity-40 group-hover:opacity-70 transition-all duration-500" />
+                  <div className="absolute -inset-1 bg-gradient-to-r from-emerald-500 via-teal-400 to-emerald-600 rounded-3xl blur-md opacity-30 group-hover:opacity-60 transition-all duration-500 transform-gpu" />
 
                   {/* Main Card */}
-                  <div className="relative bg-gradient-to-br from-slate-900 via-emerald-950 to-slate-900 rounded-2xl p-5 border border-emerald-500/30 overflow-hidden shadow-2xl">
+                  <div className="relative bg-gradient-to-br from-slate-900 via-emerald-950 to-slate-900 rounded-2xl p-5 border border-emerald-500/30 overflow-hidden shadow-xl">
                     {/* Animated Background Pattern */}
                     <div className="absolute inset-0 opacity-20">
-                      <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(16,185,129,0.3),transparent_50%)]" />
-                      <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_80%,rgba(20,184,166,0.3),transparent_50%)]" />
+                      <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(16,185,129,0.2),transparent_50%)] transform-gpu" />
+                      <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_80%,rgba(20,184,166,0.2),transparent_50%)] transform-gpu" />
                     </div>
 
                     {/* Shimmer Effect */}
-                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000 ease-out" />
+                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000 ease-out transform-gpu" />
 
                     {/* Top Badge */}
-                    <div className="absolute -top-1 left-1/2 -translate-x-1/2 flex items-center gap-1.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full shadow-lg shadow-amber-500/30">
+                    <div className="absolute -top-1 left-1/2 -translate-x-1/2 flex items-center gap-1.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full shadow-md">
                       <Sparkles className="w-3 h-3" />
                       HOT
                     </div>
@@ -410,12 +392,10 @@ export default function Home() {
                     <div className="relative flex items-center gap-4 mt-2">
                       {/* Icon Container */}
                       <div className="relative">
-                        <div className="absolute inset-0 bg-emerald-500 rounded-2xl blur-md opacity-60" />
-                        <div className="relative w-14 h-14 bg-gradient-to-br from-emerald-400 to-teal-500 rounded-2xl flex items-center justify-center shadow-lg ring-4 ring-emerald-500/20">
+                        <div className="absolute inset-0 bg-emerald-500 rounded-2xl blur-sm opacity-50 transform-gpu" />
+                        <div className="relative w-14 h-14 bg-gradient-to-br from-emerald-400 to-teal-500 rounded-2xl flex items-center justify-center shadow-lg ring-2 ring-emerald-500/20">
                           <Phone className="w-7 h-7 text-white drop-shadow-md" />
                         </div>
-                        {/* Pulse Ring */}
-                        <div className="absolute -inset-1 rounded-2xl border-2 border-emerald-400/50 opacity-30" />
                       </div>
 
                       {/* Text */}
@@ -433,8 +413,8 @@ export default function Home() {
 
                       {/* Arrow Button */}
                       <div className="relative">
-                        <div className="absolute inset-0 bg-emerald-400 rounded-full blur-md opacity-50 group-hover:opacity-80 transition-opacity" />
-                        <div className="relative w-11 h-11 bg-gradient-to-br from-emerald-400 to-teal-500 rounded-full flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
+                        <div className="absolute inset-0 bg-emerald-400 rounded-full blur-sm opacity-40 group-hover:opacity-70 transition-opacity transform-gpu" />
+                        <div className="relative w-11 h-11 bg-gradient-to-br from-emerald-400 to-teal-500 rounded-full flex items-center justify-center shadow-md group-hover:scale-110 transition-transform duration-300 transform-gpu">
                           <ChevronRight className="w-6 h-6 text-white group-hover:translate-x-0.5 transition-transform" />
                         </div>
                       </div>
@@ -443,31 +423,28 @@ export default function Home() {
                     {/* Bottom Accent Line */}
                     <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-500 via-teal-400 to-emerald-500" />
                   </div>
-                </motion.a>
+                </a>
               );
             }
 
             // Regular Links
             return (
-              <motion.a
+              <a
                 key={link.id}
                 href={link.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                variants={itemVars}
-                whileHover={{ scale: 1.02, y: -2 }}
-                whileTap={{ scale: 0.98 }}
-                className="block group"
+                className="block group hover:scale-[1.02] hover:-translate-y-0.5 active:scale-[0.98] transition-transform duration-300 transform-gpu will-change-transform"
               >
                 <Card className={cn(
                   "relative overflow-hidden border transition-all duration-300 shadow-sm group",
                   "flex items-center p-3.5 gap-4",
-                  "hover:shadow-md backdrop-blur-sm bg-background/40 hover:bg-background/60",
+                  "hover:shadow-md backdrop-blur-sm bg-background/40 hover:bg-background/60 transform-gpu",
                   link.baseTint
                 )}>
                   <div
                     className={cn(
-                      "w-12 h-12 rounded-2xl flex items-center justify-center text-white shadow-lg transition-transform duration-500 group-hover:scale-110 group-hover:rotate-3",
+                      "w-12 h-12 rounded-2xl flex items-center justify-center text-white shadow-sm transition-transform duration-500 group-hover:scale-110 group-hover:rotate-3 transform-gpu",
                       link.color
                     )}
                   >
@@ -485,14 +462,14 @@ export default function Home() {
                     </div>
                   </div>
 
-                  <div className="w-8 h-8 rounded-full flex items-center justify-center transition-all duration-300 bg-transparent text-muted-foreground/50 opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 group-hover:bg-primary/10 group-hover:text-primary">
+                  <div className="w-8 h-8 rounded-full flex items-center justify-center transition-all duration-300 bg-transparent text-muted-foreground/50 opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 group-hover:bg-primary/10 group-hover:text-primary transform-gpu">
                     <ChevronRight className="w-5 h-5" />
                   </div>
                 </Card>
-              </motion.a>
+              </a>
             );
           })}
-        </motion.div>
+        </div>
       </main>
     </div>
   );
