@@ -206,32 +206,26 @@ export function CompanySlider() {
                 <div className="absolute top-0 left-0 w-16 h-full bg-gradient-to-r from-background to-transparent z-10 pointer-events-none" />
                 <div className="absolute top-0 right-0 w-16 h-full bg-gradient-to-l from-background to-transparent z-10 pointer-events-none" />
 
-                <motion.div
-                    className="flex gap-4 w-fit" // Increased gap slightly
-                    animate={{
-                        x: ["0%", "-33.33%"],
-                    }}
-                    transition={{
-                        duration: 200, // Slower speed (was 120)
-                        ease: "linear",
-                        repeat: Infinity,
-                    }}
+                <div
+                    className="flex gap-4 w-fit animate-scroll-marquee"
+                    style={{ willChange: "transform" }}
                 >
                     {sliderContent.map((logo, index) => (
                         <div
                             key={`${logo}-${index}`}
-                            className="relative w-16 h-16 flex-shrink-0 bg-white rounded-xl shadow-sm border border-border/10 flex items-center justify-center p-2"
+                            className="relative w-16 h-16 flex-shrink-0 bg-white rounded-xl shadow-sm border border-border/10 flex items-center justify-center p-2 transform-gpu"
                         >
                             <Image
                                 src={`${LOGO_PATH}${encodeURIComponent(logo)}`}
                                 alt="Company Logo"
                                 fill
+                                loading="lazy"
                                 className="object-contain p-1"
                                 sizes="64px"
                             />
                         </div>
                     ))}
-                </motion.div>
+                </div>
             </div>
         </div>
     );

@@ -136,9 +136,9 @@ const highlights = [
 
 const BackgroundGlow = () => (
   <div className="fixed inset-0 overflow-hidden pointer-events-none -z-10">
-    <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-blue-500/20 rounded-full blur-[100px]" />
-    <div className="absolute top-[20%] right-[-10%] w-[40%] h-[40%] bg-purple-500/20 rounded-full blur-[100px]" />
-    <div className="absolute bottom-[-10%] left-[20%] w-[60%] h-[60%] bg-emerald-500/10 rounded-full blur-[100px]" />
+    <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-blue-500/20 rounded-full blur-3xl transform-gpu" />
+    <div className="absolute top-[20%] right-[-10%] w-[40%] h-[40%] bg-purple-500/20 rounded-full blur-3xl transform-gpu" />
+    <div className="absolute bottom-[-10%] left-[20%] w-[60%] h-[60%] bg-emerald-500/10 rounded-full blur-3xl transform-gpu" />
   </div>
 );
 
@@ -244,19 +244,11 @@ export default function Home() {
             transition={{ type: "spring", duration: 0.5 }}
             className="relative mb-4"
           >
-            {/* Animated Rings */}
-            <motion.div
-              animate={{ rotate: 360 }}
-              transition={{ repeat: Infinity, duration: 8, ease: "linear" }}
-              className="absolute -inset-2 rounded-full bg-gradient-to-tr from-green-500 via-emerald-400 to-blue-500 p-[2px] opacity-80 blur-sm"
-            />
-            <motion.div
-              animate={{ rotate: -360 }}
-              transition={{ repeat: Infinity, duration: 12, ease: "linear" }}
-              className="absolute -inset-1.5 rounded-full bg-gradient-to-tr from-green-600 via-emerald-500 to-blue-600 p-[2px]"
-            >
+            {/* Animated Rings - Optimized with CSS Animation */}
+            <div className="absolute -inset-2 rounded-full bg-gradient-to-tr from-green-500 via-emerald-400 to-blue-500 p-[2px] opacity-80 blur-sm animate-[spin_8s_linear_infinite]" />
+            <div className="absolute -inset-1.5 rounded-full bg-gradient-to-tr from-green-600 via-emerald-500 to-blue-600 p-[2px] animate-[spin_12s_linear_infinite_reverse]">
               <div className="rounded-full bg-background p-[2px] w-full h-full"></div>
-            </motion.div>
+            </div>
 
             <Avatar className="w-28 h-28 sm:w-32 sm:h-32 border-4 border-background relative z-10 shadow-2xl">
               <AvatarImage src={profile.avatarUrl} className="object-cover" />

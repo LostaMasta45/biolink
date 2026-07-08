@@ -6,7 +6,7 @@ import {
     ShieldCheck, Sparkles, User, Phone, Building2, 
     ArrowLeft, ArrowRight, CreditCard, Loader2, 
     CheckCircle2, Copy, MessageCircle, Instagram, Heart, FileText, Download,
-    Check
+    Check, Clock, Zap, Home
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -392,50 +392,150 @@ function PaymentContent() {
                 </div>
 
                 {/* Mobile Success View (Premium Native App Style - Green E-Wallet) */}
-                <div className="md:hidden min-h-screen bg-[#00a550] flex flex-col font-sans relative">
-                    <div className="flex justify-center pt-12 pb-8 text-white">
-                        <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center border-2 border-white/40">
-                            <CheckCircle2 className="w-10 h-10 text-white" />
-                        </div>
+                <motion.div 
+                    key="style1"
+                    initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                    className="md:hidden min-h-screen bg-[#00a550] flex flex-col font-sans relative overflow-x-hidden"
+                >
+                    {/* Background elements */}
+                    <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/4 pointer-events-none" />
+                    <div className="absolute top-1/4 left-0 w-48 h-48 bg-[#008c44] rounded-full blur-2xl -translate-x-1/2 pointer-events-none" />
+                    
+                    {/* Header */}
+                    <div className="flex justify-center items-center px-6 pt-12 pb-16 text-white relative z-10">
+                        <span className="font-bold text-lg tracking-tight">Status Pembayaran</span>
                     </div>
                     
                     {/* Floating Content Card */}
-                    <div className="flex-1 bg-white rounded-t-[32px] px-6 pt-10 pb-8 flex flex-col relative shadow-[0_-10px_20px_rgba(0,0,0,0.1)]">
-                        <h2 className="text-2xl font-bold text-slate-800 text-center mb-2 tracking-tight">Pembayaran Berhasil!</h2>
-                        <p className="text-slate-500 text-sm text-center font-medium mb-8">Terima kasih, pesanan Anda telah kami terima.</p>
-
-                        <div className="w-full bg-slate-50 rounded-[20px] p-5 mb-8 border border-slate-100">
-                            <div className="flex justify-between items-center mb-4">
-                                <span className="text-slate-400 text-sm font-medium">Order ID</span>
-                                <button onClick={copyOrderId} className="flex items-center gap-1.5 active:scale-95 transition-transform">
-                                    <span className="text-slate-800 font-bold text-sm">{orderId}</span>
-                                    {copied ? <CheckCircle2 className="w-3.5 h-3.5 text-[#00a550]" /> : <Copy className="w-3.5 h-3.5 text-slate-400" />}
-                                </button>
-                            </div>
-                            <div className="flex justify-between items-center mb-4">
-                                <span className="text-slate-400 text-sm font-medium">Paket</span>
-                                <span className="text-slate-800 font-bold text-sm bg-emerald-50 text-emerald-700 px-2.5 py-0.5 rounded-md">{packageName}</span>
-                            </div>
-                            <div className="flex justify-between items-center border-t border-dashed border-slate-200 pt-4 mt-2">
-                                <span className="text-slate-500 text-sm font-bold">Total Bayar</span>
-                                <span className="text-[#00a550] font-black text-xl">Rp {amount.toLocaleString("id-ID")}</span>
-                            </div>
+                    <div className="flex-1 bg-[#f8fafc] rounded-t-[32px] pt-20 px-6 pb-8 flex flex-col items-center relative shadow-[0_-20px_40px_rgba(0,0,0,0.15)] z-20">
+                        {/* Floating Success Icon */}
+                        <div className="absolute -top-14 left-1/2 -translate-x-1/2 w-28 h-28 z-30">
+                            <motion.div 
+                                initial={{ scale: 0, opacity: 0 }}
+                                animate={{ scale: 1, opacity: 1 }}
+                                transition={{ type: "spring", bounce: 0.5, delay: 0.1 }}
+                                className="w-full h-full bg-white rounded-full p-2.5 shadow-xl"
+                            >
+                                <div className="w-full h-full bg-[#00a550] rounded-full flex items-center justify-center relative overflow-hidden">
+                                    <motion.div 
+                                        animate={{ scale: [1, 2], opacity: [0.5, 0] }}
+                                        transition={{ duration: 2, repeat: Infinity, ease: "easeOut" }}
+                                        className="absolute inset-0 bg-white/60 rounded-full"
+                                    />
+                                    <motion.div
+                                        animate={{ scale: [1, 1.1, 1] }}
+                                        transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+                                    >
+                                        <CheckCircle2 className="w-14 h-14 text-white relative z-10" strokeWidth={2.5} />
+                                    </motion.div>
+                                </div>
+                            </motion.div>
                         </div>
+                        
+                        <motion.h2 
+                            initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.3 }}
+                            className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-br from-slate-800 to-slate-500 mb-3 tracking-tight text-center leading-tight"
+                        >
+                            Pembayaran Diproses
+                        </motion.h2>
+                        
+                        <motion.div 
+                            initial="hidden" animate="visible"
+                            variants={{
+                                hidden: { opacity: 0 },
+                                visible: { opacity: 1, transition: { staggerChildren: 0.15, delayChildren: 0.4 } }
+                            }}
+                            className="w-full mb-8 space-y-4"
+                        >
+                            <motion.p 
+                                variants={{ hidden: { opacity: 0, y: 15 }, visible: { opacity: 1, y: 0 } }}
+                                className="text-slate-500 text-[13.5px] font-medium text-center mb-6 max-w-[280px] mx-auto leading-relaxed"
+                            >
+                                Terima kasih telah mempercayakan publikasi lowongan perusahaan Anda kepada Infolokerjombang.
+                            </motion.p>
 
-                        <div className="w-full space-y-3 mt-auto">
-                            <a href={waLink} target="_blank" rel="noopener noreferrer" className="block">
-                                <Button size="lg" className="w-full rounded-[20px] font-bold bg-[#00a550] hover:bg-[#008c44] text-white h-14 shadow-lg shadow-emerald-500/30 text-[15px] active:scale-[0.98] transition-all">
-                                    <MessageCircle className="w-5 h-5 mr-2" /> Konfirmasi ke Admin
-                                </Button>
-                            </a>
-                            <Link href="/" className="block">
-                                <Button variant="ghost" size="lg" className="w-full rounded-[20px] font-bold h-14 text-slate-500 bg-slate-100 hover:bg-slate-200 active:scale-[0.98] transition-all">
-                                    Kembali ke Beranda
-                                </Button>
+                            <motion.div 
+                                variants={{ hidden: { opacity: 0, x: -20 }, visible: { opacity: 1, x: 0 } }}
+                                className="bg-white border border-slate-100 shadow-sm rounded-2xl p-4 flex gap-3 text-left"
+                            >
+                                <div className="mt-0.5 w-7 h-7 rounded-full bg-blue-50 flex items-center justify-center shrink-0">
+                                    <Clock className="w-4 h-4 text-blue-500" />
+                                </div>
+                                <p className="text-slate-600 text-[13px] leading-relaxed">
+                                    <strong className="text-slate-800 block mb-0.5">Sedang Kami Cek</strong>
+                                    Data dan pembayaran sudah diterima. Tim akan segera menghubungi via WhatsApp untuk jadwal tayang.
+                                </p>
+                            </motion.div>
+
+                            <motion.div 
+                                variants={{ hidden: { opacity: 0, x: -20 }, visible: { opacity: 1, x: 0 } }}
+                                className="bg-white border border-slate-100 shadow-sm rounded-2xl p-4 flex gap-3 text-left"
+                            >
+                                <div className="mt-0.5 w-7 h-7 rounded-full bg-amber-50 flex items-center justify-center shrink-0">
+                                    <ShieldCheck className="w-4 h-4 text-amber-500" />
+                                </div>
+                                <p className="text-slate-600 text-[13px] leading-relaxed">
+                                    <strong className="text-slate-800 block mb-0.5">Simpan Bukti</strong>
+                                    Mohon simpan bukti pembayaran untuk berjaga-jaga ya.
+                                </p>
+                            </motion.div>
+
+                            <motion.div 
+                                variants={{ hidden: { opacity: 0, x: -20 }, visible: { opacity: 1, x: 0 } }}
+                                className="bg-white border border-slate-100 shadow-sm rounded-2xl p-4 flex gap-3 text-left"
+                            >
+                                <div className="mt-0.5 w-7 h-7 rounded-full bg-emerald-50 flex items-center justify-center shrink-0">
+                                    <Zap className="w-4 h-4 text-emerald-500" />
+                                </div>
+                                <p className="text-slate-600 text-[13px] leading-relaxed">
+                                    <strong className="text-slate-800 block mb-0.5">Siap Tampil</strong>
+                                    Lowongan kamu akan segera menjangkau ribuan pencari kerja di Jombang.
+                                </p>
+                            </motion.div>
+                        </motion.div>
+                        
+                        {/* Receipt Card */}
+                        <motion.div 
+                            initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.5 }}
+                            className="w-full bg-white rounded-3xl p-5 border border-slate-100 shadow-[0_5px_15px_-5px_rgba(0,0,0,0.05)] mb-8"
+                        >
+                            <div className="flex justify-between items-center mb-4 pb-4 border-b border-slate-100 border-dashed">
+                                <span className="text-slate-500 text-sm font-medium">Nominal</span>
+                                <span className="text-xl font-black text-slate-800">Rp {amount.toLocaleString("id-ID")}</span>
+                            </div>
+                            <div className="space-y-3">
+                                <div className="flex justify-between items-center">
+                                    <span className="text-slate-400 text-xs font-medium">Tanggal</span>
+                                    <span className="text-slate-700 text-xs font-bold">{new Date().toLocaleString('id-ID', {day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute:'2-digit'})} WIB</span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                    <span className="text-slate-400 text-xs font-medium">Paket</span>
+                                    <span className="text-slate-700 text-xs font-bold">{packageName}</span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                    <span className="text-slate-400 text-xs font-medium">ID Transaksi</span>
+                                    <button onClick={copyOrderId} className="flex items-center gap-1.5 active:scale-95 transition-transform">
+                                        <span className="text-slate-700 text-xs font-mono font-bold bg-slate-50 px-2 py-0.5 rounded-md border border-slate-100">{orderId}</span>
+                                        {copied ? <CheckCircle2 className="w-3.5 h-3.5 text-[#00a550]" /> : <Copy className="w-3.5 h-3.5 text-slate-400" />}
+                                    </button>
+                                </div>
+                            </div>
+                        </motion.div>
+                        
+                        {/* Action Buttons */}
+                        <motion.div 
+                            initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.6 }}
+                            className="w-full space-y-3 mt-auto"
+                        >
+                            <Link href={waLink} target="_blank" className="w-full bg-[#00a550] hover:bg-[#008c44] text-white py-4 rounded-2xl font-bold text-[15px] flex justify-center items-center gap-2 shadow-lg shadow-emerald-500/25 active:scale-[0.98] transition-all">
+                                <MessageCircle className="w-5 h-5" /> Konfirmasi ke Admin
                             </Link>
-                        </div>
+                            <Link href="/" className="w-full bg-emerald-50 hover:bg-emerald-100 text-[#00a550] py-4 rounded-2xl font-bold text-[15px] flex justify-center items-center gap-2 active:scale-[0.98] transition-all">
+                                <Home className="w-5 h-5" /> Kembali ke Beranda
+                            </Link>
+                        </motion.div>
                     </div>
-                </div>
+                </motion.div>
             </>
         );
     }
@@ -721,11 +821,11 @@ function PaymentContent() {
                             onClick={handleBack} 
                             disabled={step === 1} 
                             className={cn(
-                                "w-10 h-10 flex items-center justify-start transition-opacity", 
+                                "w-10 h-10 flex items-center justify-center bg-white/10 backdrop-blur-md rounded-full border border-white/10 transition-all active:scale-95", 
                                 step === 1 ? "opacity-0 invisible" : "opacity-100"
                             )}
                         >
-                            <ArrowLeft className="w-6 h-6 text-white" />
+                            <ArrowLeft className="w-5 h-5 text-white" />
                         </button>
                         
                         <div className="w-10" /> {/* Spacer */}

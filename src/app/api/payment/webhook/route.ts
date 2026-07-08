@@ -33,6 +33,64 @@ async function sendTelegramNotification(text: string) {
     }
 }
 
+// Send WhatsApp notification using Kirimdev API
+async function sendWhatsappNotification(phoneNumber: string, order: any) {
+    const apiKey = process.env.KIRIMDEV_API_KEY;
+    const phoneId = process.env.KIRIMDEV_PHONE_ID;
+
+    if (!apiKey || !phoneId || !phoneNumber) {
+        console.warn("KIRIMDEV credentials not set or phone number missing.");
+        return;
+    }
+
+    // Format phone number to start with 62 (without +)
+    let formattedPhone = phoneNumber.replace(/[^0-9]/g, '');
+    if (formattedPhone.startsWith('0')) {
+        formattedPhone = '62' + formattedPhone.substring(1);
+    } else if (!formattedPhone.startsWith('62')) {
+        formattedPhone = '62' + formattedPhone;
+    }
+    const totalFormatted = order.amount.toLocaleString("id-ID");
+    
+    try {
+        const res = await fetch(`https://api.kirimdev.com/v1/${phoneId}/messages`, {
+            method: "POST",
+            headers: { 
+                "Authorization": `Bearer ${apiKey}`,
+                "Content-Type": "application/json" 
+            },
+            body: JSON.stringify({
+                messaging_product: "whatsapp",
+                to: formattedPhone,
+                type: "template",
+                template: {
+                    name: "invoice_pembayaran",
+                    language: { code: "id" },
+                    components: [
+                        {
+                            type: "body",
+                            parameters: [
+                                { type: "text", text: order.customer_name || 'Pelanggan' },
+                                { type: "text", text: order.package_name || 'Paket Anda' },
+                                { type: "text", text: totalFormatted },
+                                { type: "text", text: order.order_id }
+                            ]
+                        }
+                    ]
+                }
+            }),
+        });
+
+        if (!res.ok) {
+            console.error("WhatsApp notification failed:", await res.text());
+        } else {
+            console.log("WhatsApp notification sent successfully to", formattedPhone);
+        }
+    } catch (err) {
+        console.error("WhatsApp notification error:", err);
+    }
+}
+
 export async function POST(request: Request) {
     try {
         const body: KlikQRISWebhookPayload = await request.json();
@@ -223,6 +281,9 @@ ${order.addon_names?.length > 0 ? `➕ <b>Add-on:</b> ${order.addon_names.join("
             `.trim();
 
             await sendTelegramNotification(telegramMessage);
+
+            // Send WhatsApp notification to Customer
+            await sendWhatsappNotification(order.customer_whatsapp, order);
 
         } else if (webhookStatus === "EXPIRED") {
             // === PAYMENT EXPIRED ===
