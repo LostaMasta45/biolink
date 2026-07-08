@@ -345,10 +345,7 @@ export default function Home() {
         </motion.div>
 
         {/* Links List - "Content" */}
-        <div
-          className="space-y-3 animate-in fade-in slide-in-from-bottom-4 duration-700 fill-mode-forwards opacity-0"
-          style={{ animationDelay: '300ms' }}
-        >
+        <div className="space-y-3 mt-4">
           <div className="flex items-center gap-2 mb-4">
             <div className="h-[1px] flex-1 bg-border"></div>
             <span className="text-xs font-semibold text-muted-foreground">QUICK LINKS</span>
