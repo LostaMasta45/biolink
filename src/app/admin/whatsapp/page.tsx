@@ -205,7 +205,7 @@ export default function WhatsAppAdminPage() {
               WhatsApp Command Center
             </h1>
             <p className="text-sm text-white/50 mt-1">
-              Self-trigger, monitoring & webhook management
+              Admin Command, monitoring & webhook management
             </p>
           </div>
         </div>
@@ -325,7 +325,7 @@ export default function WhatsAppAdminPage() {
                       ) : (
                         <Send size={14} />
                       )}
-                      Test Self-Trigger
+                      Test Admin Command
                     </button>
                   </div>
 
@@ -418,17 +418,24 @@ export default function WhatsAppAdminPage() {
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-semibold flex items-center gap-2">
                   <Terminal className="text-cyan-400" size={20} />
-                  Self-Trigger Commands
+                  Admin Commands
                 </h2>
                 <span className="text-xs text-white/30 bg-white/5 px-3 py-1 rounded-full">
                   {commands.filter((c) => c.enabled).length}/{commands.length} aktif
                 </span>
               </div>
 
-              <p className="text-sm text-white/40 mb-6">
-                Kirim command berikut ke chat nomor WA bisnis Anda untuk menjalankannya.
-                Bot akan membaca pesan dari diri sendiri dan membalas otomatis.
-              </p>
+              <div className="mb-6 space-y-2">
+                <p className="text-sm text-white/40">
+                  Gunakan <strong className="text-emerald-400">Nomor Pribadi (Admin)</strong> Anda untuk mengirim command ini ke Chat WhatsApp KirimDev (bot).
+                </p>
+                <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl flex items-start gap-3">
+                  <Info className="text-red-400 mt-0.5 flex-shrink-0" size={16} />
+                  <p className="text-xs text-red-300">
+                    <strong>PENTING:</strong> Meta API <strong>TIDAK MENGIZINKAN</strong> nomor WhatsApp Business untuk membalas pesan ke nomornya sendiri. Jika Anda mengirim chat dari nomor bot ke dirinya sendiri, akan gagal (Error #100).
+                  </p>
+                </div>
+              </div>
 
               <div className="space-y-3">
                 {commands.map((cmd) => (
@@ -644,8 +651,8 @@ export default function WhatsAppAdminPage() {
                     <h3 className="font-medium mb-2">Klik &quot;Simpan&quot; & Test</h3>
                     <p className="text-sm text-white/50 mb-3">
                       Setelah menyimpan, kembali ke halaman ini dan gunakan tombol{" "}
-                      <strong className="text-emerald-400">&quot;Test Self-Trigger&quot;</strong> di tab Overview 
-                      untuk memverifikasi webhook sudah terhubung.
+                      <strong className="text-emerald-400">&quot;Test Admin Command&quot;</strong> di tab Overview 
+                      untuk memverifikasi webhook sudah terhubung. Pastikan <code className="text-cyan-400">WA_ADMIN_NUMBERS</code> sudah diset.
                     </p>
                   </div>
                 </div>
@@ -664,6 +671,8 @@ export default function WhatsAppAdminPage() {
               <div className="rounded-xl bg-black/50 border border-white/[0.06] p-4 font-mono text-sm space-y-1 overflow-x-auto">
                 <p className="text-white/30"># API Key (sama untuk semua akun)</p>
                 <p><span className="text-cyan-400">KIRIMDEV_API_KEY</span><span className="text-white/30">=</span><span className="text-amber-400">sk-xxxxxxxxxxxxxxxxx</span></p>
+                <p className="mt-3 text-white/30"># Nomor WA Pribadi Anda (Yang Boleh Menjalankan Command - pisahkan dengan koma)</p>
+                <p><span className="text-cyan-400">WA_ADMIN_NUMBERS</span><span className="text-white/30">=</span><span className="text-amber-400">62812345678,62898765432</span></p>
                 <p className="mt-3 text-white/30"># Akun 1: Lostamasta</p>
                 <p><span className="text-cyan-400">KIRIMDEV_PHONE_ID_1</span><span className="text-white/30">=</span><span className="text-amber-400">phone_id_dari_kirimdev</span></p>
                 <p><span className="text-cyan-400">KIRIMDEV_PHONE_NUMBER_1</span><span className="text-white/30">=</span><span className="text-amber-400">6283122866975</span></p>
@@ -687,10 +696,10 @@ export default function WhatsAppAdminPage() {
             <div className="rounded-2xl bg-white/[0.03] border border-white/[0.06] p-6">
               <h2 className="text-lg font-semibold flex items-center gap-2 mb-4">
                 <Bot className="text-emerald-400" size={20} />
-                Quick Self-Trigger Test
+                Quick Admin Command Test
               </h2>
               <p className="text-sm text-white/40 mb-4">
-                Pilih akun dan kirim pesan test untuk memverifikasi self-trigger berjalan:
+                Pilih akun, dan sistem akan mencoba mengirim pesan test ke nomor pribadi (<code className="text-cyan-400">WA_ADMIN_NUMBERS</code>) Anda:
               </p>
               <div className="grid gap-3 md:grid-cols-2">
                 {accounts.map((account) => (
@@ -723,7 +732,7 @@ export default function WhatsAppAdminPage() {
                 Command Cheatsheet
               </h2>
               <p className="text-sm text-white/40 mb-4">
-                Buka WhatsApp di HP, kirim pesan ke nomor bisnis Anda sendiri:
+                Gunakan nomor pribadi Anda, kirim pesan ke WhatsApp bisnis Anda:
               </p>
               <div className="grid gap-2 md:grid-cols-2">
                 {commands.map((cmd) => (

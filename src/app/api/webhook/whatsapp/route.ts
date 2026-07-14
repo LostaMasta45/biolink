@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { isSelfMessage, getAccountByPhoneId, getAllAccounts, getAccountByPhone } from '@/lib/whatsapp/kirimdev-client';
+import { isAdminNumber, getAccountByPhoneId, getAllAccounts, getAccountByPhone } from '@/lib/whatsapp/kirimdev-client';
 import { processCommand } from '@/lib/whatsapp/command-processor';
 import type { KirimDevWebhookPayload } from '@/lib/whatsapp/types';
 
@@ -13,7 +13,7 @@ import type { KirimDevWebhookPayload } from '@/lib/whatsapp/types';
 //
 // Events yang di-subscribe:
 //   ✅ message.received
-//   ✅ message.sent (PENTING untuk self-trigger)
+//   ✅ message.sent
 // ============================================
 
 export async function POST(req: NextRequest) {
@@ -40,10 +40,10 @@ export async function POST(req: NextRequest) {
     //  ROUTING LOGIC
     // ═══════════════════════════════════════════
 
-    // CASE 1: SELF-TRIGGER
-    // Pesan dari nomor kita sendiri DAN diawali "!"
-    if (isSelfMessage(senderPhone) && text.startsWith('!')) {
-      console.log('[Webhook] 🤖 Self-trigger detected:', text);
+    // CASE 1: ADMIN COMMAND
+    // Pesan dari nomor Admin (Pribadi) DAN diawali "!"
+    if (isAdminNumber(senderPhone) && text.startsWith('!')) {
+      console.log('[Webhook] 🤖 Admin command detected:', text);
 
       // Tentukan phone ID mana yang menerima pesan ini
       // Prioritas: dari payload.data.phoneId, lalu dari payload.data.to
@@ -78,7 +78,7 @@ export async function POST(req: NextRequest) {
 
       // Proses command secara async (agar webhook cepat return 200)
       // KirimDev butuh response dalam < 5 detik
-      processCommand(payload, phoneId, accountLabel).catch(err => {
+      processCommand(phoneId, senderPhone, text).catch(err => {
         console.error('[Webhook] Command processing failed:', err);
       });
 

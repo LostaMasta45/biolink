@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import {
   getAllAccounts,
   testConnection,
-  sendToSelf,
+  sendTestToAdmin,
   sendTextMessage,
 } from '@/lib/whatsapp/kirimdev-client';
 import { COMMANDS } from '@/lib/whatsapp/command-processor';
@@ -60,18 +60,18 @@ export async function POST(req: NextRequest) {
         return NextResponse.json(result);
       }
 
-      // ─── Test kirim pesan ke nomor sendiri ───
+      // ─── Test kirim pesan ke nomor admin ───
       case 'test_self_trigger': {
         if (!phoneId) {
           return NextResponse.json({ error: 'phoneId diperlukan' }, { status: 400 });
         }
-        const testMsg = message || '🧪 *Test Self-Trigger*\n\nIni adalah pesan test dari ILJ-Hub Dashboard.\nJika Anda melihat pesan ini, webhook sudah terhubung dengan benar!\n\nKetik *!help* untuk melihat daftar command.';
-        const result = await sendToSelf(phoneId, testMsg);
+        const testMsg = message || '🧪 *Test Admin Command*\n\nIni adalah pesan test dari ILJ-Hub Dashboard.\nJika Anda melihat pesan ini, webhook sudah terhubung dengan benar!\n\nKetik *!help* untuk melihat daftar command.';
+        const result = await sendTestToAdmin(phoneId, testMsg);
         return NextResponse.json({
           ...result,
           message: result.success
-            ? 'Pesan test berhasil dikirim ke nomor sendiri'
-            : 'Gagal mengirim pesan test',
+            ? 'Pesan test berhasil dikirim ke nomor Admin'
+            : result.error,
         });
       }
 

@@ -1,132 +1,148 @@
-import { sendToSelf } from './kirimdev-client';
-import type { KirimDevWebhookPayload, CommandDefinition, CommandContext, CommandLog } from './types';
-import { handleRekap } from './commands/rekap';
-import { handleCekOrder } from './commands/cek-order';
-import { handleTagihan } from './commands/tagihan';
-import { handleStats } from './commands/stats';
-import { handleHelp } from './commands/help';
-import { handleKlien } from './commands/klien';
+import { sendTextMessage } from './kirimdev-client';
 
 // ============================================
-// Command Registry
-// Semua command yang tersedia didaftarkan di sini
+// WhatsApp Command System
 // ============================================
 
-export const COMMANDS: Record<string, Omit<CommandDefinition, 'name' | 'handler'> & {
-  handler: CommandDefinition['handler'];
-}> = {
-  '!rekap': {
-    description: 'Rekap penjualan & keuangan',
-    usage: '!rekap [hari|minggu|bulan]',
-    enabled: true,
-    handler: handleRekap,
-  },
-  '!cek': {
-    description: 'Cek status order berdasarkan ID atau nomor WA',
-    usage: '!cek ORD-123 atau !cek 08123456789',
-    enabled: true,
-    handler: handleCekOrder,
-  },
-  '!tagihan': {
-    description: 'Lihat tagihan pending atau detail invoice',
-    usage: '!tagihan atau !tagihan INV-001',
-    enabled: true,
-    handler: handleTagihan,
-  },
-  '!stats': {
-    description: 'Statistik lengkap bulan ini vs bulan lalu',
-    usage: '!stats',
-    enabled: true,
-    handler: handleStats,
-  },
-  '!klien': {
-    description: 'Cari data klien atau lihat top 10 klien',
-    usage: '!klien atau !klien Tokopedia',
-    enabled: true,
-    handler: handleKlien,
-  },
+export interface Command {
+  description: string;
+  usage: string;
+  enabled: boolean;
+  execute: (phoneId: string, senderPhone: string, args: string[]) => Promise<void>;
+}
+
+export const COMMANDS: Record<string, Command> = {
   '!help': {
-    description: 'Tampilkan semua command yang tersedia',
+    description: 'Menampilkan daftar perintah yang tersedia',
     usage: '!help',
     enabled: true,
-    handler: handleHelp,
+    execute: async (phoneId, senderPhone) => {
+      const activeCmds = Object.entries(COMMANDS)
+        .filter(([_, cmd]) => cmd.enabled)
+        .map(([name, cmd]) => `*${name}*\n${cmd.description}`)
+        .join('\n\n');
+        
+      const reply = `🤖 *ILJ-Hub Admin Bot*\n\nBerikut daftar command yang tersedia:\n\n${activeCmds}`;
+      await sendTextMessage(phoneId, senderPhone, reply);
+    }
   },
+  
+  '!rekap': {
+    description: 'Menampilkan ringkasan pendapatan hari ini',
+    usage: '!rekap',
+    enabled: true,
+    execute: async (phoneId, senderPhone) => {
+      // TODO: Connect ke database Supabase
+      const reply = `📊 *Rekap Hari Ini*\n\nTotal Transaksi: 0\nPendapatan: Rp 0\nStatus: _Belum ada data dari database_`;
+      await sendTextMessage(phoneId, senderPhone, reply);
+    }
+  },
+
+  '!cek': {
+    description: 'Mengecek status invoice berdasarkan ID',
+    usage: '!cek [ID_INVOICE]',
+    enabled: true,
+    execute: async (phoneId, senderPhone, args) => {
+      if (args.length === 0) {
+        await sendTextMessage(phoneId, senderPhone, '❌ Mohon sertakan ID invoice.\n\nContoh: *!cek INV-12345*');
+        return;
+      }
+      
+      const invoiceId = args[0];
+      // TODO: Query ke database
+      const reply = `🔍 *Status Invoice*\n\nID: ${invoiceId}\nStatus: _Belum terhubung ke DB_`;
+      await sendTextMessage(phoneId, senderPhone, reply);
+    }
+  },
+
+  '!tagihan': {
+    description: 'Menampilkan daftar invoice yang belum dibayar (pending)',
+    usage: '!tagihan',
+    enabled: true,
+    execute: async (phoneId, senderPhone) => {
+      const reply = `⚠️ *Invoice Pending*\n\nSaat ini belum ada data yang bisa ditarik dari database.`;
+      await sendTextMessage(phoneId, senderPhone, reply);
+    }
+  },
+
+  '!stats': {
+    description: 'Menampilkan statistik klik QRIS dan konversi bulan ini',
+    usage: '!stats',
+    enabled: true,
+    execute: async (phoneId, senderPhone) => {
+      const reply = `📈 *Statistik Bulan Ini*\n\nPengunjung Web: 0\nKlik QRIS: 0\nKonversi: 0%`;
+      await sendTextMessage(phoneId, senderPhone, reply);
+    }
+  },
+
+  '!klien': {
+    description: 'Mencari data klien (nama/nomor)',
+    usage: '!klien [NAMA]',
+    enabled: true,
+    execute: async (phoneId, senderPhone, args) => {
+      if (args.length === 0) {
+        await sendTextMessage(phoneId, senderPhone, '❌ Mohon sertakan nama klien.\n\nContoh: *!klien Budi*');
+        return;
+      }
+      
+      const nama = args.join(' ');
+      const reply = `👤 *Hasil Pencarian Klien*\n\nQuery: "${nama}"\nHasil: _Belum terhubung ke DB_`;
+      await sendTextMessage(phoneId, senderPhone, reply);
+    }
+  }
 };
 
-// ============================================
-// Command Processor
-// ============================================
-
 /**
- * Proses pesan self-trigger (command dari diri sendiri)
- * 
- * Flow:
- * 1. Parse command name dan arguments dari teks pesan
- * 2. Cari handler yang sesuai di COMMANDS registry
- * 3. Jalankan handler
- * 4. Kirim hasilnya balik ke chat yang sama via KirimDev API
- * 5. Log hasilnya untuk tracking
+ * Memproses pesan teks dan menjalankan command jika valid
+ * @param phoneId - Phone ID yang menerima pesan
+ * @param senderPhone - Nomor pengirim pesan
+ * @param text - Teks pesan
  */
-export async function processCommand(
-  payload: KirimDevWebhookPayload,
-  phoneId: string,
-  accountLabel: string
-): Promise<void> {
-  const text = payload.data.message?.text?.trim();
-  if (!text || !text.startsWith('!')) return;
+export async function processCommand(phoneId: string, senderPhone: string, text: string): Promise<boolean> {
+  if (!text.startsWith('!')) return false;
 
-  // Parse command dan arguments
-  const parts = text.split(/\s+/);
-  const commandName = parts[0].toLowerCase();
-  const args = parts.slice(1);
+  const args = text.split(' ');
+  const commandName = args[0].toLowerCase();
+  const commandArgs = args.slice(1);
 
   const command = COMMANDS[commandName];
-
-  // Command tidak ditemukan
+  
   if (!command) {
-    await sendToSelf(
+    await sendTextMessage(
       phoneId,
+      senderPhone,
       `❌ Command *${commandName}* tidak ditemukan.\n\nKetik *!help* untuk melihat daftar command.`
     );
-    return;
+    return true;
   }
 
-  // Command dinonaktifkan
   if (!command.enabled) {
-    await sendToSelf(
+    await sendTextMessage(
       phoneId,
+      senderPhone,
       `⚠️ Command *${commandName}* sedang dinonaktifkan oleh admin.`
     );
-    return;
+    return true;
   }
-
-  const context: CommandContext = {
-    senderPhone: payload.data.from,
-    receiverPhoneId: phoneId,
-    receiverLabel: accountLabel,
-    rawPayload: payload,
-  };
 
   try {
     // Kirim indikator "sedang memproses..."
-    await sendToSelf(phoneId, `⏳ Memproses *${commandName}*...`);
+    await sendTextMessage(phoneId, senderPhone, `⏳ Memproses *${commandName}*...`);
 
-    // Execute command handler
-    const result = await command.handler(args, context);
-
-    // Kirim hasil
-    await sendToSelf(phoneId, result);
-
-    // Log sukses
-    console.log(`[Command] ✅ ${commandName} executed successfully via ${accountLabel}`);
+    // Execute command
+    await command.execute(phoneId, senderPhone, commandArgs);
+    console.log(`[Command] ✅ ${commandName} executed successfully for ${senderPhone}`);
+    return true;
 
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : 'Unknown error';
     console.error(`[Command] ❌ Error executing ${commandName}:`, errorMsg);
 
-    await sendToSelf(
+    await sendTextMessage(
       phoneId,
+      senderPhone,
       `❌ *Error saat menjalankan ${commandName}:*\n\n\`${errorMsg}\`\n\nSilakan coba lagi atau hubungi developer.`
     );
+    return false;
   }
 }

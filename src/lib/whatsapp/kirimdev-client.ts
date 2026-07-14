@@ -156,13 +156,12 @@ export async function sendTemplateMessage(
 // ============================================
 
 /**
- * Kirim pesan ke nomor sendiri (Self-Trigger Reply)
- * Mengirim balasan ke chat yang sama (nomor pengirim = nomor tujuan)
+ * Kirim pesan test ke nomor admin (bukan ke diri sendiri)
  * 
- * @param phoneId - Phone ID akun yang digunakan
+ * @param phoneId - Phone ID akun yang digunakan (pengirim)
  * @param message - Teks pesan balasan
  */
-export async function sendToSelf(
+export async function sendTestToAdmin(
   phoneId: string,
   message: string
 ): Promise<{ success: boolean; error?: string }> {
@@ -170,7 +169,14 @@ export async function sendToSelf(
   if (!account) {
     return { success: false, error: `Akun dengan phoneId ${phoneId} tidak ditemukan` };
   }
-  return sendTextMessage(phoneId, account.phoneNumber, message);
+
+  const admins = getAdminNumbers();
+  if (admins.length === 0) {
+    return { success: false, error: `WA_ADMIN_NUMBERS belum dikonfigurasi di .env.local` };
+  }
+
+  // Kirim ke admin pertama saja untuk test
+  return sendTextMessage(phoneId, admins[0], message);
 }
 
 /**
@@ -195,11 +201,19 @@ export async function sendNotifToAdmin(
 }
 
 /**
- * Cek apakah nomor pengirim adalah salah satu nomor bisnis kita
+ * Ambil daftar nomor admin dari .env (bisa dipisah koma)
  */
-export function isSelfMessage(senderPhone: string): boolean {
+export function getAdminNumbers(): string[] {
+  const envAdmin = process.env.WA_ADMIN_NUMBERS || '';
+  return envAdmin.split(',').map(n => normalizePhone(n)).filter(n => n.length > 5);
+}
+
+/**
+ * Cek apakah nomor pengirim adalah nomor admin
+ */
+export function isAdminNumber(senderPhone: string): boolean {
   const normalized = normalizePhone(senderPhone);
-  return getAccounts().some(acc => normalizePhone(acc.phoneNumber) === normalized);
+  return getAdminNumbers().includes(normalized);
 }
 
 /**
