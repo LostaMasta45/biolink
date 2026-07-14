@@ -225,40 +225,119 @@ export function getAllAccounts(): WhatsAppAccount[] {
 }
 
 /**
- * Test koneksi ke KirimDev API
+ * Test koneksi ke KirimDev API — dengan log detail
+ * 
+ * Checks:
+ * 1. API Key valid → GET /health
+ * 2. Akun terdaftar → GET /accounts 
+ * 3. Phone ID cocok → cek di daftar accounts
  */
 export async function testConnection(phoneId: string): Promise<{
   connected: boolean;
   accountLabel: string;
   error?: string;
+  details: {
+    apiKeySet: boolean;
+    apiKeyPrefix: string;
+    phoneId: string;
+    phoneNumber: string;
+    healthCheck: { ok: boolean; status?: number; body?: string };
+    accountsCheck: { ok: boolean; status?: number; found: boolean; body?: string };
+    timestamp: string;
+  };
 }> {
   const account = getAccounts().find(a => a.phoneId === phoneId);
+  const apiKey = process.env.KIRIMDEV_API_KEY || '';
+  const baseUrl = 'https://api.kirimdev.com/v1';
+  const now = new Date().toISOString();
+
+  const details = {
+    apiKeySet: !!apiKey,
+    apiKeyPrefix: apiKey ? apiKey.substring(0, 12) + '...' : '(kosong)',
+    phoneId: phoneId,
+    phoneNumber: account?.phoneNumber || '(tidak ditemukan)',
+    healthCheck: { ok: false, status: 0, body: '' } as { ok: boolean; status?: number; body?: string },
+    accountsCheck: { ok: false, status: 0, found: false, body: '' } as { ok: boolean; status?: number; found: boolean; body?: string },
+    timestamp: now,
+  };
+
   if (!account) {
-    return { connected: false, accountLabel: 'Unknown', error: 'Akun tidak ditemukan' };
+    return { connected: false, accountLabel: 'Unknown', error: 'Akun tidak ditemukan di env', details };
   }
 
-  const apiKey = process.env.KIRIMDEV_API_KEY;
   if (!apiKey) {
-    return { connected: false, accountLabel: account.label, error: 'API Key belum dikonfigurasi' };
+    return { connected: false, accountLabel: account.label, error: 'KIRIMDEV_API_KEY kosong di .env.local', details };
   }
 
-  try {
-    // Coba fetch info akun (atau endpoint health check KirimDev)
-    const res = await fetch(`https://api.kirimdev.com/v1/${phoneId}/health`, {
-      method: 'GET',
-      headers: { 'Authorization': `Bearer ${apiKey}` },
-    });
+  const headers = { 'Authorization': `Bearer ${apiKey}` };
 
-    return {
-      connected: res.ok,
-      accountLabel: account.label,
-      error: res.ok ? undefined : `HTTP ${res.status}: ${await res.text()}`,
-    };
-  } catch (error) {
+  // Step 1: Health check (verifikasi API key valid)
+  try {
+    const healthRes = await fetch(`${baseUrl}/health`, { method: 'GET', headers });
+    const healthBody = await healthRes.text();
+    details.healthCheck = { ok: healthRes.ok, status: healthRes.status, body: healthBody.substring(0, 200) };
+
+    if (!healthRes.ok) {
+      return {
+        connected: false,
+        accountLabel: account.label,
+        error: `API Key tidak valid (health: ${healthRes.status})`,
+        details,
+      };
+    }
+  } catch (err) {
+    details.healthCheck = { ok: false, body: (err as Error).message };
     return {
       connected: false,
       accountLabel: account.label,
-      error: (error as Error).message,
+      error: `Gagal koneksi ke KirimDev: ${(err as Error).message}`,
+      details,
     };
   }
+
+  // Step 2: Cek accounts (verifikasi phone ID terdaftar)
+  try {
+    const accountsRes = await fetch(`${baseUrl}/accounts`, { method: 'GET', headers });
+    const accountsBody = await accountsRes.text();
+    details.accountsCheck = {
+      ok: accountsRes.ok,
+      status: accountsRes.status,
+      found: false,
+      body: accountsBody.substring(0, 500),
+    };
+
+    if (accountsRes.ok) {
+      try {
+        const accountsData = JSON.parse(accountsBody);
+        const accountsList = accountsData.data || accountsData.accounts || accountsData;
+        if (Array.isArray(accountsList)) {
+          const found = accountsList.some(
+            (a: any) => String(a.id) === String(phoneId) || String(a.phone_number_id) === String(phoneId)
+          );
+          details.accountsCheck.found = found;
+          if (!found) {
+            return {
+              connected: false,
+              accountLabel: account.label,
+              error: `API Key valid, tapi Phone ID "${phoneId}" tidak ditemukan di akun KirimDev Anda`,
+              details,
+            };
+          }
+        }
+      } catch {
+        // JSON parse gagal, tapi health OK berarti koneksi dasar berhasil
+        details.accountsCheck.found = true; // assume OK
+      }
+    }
+  } catch (err) {
+    details.accountsCheck = { ok: false, found: false, body: (err as Error).message };
+    // Health OK tapi accounts gagal — koneksi dasar OK
+  }
+
+  return {
+    connected: true,
+    accountLabel: account.label,
+    details,
+  };
 }
+

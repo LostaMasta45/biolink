@@ -23,6 +23,7 @@ import {
   Shield,
   Bot,
   Hash,
+  ChevronRight,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -62,7 +63,8 @@ export default function WhatsAppAdminPage() {
   const [loading, setLoading] = useState(true);
   const [testingAccount, setTestingAccount] = useState<string | null>(null);
   const [sendingTest, setSendingTest] = useState<string | null>(null);
-  const [testResults, setTestResults] = useState<Record<string, { success: boolean; message: string }>>({});
+  const [testResults, setTestResults] = useState<Record<string, { success: boolean; message: string; details?: any }>>({});
+  const [expandedLog, setExpandedLog] = useState<string | null>(null);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [activeTab, setActiveTab] = useState<"overview" | "commands" | "webhook" | "test">("overview");
   const [copied, setCopied] = useState(false);
@@ -104,8 +106,13 @@ export default function WhatsAppAdminPage() {
         [phoneId]: {
           success: result.connected,
           message: result.connected ? "Terhubung!" : result.error || "Gagal",
+          details: result.details,
         },
       }));
+      // Auto expand log if error
+      if (!result.connected) {
+        setExpandedLog(phoneId);
+      }
     } catch {
       setTestResults(prev => ({
         ...prev,
@@ -212,7 +219,7 @@ export default function WhatsAppAdminPage() {
       </div>
 
       {/* Tab Navigation */}
-      <div className="flex gap-2 p-1 rounded-2xl bg-white/5 backdrop-blur-sm">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 p-1 rounded-2xl bg-white/5 backdrop-blur-sm">
         {([
           { id: "overview", label: "Overview", icon: Smartphone },
           { id: "commands", label: "Commands", icon: Terminal },
@@ -299,7 +306,7 @@ export default function WhatsAppAdminPage() {
                     <button
                       onClick={() => handleTestConnection(account.phoneId)}
                       disabled={testingAccount === account.phoneId}
-                      className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 transition-colors text-sm disabled:opacity-50"
+                      className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 transition-colors text-xs sm:text-sm disabled:opacity-50"
                     >
                       {testingAccount === account.phoneId ? (
                         <RefreshCw size={14} className="animate-spin" />
@@ -311,7 +318,7 @@ export default function WhatsAppAdminPage() {
                     <button
                       onClick={() => handleTestSelfTrigger(account.phoneId)}
                       disabled={sendingTest === account.phoneId}
-                      className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 transition-colors text-sm disabled:opacity-50"
+                      className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 transition-colors text-xs sm:text-sm disabled:opacity-50"
                     >
                       {sendingTest === account.phoneId ? (
                         <RefreshCw size={14} className="animate-spin" />
@@ -321,6 +328,41 @@ export default function WhatsAppAdminPage() {
                       Test Self-Trigger
                     </button>
                   </div>
+
+                  {testResults[account.phoneId]?.details && (
+                    <div className="mt-4 border-t border-white/10 pt-4">
+                      <button
+                        onClick={() => setExpandedLog(expandedLog === account.phoneId ? null : account.phoneId)}
+                        className="w-full flex items-center justify-between text-xs text-white/50 hover:text-white/80 transition-colors"
+                      >
+                        <span className="flex items-center gap-2">
+                          <Terminal size={12} />
+                          {expandedLog === account.phoneId ? "Sembunyikan Detail Log" : "Lihat Detail Log"}
+                        </span>
+                        <ChevronRight
+                          size={14}
+                          className={`transition-transform ${expandedLog === account.phoneId ? "rotate-90" : ""}`}
+                        />
+                      </button>
+
+                      <AnimatePresence>
+                        {expandedLog === account.phoneId && (
+                          <motion.div
+                            initial={{ height: 0, opacity: 0 }}
+                            animate={{ height: "auto", opacity: 1 }}
+                            exit={{ height: 0, opacity: 0 }}
+                            className="overflow-hidden"
+                          >
+                            <div className="mt-3 p-3 rounded-xl bg-black/40 border border-white/5 overflow-x-auto">
+                              <pre className="text-[10px] text-white/70 font-mono">
+                                {JSON.stringify(testResults[account.phoneId].details, null, 2)}
+                              </pre>
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </div>
+                  )}
                 </div>
               ))}
 
@@ -336,7 +378,7 @@ export default function WhatsAppAdminPage() {
             </div>
 
             {/* Quick Stats */}
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="rounded-2xl bg-white/[0.03] border border-white/[0.06] p-5">
                 <div className="flex items-center gap-2 text-white/40 text-sm mb-2">
                   <Smartphone size={16} />
