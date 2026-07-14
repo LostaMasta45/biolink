@@ -63,6 +63,9 @@ export interface KirimDevWebhookPayload {
     /** Status update (untuk event message.status) */
     status?: 'sent' | 'delivered' | 'read' | 'failed';
   };
+
+  /** WhatsApp Cloud API format (jika di-forward langsung oleh KirimDev) */
+  entry?: any[];
 }
 
 /**

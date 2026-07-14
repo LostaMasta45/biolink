@@ -20,59 +20,64 @@ export async function POST(req: NextRequest) {
   try {
     const payload: KirimDevWebhookPayload = await req.json();
 
-    console.log('[Webhook] 📨 Event:', payload.event, '| From:', payload.data?.from, '| To:', payload.data?.to);
+    // ─── Ekstrak data dari payload ───
+    let eventName = payload.event;
+    let senderPhone = payload.data?.from;
+    let text = payload.data?.message?.text;
+    let phoneId = payload.data?.phoneId || '';
+    let toPhone = payload.data?.to || '';
 
-    // ─── Hanya proses event pesan yang relevan ───
-    if (payload.event !== 'message.received' && payload.event !== 'message.sent') {
-      // Event lain (status, revoked, dll) — acknowledge saja
-      return NextResponse.json({ status: 'ok', event: payload.event, action: 'ignored' });
+    // Coba parse format WhatsApp Cloud API (yang diteruskan oleh KirimDev)
+    if (payload.entry && payload.entry.length > 0) {
+      const changes = payload.entry[0].changes;
+      if (changes && changes.length > 0) {
+        const value = changes[0].value;
+        if (value && value.messages && value.messages.length > 0) {
+          const msg = value.messages[0];
+          senderPhone = msg.from;
+          if (msg.type === 'text' && msg.text) {
+            text = msg.text.body;
+          }
+          phoneId = value.metadata?.phone_number_id || '';
+          toPhone = value.metadata?.display_phone_number || '';
+          eventName = 'message.received'; // asumsikan ini pesan masuk
+        }
+      }
     }
 
-    // ─── Skip jika tidak ada konten pesan ───
-    if (!payload.data?.message?.text) {
-      return NextResponse.json({ status: 'ok', action: 'no_text_content' });
+    console.log('[Webhook] 📨 Event:', eventName, '| From:', senderPhone, '| To:', toPhone);
+
+    if (!eventName || !senderPhone || !text) {
+      // Bukan event pesan teks masuk, abaikan saja
+      return NextResponse.json({ status: 'ok', action: 'ignored_or_no_text' });
     }
 
-    const senderPhone = payload.data.from;
-    const text = payload.data.message.text.trim();
+    text = text.trim();
 
     // ═══════════════════════════════════════════
     //  ROUTING LOGIC
     // ═══════════════════════════════════════════
 
     // CASE 1: ADMIN COMMAND
-    // Pesan dari nomor Admin (Pribadi) DAN diawali "!"
     if (isAdminNumber(senderPhone) && text.startsWith('!')) {
       console.log('[Webhook] 🤖 Admin command detected:', text);
 
-      // Tentukan phone ID mana yang menerima pesan ini
-      // Prioritas: dari payload.data.phoneId, lalu dari payload.data.to
-      let phoneId = payload.data.phoneId || '';
       let accountLabel = 'Unknown';
-
       if (phoneId) {
         const account = getAccountByPhoneId(phoneId);
         accountLabel = account?.label || 'Unknown';
-      } else if (payload.data.to) {
-        // Fallback: cari berdasarkan nomor tujuan
-        const account = getAccountByPhone(payload.data.to);
+      }
+
+      if (!phoneId && toPhone) {
+        const account = getAccountByPhone(toPhone);
         if (account) {
           phoneId = account.phoneId;
           accountLabel = account.label;
         }
       }
 
-      // Fallback terakhir: gunakan akun pertama
       if (!phoneId) {
-        const accounts = getAllAccounts();
-        if (accounts.length > 0) {
-          phoneId = accounts[0].phoneId;
-          accountLabel = accounts[0].label;
-        }
-      }
-
-      if (!phoneId) {
-        console.error('[Webhook] ❌ Tidak bisa menentukan phoneId untuk self-trigger');
+        console.error('[Webhook] ❌ Tidak bisa menentukan phoneId untuk membalas');
         return NextResponse.json({ status: 'error', message: 'No phoneId available' }, { status: 500 });
       }
 
