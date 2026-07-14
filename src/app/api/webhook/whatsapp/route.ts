@@ -51,7 +51,15 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    console.log('[Webhook] 📨 Event:', eventName, '| From:', senderPhone, '| To:', toPhone);
+    // Fallback: Jika phoneId kosong, gunakan akun pertama yang terdaftar
+    if (!phoneId) {
+      const accounts = getAllAccounts();
+      if (accounts.length > 0) {
+        phoneId = accounts[0].phoneId;
+      }
+    }
+
+    console.log('[Webhook] 📨 Event:', eventName, '| From:', senderPhone, '| To:', toPhone, '| PhoneID:', phoneId);
 
     if (!eventName || !senderPhone || !text) {
       // Bukan event pesan teks masuk, abaikan saja
