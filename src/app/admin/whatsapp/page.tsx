@@ -25,7 +25,9 @@ import {
   Check,
   Crown,
   XCircle,
-  Clock
+  Clock,
+  FileText,
+  ListTodo
 } from "lucide-react";
 import Link from "next/link";
 
@@ -126,34 +128,42 @@ export default function WhatsAppAdminPage() {
   };
 
   // Test Admin Command
-  const handleTestSelfTrigger = async (phoneId: string) => {
+  const handleTestSelfTrigger = async (phoneId: string, customCommand?: string) => {
     setSendingTest(phoneId);
+    const commandName = customCommand ? `Simulasi: ${customCommand}` : "🧪 Test Admin Command";
     try {
       const res = await fetch("/api/admin/whatsapp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "test_self_trigger", phoneId }),
+        body: JSON.stringify({ 
+          action: "test_self_trigger", 
+          phoneId,
+          message: customCommand
+        }),
       });
       const result = await res.json();
       setLogs(prev => [
         {
-          command: "🧪 Test Admin Command",
+          command: commandName,
           status: result.success ? "success" : "error",
           time: new Date().toLocaleTimeString("id-ID"),
           response: result.message || result.error || "",
         },
         ...prev,
       ]);
+      // Beralih ke tab test untuk melihat hasil
+      setActiveTab("test");
     } catch {
       setLogs(prev => [
         {
-          command: "🧪 Test Admin Command",
+          command: commandName,
           status: "error",
           time: new Date().toLocaleTimeString("id-ID"),
           response: "Network error",
         },
         ...prev,
       ]);
+      setActiveTab("test");
     } finally {
       setSendingTest(null);
     }
@@ -190,8 +200,11 @@ export default function WhatsAppAdminPage() {
     );
   }
 
+  // Get Bot Phone ID for Quick Actions
+  const botPhoneId = accounts.length > 1 ? accounts[1].phoneId : (accounts[0]?.phoneId || "");
+
   return (
-    <div className="space-y-8 pb-20 relative">
+    <div className="space-y-8 pb-20 relative w-full overflow-x-hidden">
       {/* Background glow effects */}
       <div className="absolute top-0 left-1/4 w-96 h-96 bg-emerald-500/10 rounded-full blur-[100px] pointer-events-none" />
       <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-teal-500/10 rounded-full blur-[100px] pointer-events-none" />
@@ -206,24 +219,24 @@ export default function WhatsAppAdminPage() {
             <ArrowLeft size={20} className="text-white/70" />
           </Link>
           <div>
-            <h1 className="text-3xl font-bold flex items-center gap-3">
+            <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-3">
               <div className="relative">
-                <MessageSquare className="text-emerald-400" size={32} />
-                <span className="absolute -top-1 -right-1 w-3 h-3 bg-emerald-400 rounded-full animate-ping" />
-                <span className="absolute -top-1 -right-1 w-3 h-3 bg-emerald-400 rounded-full" />
+                <MessageSquare className="text-emerald-400" size={28} />
+                <span className="absolute -top-1 -right-1 w-2 h-2 bg-emerald-400 rounded-full animate-ping" />
+                <span className="absolute -top-1 -right-1 w-2 h-2 bg-emerald-400 rounded-full" />
               </div>
               <span className="bg-clip-text text-transparent bg-gradient-to-r from-emerald-400 to-teal-200">
                 Command Center
               </span>
             </h1>
-            <p className="text-sm text-white/50 mt-1 font-medium">
+            <p className="text-xs md:text-sm text-white/50 mt-1 font-medium">
               Dual-Account Architecture & Webhook Management
             </p>
           </div>
         </div>
         <button
           onClick={fetchData}
-          className="flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/5 backdrop-blur-md transition-all shadow-lg hover:shadow-white/5 text-sm font-medium"
+          className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/5 backdrop-blur-md transition-all shadow-lg hover:shadow-white/5 text-sm font-medium w-full md:w-auto"
         >
           <RefreshCw size={16} className="text-emerald-400" />
           Refresh Data
@@ -235,26 +248,26 @@ export default function WhatsAppAdminPage() {
         {([
           { id: "overview", label: "Overview", icon: Smartphone },
           { id: "commands", label: "Commands", icon: Terminal },
-          { id: "webhook", label: "Webhook Flow", icon: Zap },
-          { id: "test", label: "Test Logs", icon: Activity },
+          { id: "webhook", label: "Webhook", icon: Zap },
+          { id: "test", label: "Activity Logs", icon: Activity },
         ] as const).map((tab) => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-sm font-semibold transition-all duration-300 relative ${
+            className={`flex-1 flex items-center justify-center gap-2 py-3 px-2 md:px-4 rounded-xl text-xs md:text-sm font-semibold transition-all duration-300 relative ${
               activeTab === tab.id
                 ? "text-emerald-300 bg-white/10 shadow-[0_0_20px_rgba(16,185,129,0.15)]"
                 : "text-white/40 hover:text-white/80 hover:bg-white/5"
             }`}
           >
-            <tab.icon size={18} className={activeTab === tab.id ? "text-emerald-400" : ""} />
+            <tab.icon size={16} className={activeTab === tab.id ? "text-emerald-400" : ""} />
             {tab.label}
           </button>
         ))}
       </div>
 
       {/* Tab Content */}
-      <div className="relative z-10">
+      <div className="relative z-10 w-full">
         <AnimatePresence mode="wait">
           {activeTab === "overview" && (
             <motion.div
@@ -265,39 +278,40 @@ export default function WhatsAppAdminPage() {
               transition={{ duration: 0.3 }}
               className="space-y-6"
             >
-              {/* Quick Stats */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="rounded-2xl bg-gradient-to-br from-white/5 to-transparent border border-white/10 backdrop-blur-lg p-4 relative overflow-hidden group">
-                  <div className="absolute top-0 right-0 p-3 opacity-10 transform translate-x-4 -translate-y-4 group-hover:scale-110 transition-transform">
-                    <Smartphone size={60} />
-                  </div>
-                  <div className="flex items-center gap-2 text-emerald-400 text-xs mb-2 font-medium">
-                    <div className="p-1.5 bg-emerald-400/10 rounded-lg"><Smartphone size={14} /></div>
-                    Akun Terhubung
-                  </div>
-                  <p className="text-3xl font-black text-white drop-shadow-md">{accounts.length}</p>
-                </div>
-                <div className="rounded-2xl bg-gradient-to-br from-white/5 to-transparent border border-white/10 backdrop-blur-lg p-4 relative overflow-hidden group">
-                  <div className="absolute top-0 right-0 p-3 opacity-10 transform translate-x-4 -translate-y-4 group-hover:scale-110 transition-transform">
-                    <Terminal size={60} />
-                  </div>
-                  <div className="flex items-center gap-2 text-cyan-400 text-xs mb-2 font-medium">
-                    <div className="p-1.5 bg-cyan-400/10 rounded-lg"><Terminal size={14} /></div>
-                    Total Commands
-                  </div>
-                  <p className="text-3xl font-black text-white drop-shadow-md">{commands.length}</p>
-                </div>
-                <div className="rounded-2xl bg-gradient-to-br from-white/5 to-transparent border border-white/10 backdrop-blur-lg p-4 relative overflow-hidden group">
-                  <div className="absolute top-0 right-0 p-3 opacity-10 transform translate-x-4 -translate-y-4 group-hover:scale-110 transition-transform">
-                    <CheckCircle2 size={60} />
-                  </div>
-                  <div className="flex items-center gap-2 text-violet-400 text-xs mb-2 font-medium">
-                    <div className="p-1.5 bg-violet-400/10 rounded-lg"><CheckCircle2 size={14} /></div>
-                    Commands Aktif
-                  </div>
-                  <p className="text-3xl font-black text-white drop-shadow-md">
-                    {commands.filter((c) => c.enabled).length}
-                  </p>
+              {/* Quick Actions Panel */}
+              <div className="rounded-2xl bg-gradient-to-br from-indigo-500/10 to-purple-500/5 border border-indigo-500/20 backdrop-blur-xl p-5">
+                <h3 className="font-bold text-lg text-white mb-4 flex items-center gap-2">
+                  <Zap className="text-amber-400" size={20} /> Quick Actions (Simulator)
+                </h3>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <button 
+                    onClick={() => handleTestSelfTrigger(botPhoneId, "!buat_invoice")}
+                    className="flex flex-col items-center justify-center p-4 rounded-xl bg-white/5 hover:bg-emerald-500/10 border border-white/10 hover:border-emerald-500/30 transition-all gap-2"
+                  >
+                    <FileText size={24} className="text-emerald-400" />
+                    <span className="text-xs font-bold text-center">Buat Invoice</span>
+                  </button>
+                  <button 
+                    onClick={() => handleTestSelfTrigger(botPhoneId, "!rekap")}
+                    className="flex flex-col items-center justify-center p-4 rounded-xl bg-white/5 hover:bg-cyan-500/10 border border-white/10 hover:border-cyan-500/30 transition-all gap-2"
+                  >
+                    <ListTodo size={24} className="text-cyan-400" />
+                    <span className="text-xs font-bold text-center">Rekap Harian</span>
+                  </button>
+                  <button 
+                    onClick={() => handleTestSelfTrigger(botPhoneId, "!tagihan")}
+                    className="flex flex-col items-center justify-center p-4 rounded-xl bg-white/5 hover:bg-orange-500/10 border border-white/10 hover:border-orange-500/30 transition-all gap-2"
+                  >
+                    <Clock size={24} className="text-orange-400" />
+                    <span className="text-xs font-bold text-center">Cek Pending</span>
+                  </button>
+                  <button 
+                    onClick={() => setActiveTab("test")}
+                    className="flex flex-col items-center justify-center p-4 rounded-xl bg-white/5 hover:bg-violet-500/10 border border-white/10 hover:border-violet-500/30 transition-all gap-2"
+                  >
+                    <Activity size={24} className="text-violet-400" />
+                    <span className="text-xs font-bold text-center">Sent / Receive Logs</span>
+                  </button>
                 </div>
               </div>
 
@@ -319,15 +333,15 @@ export default function WhatsAppAdminPage() {
                             : "bg-white/5 border-white/10"
                       }`}
                     >
-                      <div className="flex items-start justify-between mb-4">
+                      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-4">
                         <div className="flex items-center gap-3">
-                          <div className={`w-12 h-12 rounded-xl flex items-center justify-center shadow-inner ${
+                          <div className={`w-12 h-12 rounded-xl flex items-center justify-center shadow-inner shrink-0 ${
                             isAdmin ? "bg-amber-500/20 text-amber-400" : isBot ? "bg-blue-500/20 text-blue-400" : "bg-white/10 text-white"
                           }`}>
                             {isAdmin ? <Crown size={24} /> : isBot ? <Bot size={24} /> : <Smartphone size={24} />}
                           </div>
                           <div>
-                            <div className="flex items-center gap-2 mb-0.5">
+                            <div className="flex items-center gap-2 mb-0.5 flex-wrap">
                               <h3 className="font-bold text-lg">{account.label}</h3>
                               {isAdmin && <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30">MASTER</span>}
                               {isBot && <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400 border border-blue-500/30">BOT</span>}
@@ -341,7 +355,7 @@ export default function WhatsAppAdminPage() {
                           <motion.span
                             initial={{ scale: 0 }}
                             animate={{ scale: 1 }}
-                            className={`flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-xl shadow-lg ${
+                            className={`flex items-center justify-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-xl shadow-lg w-full sm:w-auto ${
                               testResults[account.phoneId].success
                                 ? "bg-emerald-500 text-white shadow-emerald-500/30"
                                 : "bg-red-500 text-white shadow-red-500/30"
@@ -357,20 +371,20 @@ export default function WhatsAppAdminPage() {
                         )}
                       </div>
 
-                      <div className="grid grid-cols-2 gap-2 text-sm mb-4">
-                        <div className="rounded-xl bg-black/40 border border-white/5 p-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm mb-4">
+                        <div className="rounded-xl bg-black/40 border border-white/5 p-3 overflow-hidden">
                           <p className="text-white/40 text-[10px] font-medium mb-1">Phone ID</p>
                           <p className="font-mono text-white/80 truncate text-xs">{account.phoneId}</p>
                         </div>
-                        <div className="rounded-xl bg-black/40 border border-white/5 p-3">
+                        <div className="rounded-xl bg-black/40 border border-white/5 p-3 overflow-hidden">
                           <p className="text-white/40 text-[10px] font-medium mb-1">Tugas Akun</p>
                           <p className="text-white/80 text-xs truncate">
-                            {isAdmin ? "Balas & Terima Laporan" : isBot ? "Bot Notifikasi" : "Akun Tambahan"}
+                            {isAdmin ? "Kirim Perintah" : isBot ? "Bot Pengeksekusi" : "Akun Tambahan"}
                           </p>
                         </div>
                       </div>
 
-                      <div className="flex gap-2">
+                      <div className="flex flex-col sm:flex-row gap-2">
                         <button
                           onClick={() => handleTestConnection(account.phoneId)}
                           disabled={testingAccount === account.phoneId}
@@ -411,12 +425,12 @@ export default function WhatsAppAdminPage() {
                             exit={{ height: 0, opacity: 0 }}
                             className="overflow-hidden mt-4"
                           >
-                            <div className="p-4 rounded-xl bg-black/60 border border-red-500/20 overflow-x-auto relative">
+                            <div className="p-4 rounded-xl bg-black/60 border border-red-500/20 w-full relative">
                               <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-red-500/0 via-red-500/50 to-red-500/0" />
                               <p className="text-red-400 text-xs font-bold mb-2 flex items-center gap-2">
                                 <Terminal size={12} /> Diagnostic Log
                               </p>
-                              <pre className="text-[10px] text-white/70 font-mono">
+                              <pre className="text-[10px] text-white/70 font-mono whitespace-pre-wrap break-all max-h-40 overflow-y-auto">
                                 {JSON.stringify(testResults[account.phoneId].details, null, 2)}
                               </pre>
                             </div>
@@ -428,10 +442,10 @@ export default function WhatsAppAdminPage() {
                 })}
 
                 {accounts.length === 0 && (
-                  <div className="col-span-2 rounded-3xl bg-white/5 border border-white/10 p-16 text-center backdrop-blur-md">
+                  <div className="col-span-1 md:col-span-2 rounded-3xl bg-white/5 border border-white/10 p-8 md:p-16 text-center backdrop-blur-md">
                     <WifiOff className="mx-auto mb-6 text-white/20" size={64} />
                     <h3 className="text-2xl font-bold text-white/80 mb-2">Belum Ada Akun</h3>
-                    <p className="text-white/40 max-w-md mx-auto">
+                    <p className="text-white/40 max-w-md mx-auto text-sm">
                       Harap konfigurasi KIRIMDEV_PHONE_ID_1 dan KIRIMDEV_PHONE_NUMBER_1 di file <code className="text-emerald-400 px-2 py-1 bg-emerald-400/10 rounded-md">.env.local</code>
                     </p>
                   </div>
@@ -449,8 +463,8 @@ export default function WhatsAppAdminPage() {
               transition={{ duration: 0.3 }}
               className="space-y-6"
             >
-              <div className="rounded-2xl bg-black/40 border border-white/10 backdrop-blur-xl p-5">
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4 border-b border-white/10 pb-4">
+              <div className="rounded-2xl bg-black/40 border border-white/10 backdrop-blur-xl p-4 md:p-5">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 border-b border-white/10 pb-4">
                   <div>
                     <h2 className="text-xl font-bold flex items-center gap-2">
                       <Terminal className="text-cyan-400" size={24} />
@@ -460,45 +474,47 @@ export default function WhatsAppAdminPage() {
                       Gunakan <strong className="text-amber-400">Akun 1 (Master)</strong> untuk mengirim pesan ke <strong className="text-blue-400">Akun 2 (Bot)</strong>.
                     </p>
                   </div>
-                  <div className="flex items-center gap-2 bg-white/5 px-3 py-1.5 rounded-xl border border-white/5">
+                  <div className="flex items-center gap-2 bg-white/5 px-3 py-1.5 rounded-xl border border-white/5 self-start md:self-auto">
                     <Activity className="text-emerald-400" size={14} />
                     <span className="font-bold text-sm">{commands.filter((c) => c.enabled).length}</span>
                     <span className="text-white/40 text-xs">/ {commands.length} Aktif</span>
                   </div>
                 </div>
 
-                <div className="grid gap-3 md:grid-cols-3">
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                   {commands.map((cmd) => (
                     <div
                       key={cmd.name}
-                      className={`relative overflow-hidden rounded-xl border backdrop-blur-md p-4 transition-all duration-300 group ${
+                      className={`relative overflow-hidden rounded-xl border backdrop-blur-md p-4 transition-all duration-300 group flex flex-col ${
                         cmd.enabled
                           ? "bg-white/[0.03] border-white/10 hover:border-cyan-500/30 hover:bg-cyan-500/5"
                           : "bg-white/[0.01] border-white/5 opacity-60 grayscale"
                       }`}
                     >
-                      <div className="relative z-10 flex items-start justify-between">
+                      <div className="relative z-10 flex items-start justify-between mb-2">
                         <div>
                           <h3 className="font-bold text-base text-white flex items-center gap-2">
                             {cmd.name}
                           </h3>
                         </div>
                         {cmd.enabled ? (
-                          <div className="px-2 py-0.5 bg-emerald-500/20 text-emerald-400 text-[9px] font-bold rounded-full border border-emerald-500/30 flex items-center gap-1">
+                          <div className="px-2 py-0.5 bg-emerald-500/20 text-emerald-400 text-[9px] font-bold rounded-full border border-emerald-500/30 shrink-0">
                             ON
                           </div>
                         ) : (
-                          <div className="px-2 py-0.5 bg-white/10 text-white/40 text-[9px] font-bold rounded-full border border-white/10">
+                          <div className="px-2 py-0.5 bg-white/10 text-white/40 text-[9px] font-bold rounded-full border border-white/10 shrink-0">
                             OFF
                           </div>
                         )}
                       </div>
-                      <p className="text-xs text-white/50 mt-1 mb-3 h-8 overflow-hidden text-ellipsis line-clamp-2">
+                      
+                      {/* Fully readable description (no height limits) */}
+                      <p className="text-xs text-white/70 mb-4 flex-grow leading-relaxed">
                         {cmd.description}
                       </p>
                       
-                      <div className="relative z-10 pt-3 border-t border-white/10">
-                        <code className="text-[10px] bg-black/60 text-cyan-300 px-2 py-1.5 rounded border border-cyan-500/20 block font-mono">
+                      <div className="relative z-10 pt-3 border-t border-white/10 mt-auto">
+                        <code className="text-[10px] bg-black/60 text-cyan-300 px-2 py-1.5 rounded border border-cyan-500/20 block font-mono whitespace-pre-wrap break-all">
                           {cmd.usage}
                         </code>
                       </div>
@@ -518,85 +534,28 @@ export default function WhatsAppAdminPage() {
               transition={{ duration: 0.3 }}
               className="space-y-6"
             >
-              <div className="rounded-3xl bg-black/40 border border-white/10 backdrop-blur-xl p-8">
-                <div className="mb-8 border-b border-white/10 pb-6">
-                  <h2 className="text-2xl font-bold flex items-center gap-3">
-                    <Zap className="text-amber-400" size={28} />
+              <div className="rounded-3xl bg-black/40 border border-white/10 backdrop-blur-xl p-5 md:p-8">
+                <div className="mb-6 md:mb-8 border-b border-white/10 pb-4 md:pb-6">
+                  <h2 className="text-xl md:text-2xl font-bold flex items-center gap-3">
+                    <Zap className="text-amber-400" size={24} />
                     Webhook Flow
                   </h2>
-                  <p className="text-white/50 mt-2 font-medium max-w-2xl">
+                  <p className="text-white/50 mt-2 font-medium max-w-2xl text-xs md:text-sm">
                     Webhook adalah jembatan komunikasi. Tanpa webhook, bot hanya bisa mengirim pesan. Dengan webhook, bot bisa "mendengarkan" perintah Anda secara real-time.
                   </p>
                 </div>
 
-                {/* Flowchart Visualizer */}
-                <div className="bg-gradient-to-b from-white/5 to-transparent border border-white/5 rounded-3xl p-8 mb-8 overflow-hidden relative">
-                  <div className="flex flex-col md:flex-row items-center justify-between gap-6 relative z-10">
-                    
-                    {/* Step 1: Admin */}
-                    <div className="flex flex-col items-center text-center w-40">
-                      <div className="w-16 h-16 bg-amber-500/20 rounded-2xl flex items-center justify-center border border-amber-500/30 mb-4 shadow-[0_0_20px_rgba(245,158,11,0.2)]">
-                        <Crown className="text-amber-400" size={32} />
-                      </div>
-                      <h4 className="font-bold text-amber-400">Akun 1</h4>
-                      <p className="text-xs text-white/50 mt-1">Kirim <code>!rekap</code></p>
-                    </div>
-
-                    {/* Arrow 1 */}
-                    <div className="hidden md:flex flex-col items-center">
-                      <div className="text-xs text-white/40 mb-2">WhatsApp Network</div>
-                      <div className="w-32 h-[2px] bg-gradient-to-r from-amber-500/50 to-blue-500/50 relative">
-                        <motion.div 
-                          className="absolute top-1/2 -translate-y-1/2 w-4 h-4 bg-white rounded-full shadow-[0_0_10px_white]"
-                          animate={{ left: ["0%", "100%"] }}
-                          transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }}
-                        />
-                      </div>
-                    </div>
-
-                    {/* Step 2: KirimDev */}
-                    <div className="flex flex-col items-center text-center w-40">
-                      <div className="w-16 h-16 bg-white/10 rounded-2xl flex items-center justify-center border border-white/20 mb-4 backdrop-blur-md">
-                        <Server className="text-white" size={32} />
-                      </div>
-                      <h4 className="font-bold text-white">KirimDev API</h4>
-                      <p className="text-xs text-white/50 mt-1">Menerima Pesan</p>
-                    </div>
-
-                    {/* Arrow 2 */}
-                    <div className="hidden md:flex flex-col items-center">
-                      <div className="text-xs text-emerald-400 mb-2 font-bold animate-pulse">HTTP POST</div>
-                      <div className="w-32 h-[2px] bg-gradient-to-r from-blue-500/50 to-emerald-500/50 relative">
-                        <motion.div 
-                          className="absolute top-1/2 -translate-y-1/2 w-4 h-4 bg-emerald-400 rounded-full shadow-[0_0_15px_rgba(52,211,153,0.8)]"
-                          animate={{ left: ["0%", "100%"] }}
-                          transition={{ duration: 1.5, repeat: Infinity, ease: "linear", delay: 0.5 }}
-                        />
-                      </div>
-                    </div>
-
-                    {/* Step 3: Server (Webhook) */}
-                    <div className="flex flex-col items-center text-center w-40">
-                      <div className="w-16 h-16 bg-emerald-500/20 rounded-2xl flex items-center justify-center border border-emerald-500/30 mb-4 shadow-[0_0_20px_rgba(16,185,129,0.2)]">
-                        <Zap className="text-emerald-400" size={32} />
-                      </div>
-                      <h4 className="font-bold text-emerald-400">Webhook ILJ</h4>
-                      <p className="text-xs text-white/50 mt-1">Proses Command</p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bg-black/60 rounded-2xl border border-white/10 p-6">
+                <div className="bg-black/60 rounded-2xl border border-white/10 p-4 md:p-6 mb-6">
                   <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                    <div className="flex-1">
-                      <p className="text-sm font-semibold text-white/60 uppercase tracking-wider mb-2">Endpoint URL</p>
-                      <code className="text-sm md:text-base text-emerald-300 font-mono block truncate">
+                    <div className="flex-1 w-full overflow-hidden">
+                      <p className="text-xs md:text-sm font-semibold text-white/60 uppercase tracking-wider mb-2">Endpoint URL</p>
+                      <code className="text-xs md:text-sm text-emerald-300 font-mono block break-all whitespace-pre-wrap">
                         {webhookUrl || "Loading..."}
                       </code>
                     </div>
                     <button
                       onClick={handleCopyWebhook}
-                      className="flex items-center gap-2 px-6 py-3 rounded-xl bg-white/10 hover:bg-white/20 transition-all font-semibold"
+                      className="shrink-0 flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-white/10 hover:bg-white/20 transition-all font-semibold w-full sm:w-auto text-sm"
                     >
                       {copied ? <Check size={18} className="text-emerald-400" /> : <Copy size={18} />}
                       {copied ? "Copied!" : "Copy URL"}
@@ -616,19 +575,19 @@ export default function WhatsAppAdminPage() {
               transition={{ duration: 0.3 }}
               className="space-y-6"
             >
-              <div className="rounded-3xl bg-black/40 border border-white/10 backdrop-blur-xl p-8">
-                <div className="flex items-center justify-between mb-8 border-b border-white/10 pb-6">
+              <div className="rounded-3xl bg-black/40 border border-white/10 backdrop-blur-xl p-5 md:p-8">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 md:mb-8 border-b border-white/10 pb-4 md:pb-6">
                   <div>
-                    <h2 className="text-2xl font-bold flex items-center gap-3">
-                      <Activity className="text-violet-400" size={28} />
-                      Activity Logs
+                    <h2 className="text-xl md:text-2xl font-bold flex items-center gap-3">
+                      <Activity className="text-violet-400" size={24} />
+                      Activity / Send & Receive Logs
                     </h2>
-                    <p className="text-white/50 mt-2 font-medium">History eksekusi test command via dashboard.</p>
+                    <p className="text-white/50 mt-2 font-medium text-xs md:text-sm">History eksekusi command via dashboard simulator.</p>
                   </div>
                   {logs.length > 0 && (
                     <button 
                       onClick={() => setLogs([])}
-                      className="text-xs font-bold px-4 py-2 bg-white/5 rounded-xl hover:bg-red-500/20 hover:text-red-400 transition-colors"
+                      className="text-xs font-bold px-4 py-2 bg-white/5 rounded-xl hover:bg-red-500/20 hover:text-red-400 transition-colors shrink-0"
                     >
                       Clear Logs
                     </button>
@@ -637,36 +596,36 @@ export default function WhatsAppAdminPage() {
 
                 <div className="space-y-4">
                   {logs.length === 0 ? (
-                    <div className="text-center py-12 bg-white/5 border border-white/5 rounded-2xl">
+                    <div className="text-center py-12 bg-white/5 border border-white/5 rounded-2xl px-4">
                       <Activity className="mx-auto text-white/20 mb-4" size={48} />
-                      <p className="text-white/40">Belum ada log aktivitas.<br/>Coba jalankan Test Flow di tab Overview.</p>
+                      <p className="text-white/40 text-sm">Belum ada log aktivitas.<br/>Coba jalankan Quick Action "Buat Invoice" di tab Overview.</p>
                     </div>
                   ) : (
                     logs.map((log, i) => (
                       <div
                         key={i}
-                        className={`p-5 rounded-2xl border transition-all ${
+                        className={`p-4 md:p-5 rounded-2xl border transition-all ${
                           log.status === "success"
                             ? "bg-emerald-500/5 border-emerald-500/10"
                             : "bg-red-500/5 border-red-500/10"
                         }`}
                       >
-                        <div className="flex items-center justify-between mb-3">
-                          <span className="font-bold flex items-center gap-2">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+                          <span className="font-bold flex items-center gap-2 text-sm md:text-base">
                             {log.status === "success" ? (
-                              <CheckCircle2 className="text-emerald-400" size={18} />
+                              <CheckCircle2 className="text-emerald-400" size={18} shrink-0 />
                             ) : (
-                              <XCircle className="text-red-400" size={18} />
+                              <XCircle className="text-red-400" size={18} shrink-0 />
                             )}
                             {log.command}
                           </span>
-                          <span className="text-xs text-white/40 flex items-center gap-1 bg-black/40 px-2 py-1 rounded-md">
+                          <span className="text-[10px] md:text-xs text-white/40 flex items-center gap-1 bg-black/40 px-2 py-1 rounded-md shrink-0 self-start sm:self-auto">
                             <Clock size={12} />
                             {log.time}
                           </span>
                         </div>
-                        <div className="bg-black/60 rounded-xl p-3 border border-white/5">
-                           <p className={`text-sm font-mono ${
+                        <div className="bg-black/60 rounded-xl p-3 border border-white/5 w-full">
+                           <p className={`text-xs md:text-sm font-mono whitespace-pre-wrap break-words ${
                             log.status === "success" ? "text-emerald-300" : "text-red-300"
                           }`}>
                             {log.response}

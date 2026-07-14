@@ -411,6 +411,7 @@ async function handleConversationState(phoneId: string, senderPhone: string, tex
   let data = session.data || {};
   let nextState = 'IDLE';
   let reply = '';
+  const inputText = text.trim();
 
   try {
     // === ALUR LOWONGAN ===

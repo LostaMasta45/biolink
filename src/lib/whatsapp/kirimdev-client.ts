@@ -136,7 +136,7 @@ export async function sendButtonMessage(
         to: normalizePhone(to),
         type: 'interactive',
         interactive: {
-          type: 'button',
+          type: 'reply_buttons',
           body: { text },
           action: {
             buttons: buttons.map(btn => ({
