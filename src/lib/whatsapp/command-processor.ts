@@ -295,7 +295,7 @@ export const COMMANDS: Record<string, Command> = {
         sender_phone: senderPhone,
         state: 'AWAIT_INV_TYPE',
         data: {}
-      });
+      }, { onConflict: 'phone_id,sender_phone' });
 
       await sendButtonMessage(
         phoneId, 
@@ -318,7 +318,7 @@ export const COMMANDS: Record<string, Command> = {
         sender_phone: senderPhone,
         state: 'LOWONGAN_AWAIT_NAME',
         data: { type: 'lowongan' }
-      });
+      }, { onConflict: 'phone_id,sender_phone' });
       await sendTextMessage(phoneId, senderPhone, '🏢 Masukkan *Nama Perusahaan/Klien*:');
     }
   },
@@ -332,7 +332,7 @@ export const COMMANDS: Record<string, Command> = {
         sender_phone: senderPhone,
         state: 'UMUM_AWAIT_NAME',
         data: { type: 'umum' }
-      });
+      }, { onConflict: 'phone_id,sender_phone' });
       await sendTextMessage(phoneId, senderPhone, '🏢 Masukkan *Nama PT / Klien*:');
     }
   }
