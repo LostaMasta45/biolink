@@ -156,56 +156,50 @@ export async function sendTemplateMessage(
 // ============================================
 
 /**
- * Kirim pesan test ke nomor admin (bukan ke diri sendiri)
- * 
- * @param phoneId - Phone ID akun yang digunakan (pengirim)
- * @param message - Teks pesan balasan
+ * Kirim pesan test ke Admin Utama (Account 1) menggunakan Account 2
  */
 export async function sendTestToAdmin(
   phoneId: string,
   message: string
 ): Promise<{ success: boolean; error?: string }> {
-  const account = getAccounts().find(a => a.phoneId === phoneId);
-  if (!account) {
-    return { success: false, error: `Akun dengan phoneId ${phoneId} tidak ditemukan` };
+  const accounts = getAccounts();
+  if (accounts.length < 2) {
+    return { success: false, error: `Butuh 2 akun WA (Akun Pengirim & Akun Admin) untuk menghindari error batasan Meta API` };
   }
 
-  const admins = getAdminNumbers();
-  if (admins.length === 0) {
-    return { success: false, error: `WA_ADMIN_NUMBERS belum dikonfigurasi di .env.local` };
-  }
+  const adminAccount = accounts[0]; // Admin 1
+  const botAccount = accounts[1]; // Admin 2 (Pengirim)
 
-  // Kirim ke admin pertama saja untuk test
-  return sendTextMessage(phoneId, admins[0], message);
+  // Selalu gunakan botAccount sebagai pengirim agar tidak kena error #100
+  return sendTextMessage(botAccount.phoneId, adminAccount.phoneNumber, message);
 }
 
 /**
- * Kirim pesan ke admin/owner via nomor pertama (default)
+ * Kirim laporan/notifikasi ke Admin Utama (Account 1) menggunakan Account 2
  */
 export async function sendNotifToAdmin(
-  message: string,
-  viaPhoneId?: string
+  message: string
 ): Promise<{ success: boolean; error?: string }> {
   const accounts = getAccounts();
-  if (accounts.length === 0) {
-    return { success: false, error: 'Tidak ada akun WhatsApp yang dikonfigurasi' };
+  if (accounts.length < 2) {
+    return { success: false, error: 'Dibutuhkan minimal 2 akun untuk mengirim notifikasi' };
   }
 
-  // Gunakan akun pertama sebagai default
-  const senderAccount = viaPhoneId
-    ? accounts.find(a => a.phoneId === viaPhoneId) || accounts[0]
-    : accounts[0];
+  const adminAccount = accounts[0]; // Penerima
+  const botAccount = accounts[1]; // Pengirim
 
-  // Kirim ke nomor sendiri
-  return sendTextMessage(senderAccount.phoneId, senderAccount.phoneNumber, message);
+  return sendTextMessage(botAccount.phoneId, adminAccount.phoneNumber, message);
 }
 
 /**
- * Ambil daftar nomor admin dari .env (bisa dipisah koma)
+ * Ambil daftar nomor admin (Nomor Admin Utama / Account 1)
  */
 export function getAdminNumbers(): string[] {
-  const envAdmin = process.env.WA_ADMIN_NUMBERS || '';
-  return envAdmin.split(',').map(n => normalizePhone(n)).filter(n => n.length > 5);
+  const accounts = getAccounts();
+  if (accounts.length > 0) {
+    return [normalizePhone(accounts[0].phoneNumber)];
+  }
+  return [];
 }
 
 /**

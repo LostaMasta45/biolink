@@ -10,11 +10,7 @@ import {
   Send,
   RefreshCw,
   Terminal,
-  ToggleLeft,
-  ToggleRight,
   CheckCircle2,
-  XCircle,
-  Clock,
   Zap,
   ArrowLeft,
   Copy,
@@ -24,6 +20,12 @@ import {
   Bot,
   Hash,
   ChevronRight,
+  Server,
+  Activity,
+  Check,
+  Crown,
+  XCircle,
+  Clock
 } from "lucide-react";
 import Link from "next/link";
 
@@ -53,7 +55,7 @@ interface LogEntry {
 }
 
 // ============================================
-// WhatsApp Admin Dashboard
+// WhatsApp Admin Dashboard (Premium UI)
 // ============================================
 
 export default function WhatsAppAdminPage() {
@@ -123,7 +125,7 @@ export default function WhatsAppAdminPage() {
     }
   };
 
-  // Test self-trigger
+  // Test Admin Command
   const handleTestSelfTrigger = async (phoneId: string) => {
     setSendingTest(phoneId);
     try {
@@ -135,7 +137,7 @@ export default function WhatsAppAdminPage() {
       const result = await res.json();
       setLogs(prev => [
         {
-          command: "🧪 Test Self-Trigger",
+          command: "🧪 Test Admin Command",
           status: result.success ? "success" : "error",
           time: new Date().toLocaleTimeString("id-ID"),
           response: result.message || result.error || "",
@@ -145,7 +147,7 @@ export default function WhatsAppAdminPage() {
     } catch {
       setLogs(prev => [
         {
-          command: "🧪 Test Self-Trigger",
+          command: "🧪 Test Admin Command",
           status: "error",
           time: new Date().toLocaleTimeString("id-ID"),
           response: "Network error",
@@ -177,183 +179,243 @@ export default function WhatsAppAdminPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center bg-[#0B1120]">
         <motion.div
           animate={{ rotate: 360 }}
-          transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+          transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }}
         >
-          <RefreshCw size={32} className="text-emerald-400" />
+          <div className="w-16 h-16 rounded-full border-t-2 border-r-2 border-emerald-400 border-opacity-80" />
         </motion.div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8 pb-20 relative">
+      {/* Background glow effects */}
+      <div className="absolute top-0 left-1/4 w-96 h-96 bg-emerald-500/10 rounded-full blur-[100px] pointer-events-none" />
+      <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-teal-500/10 rounded-full blur-[100px] pointer-events-none" />
+
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 relative z-10">
+        <div className="flex items-center gap-4">
           <Link
             href="/admin"
-            className="p-2 rounded-xl bg-white/5 hover:bg-white/10 transition-colors"
+            className="p-3 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/5 backdrop-blur-md transition-all hover:scale-105"
           >
-            <ArrowLeft size={20} />
+            <ArrowLeft size={20} className="text-white/70" />
           </Link>
           <div>
-            <h1 className="text-2xl font-bold flex items-center gap-2">
-              <MessageSquare className="text-emerald-400" size={28} />
-              WhatsApp Command Center
+            <h1 className="text-3xl font-bold flex items-center gap-3">
+              <div className="relative">
+                <MessageSquare className="text-emerald-400" size={32} />
+                <span className="absolute -top-1 -right-1 w-3 h-3 bg-emerald-400 rounded-full animate-ping" />
+                <span className="absolute -top-1 -right-1 w-3 h-3 bg-emerald-400 rounded-full" />
+              </div>
+              <span className="bg-clip-text text-transparent bg-gradient-to-r from-emerald-400 to-teal-200">
+                Command Center
+              </span>
             </h1>
-            <p className="text-sm text-white/50 mt-1">
-              Admin Command, monitoring & webhook management
+            <p className="text-sm text-white/50 mt-1 font-medium">
+              Dual-Account Architecture & Webhook Management
             </p>
           </div>
         </div>
         <button
           onClick={fetchData}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 transition-colors text-sm"
+          className="flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/5 backdrop-blur-md transition-all shadow-lg hover:shadow-white/5 text-sm font-medium"
         >
-          <RefreshCw size={16} />
-          Refresh
+          <RefreshCw size={16} className="text-emerald-400" />
+          Refresh Data
         </button>
       </div>
 
       {/* Tab Navigation */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 p-1 rounded-2xl bg-white/5 backdrop-blur-sm">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 p-1.5 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-md relative z-10">
         {([
           { id: "overview", label: "Overview", icon: Smartphone },
           { id: "commands", label: "Commands", icon: Terminal },
-          { id: "webhook", label: "Webhook Setup", icon: Zap },
-          { id: "test", label: "Test & Log", icon: Bot },
+          { id: "webhook", label: "Webhook Flow", icon: Zap },
+          { id: "test", label: "Test Logs", icon: Activity },
         ] as const).map((tab) => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-sm font-medium transition-all ${
+            className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-sm font-semibold transition-all duration-300 relative ${
               activeTab === tab.id
-                ? "bg-emerald-500/20 text-emerald-400 shadow-lg shadow-emerald-500/10"
-                : "text-white/50 hover:text-white/80 hover:bg-white/5"
+                ? "text-emerald-300 bg-white/10 shadow-[0_0_20px_rgba(16,185,129,0.15)]"
+                : "text-white/40 hover:text-white/80 hover:bg-white/5"
             }`}
           >
-            <tab.icon size={16} />
+            <tab.icon size={18} className={activeTab === tab.id ? "text-emerald-400" : ""} />
             {tab.label}
           </button>
         ))}
       </div>
 
       {/* Tab Content */}
-      <AnimatePresence mode="wait">
-        {activeTab === "overview" && (
-          <motion.div
-            key="overview"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="space-y-4"
-          >
-            {/* Account Cards */}
-            <div className="grid gap-4 md:grid-cols-2">
-              {accounts.map((account) => (
-                <div
-                  key={account.phoneId}
-                  className="rounded-2xl bg-white/[0.03] border border-white/[0.06] p-6 space-y-4"
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 flex items-center justify-center">
-                        <Smartphone className="text-emerald-400" size={24} />
-                      </div>
-                      <div>
-                        <h3 className="font-semibold text-lg">{account.label}</h3>
-                        <p className="text-sm text-white/50 font-mono">
-                          {formatPhone(account.phoneNumber)}
-                        </p>
-                      </div>
-                    </div>
-                    {testResults[account.phoneId] && (
-                      <span
-                        className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full ${
-                          testResults[account.phoneId].success
-                            ? "bg-emerald-500/10 text-emerald-400"
-                            : "bg-red-500/10 text-red-400"
-                        }`}
-                      >
-                        {testResults[account.phoneId].success ? (
-                          <Wifi size={12} />
-                        ) : (
-                          <WifiOff size={12} />
+      <div className="relative z-10">
+        <AnimatePresence mode="wait">
+          {activeTab === "overview" && (
+            <motion.div
+              key="overview"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.3 }}
+              className="space-y-6"
+            >
+              {/* Quick Stats */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="rounded-2xl bg-gradient-to-br from-white/5 to-transparent border border-white/10 backdrop-blur-lg p-6 relative overflow-hidden group">
+                  <div className="absolute top-0 right-0 p-4 opacity-10 transform translate-x-4 -translate-y-4 group-hover:scale-110 transition-transform">
+                    <Smartphone size={80} />
+                  </div>
+                  <div className="flex items-center gap-3 text-emerald-400 text-sm mb-3 font-medium">
+                    <div className="p-2 bg-emerald-400/10 rounded-lg"><Smartphone size={16} /></div>
+                    Akun Terhubung
+                  </div>
+                  <p className="text-4xl font-black text-white drop-shadow-md">{accounts.length}</p>
+                </div>
+                <div className="rounded-2xl bg-gradient-to-br from-white/5 to-transparent border border-white/10 backdrop-blur-lg p-6 relative overflow-hidden group">
+                  <div className="absolute top-0 right-0 p-4 opacity-10 transform translate-x-4 -translate-y-4 group-hover:scale-110 transition-transform">
+                    <Terminal size={80} />
+                  </div>
+                  <div className="flex items-center gap-3 text-cyan-400 text-sm mb-3 font-medium">
+                    <div className="p-2 bg-cyan-400/10 rounded-lg"><Terminal size={16} /></div>
+                    Total Commands
+                  </div>
+                  <p className="text-4xl font-black text-white drop-shadow-md">{commands.length}</p>
+                </div>
+                <div className="rounded-2xl bg-gradient-to-br from-white/5 to-transparent border border-white/10 backdrop-blur-lg p-6 relative overflow-hidden group">
+                  <div className="absolute top-0 right-0 p-4 opacity-10 transform translate-x-4 -translate-y-4 group-hover:scale-110 transition-transform">
+                    <CheckCircle2 size={80} />
+                  </div>
+                  <div className="flex items-center gap-3 text-violet-400 text-sm mb-3 font-medium">
+                    <div className="p-2 bg-violet-400/10 rounded-lg"><CheckCircle2 size={16} /></div>
+                    Commands Aktif
+                  </div>
+                  <p className="text-4xl font-black text-white drop-shadow-md">
+                    {commands.filter((c) => c.enabled).length}
+                  </p>
+                </div>
+              </div>
+
+              {/* Account Cards */}
+              <div className="grid gap-6 md:grid-cols-2">
+                {accounts.map((account, index) => {
+                  const isAdmin = index === 0;
+                  const isBot = index === 1;
+                  
+                  return (
+                    <motion.div
+                      whileHover={{ y: -4 }}
+                      key={account.phoneId}
+                      className={`rounded-3xl border backdrop-blur-xl p-6 transition-all shadow-xl ${
+                        isAdmin 
+                          ? "bg-gradient-to-br from-amber-500/10 to-orange-500/5 border-amber-500/20 shadow-amber-500/5" 
+                          : isBot
+                            ? "bg-gradient-to-br from-blue-500/10 to-cyan-500/5 border-blue-500/20 shadow-blue-500/5"
+                            : "bg-white/5 border-white/10"
+                      }`}
+                    >
+                      <div className="flex items-start justify-between mb-6">
+                        <div className="flex items-center gap-4">
+                          <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shadow-inner ${
+                            isAdmin ? "bg-amber-500/20 text-amber-400" : isBot ? "bg-blue-500/20 text-blue-400" : "bg-white/10 text-white"
+                          }`}>
+                            {isAdmin ? <Crown size={28} /> : isBot ? <Bot size={28} /> : <Smartphone size={28} />}
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2 mb-1">
+                              <h3 className="font-bold text-xl">{account.label}</h3>
+                              {isAdmin && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30">MASTER</span>}
+                              {isBot && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400 border border-blue-500/30">BOT</span>}
+                            </div>
+                            <p className="text-sm text-white/50 font-mono font-medium">
+                              {formatPhone(account.phoneNumber)}
+                            </p>
+                          </div>
+                        </div>
+                        {testResults[account.phoneId] && (
+                          <motion.span
+                            initial={{ scale: 0 }}
+                            animate={{ scale: 1 }}
+                            className={`flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-xl shadow-lg ${
+                              testResults[account.phoneId].success
+                                ? "bg-emerald-500 text-white shadow-emerald-500/30"
+                                : "bg-red-500 text-white shadow-red-500/30"
+                            }`}
+                          >
+                            {testResults[account.phoneId].success ? (
+                              <Wifi size={12} />
+                            ) : (
+                              <WifiOff size={12} />
+                            )}
+                            {testResults[account.phoneId].message}
+                          </motion.span>
                         )}
-                        {testResults[account.phoneId].message}
-                      </span>
-                    )}
-                  </div>
+                      </div>
 
-                  <div className="grid grid-cols-2 gap-3 text-sm">
-                    <div className="rounded-xl bg-white/[0.03] p-3">
-                      <p className="text-white/40 text-xs">Phone ID</p>
-                      <p className="font-mono text-white/70 mt-1 truncate">{account.phoneId}</p>
-                    </div>
-                    <div className="rounded-xl bg-white/[0.03] p-3">
-                      <p className="text-white/40 text-xs">Status</p>
-                      <p className="text-white/70 mt-1 flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                        Aktif
-                      </p>
-                    </div>
-                  </div>
+                      <div className="grid grid-cols-2 gap-3 text-sm mb-6">
+                        <div className="rounded-2xl bg-black/40 border border-white/5 p-4">
+                          <p className="text-white/40 text-xs font-medium mb-1">Phone ID</p>
+                          <p className="font-mono text-white/80 truncate text-xs">{account.phoneId}</p>
+                        </div>
+                        <div className="rounded-2xl bg-black/40 border border-white/5 p-4">
+                          <p className="text-white/40 text-xs font-medium mb-1">Tugas Akun</p>
+                          <p className="text-white/80 text-xs">
+                            {isAdmin ? "Balas Customer & Terima Laporan" : isBot ? "Proses Command & Kirim Laporan" : "Akun Tambahan"}
+                          </p>
+                        </div>
+                      </div>
 
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => handleTestConnection(account.phoneId)}
-                      disabled={testingAccount === account.phoneId}
-                      className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 transition-colors text-xs sm:text-sm disabled:opacity-50"
-                    >
-                      {testingAccount === account.phoneId ? (
-                        <RefreshCw size={14} className="animate-spin" />
-                      ) : (
-                        <Wifi size={14} />
-                      )}
-                      Test Koneksi
-                    </button>
-                    <button
-                      onClick={() => handleTestSelfTrigger(account.phoneId)}
-                      disabled={sendingTest === account.phoneId}
-                      className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 transition-colors text-xs sm:text-sm disabled:opacity-50"
-                    >
-                      {sendingTest === account.phoneId ? (
-                        <RefreshCw size={14} className="animate-spin" />
-                      ) : (
-                        <Send size={14} />
-                      )}
-                      Test Admin Command
-                    </button>
-                  </div>
-
-                  {testResults[account.phoneId]?.details && (
-                    <div className="mt-4 border-t border-white/10 pt-4">
-                      <button
-                        onClick={() => setExpandedLog(expandedLog === account.phoneId ? null : account.phoneId)}
-                        className="w-full flex items-center justify-between text-xs text-white/50 hover:text-white/80 transition-colors"
-                      >
-                        <span className="flex items-center gap-2">
-                          <Terminal size={12} />
-                          {expandedLog === account.phoneId ? "Sembunyikan Detail Log" : "Lihat Detail Log"}
-                        </span>
-                        <ChevronRight
-                          size={14}
-                          className={`transition-transform ${expandedLog === account.phoneId ? "rotate-90" : ""}`}
-                        />
-                      </button>
+                      <div className="flex gap-3">
+                        <button
+                          onClick={() => handleTestConnection(account.phoneId)}
+                          disabled={testingAccount === account.phoneId}
+                          className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition-colors text-sm font-semibold disabled:opacity-50"
+                        >
+                          {testingAccount === account.phoneId ? (
+                            <RefreshCw size={16} className="animate-spin text-emerald-400" />
+                          ) : (
+                            <Wifi size={16} className="text-white/60" />
+                          )}
+                          Ping API
+                        </button>
+                        <button
+                          onClick={() => handleTestSelfTrigger(account.phoneId)}
+                          disabled={sendingTest === account.phoneId}
+                          className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl border transition-colors text-sm font-semibold disabled:opacity-50 ${
+                            isAdmin
+                              ? "bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border-amber-500/30"
+                              : isBot
+                                ? "bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border-blue-500/30"
+                                : "bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border-emerald-500/30"
+                          }`}
+                        >
+                          {sendingTest === account.phoneId ? (
+                            <RefreshCw size={16} className="animate-spin" />
+                          ) : (
+                            <Send size={16} />
+                          )}
+                          Test Flow
+                        </button>
+                      </div>
 
                       <AnimatePresence>
-                        {expandedLog === account.phoneId && (
+                        {testResults[account.phoneId]?.details && (
                           <motion.div
                             initial={{ height: 0, opacity: 0 }}
                             animate={{ height: "auto", opacity: 1 }}
                             exit={{ height: 0, opacity: 0 }}
-                            className="overflow-hidden"
+                            className="overflow-hidden mt-4"
                           >
-                            <div className="mt-3 p-3 rounded-xl bg-black/40 border border-white/5 overflow-x-auto">
+                            <div className="p-4 rounded-xl bg-black/60 border border-red-500/20 overflow-x-auto relative">
+                              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-red-500/0 via-red-500/50 to-red-500/0" />
+                              <p className="text-red-400 text-xs font-bold mb-2 flex items-center gap-2">
+                                <Terminal size={12} /> Diagnostic Log
+                              </p>
                               <pre className="text-[10px] text-white/70 font-mono">
                                 {JSON.stringify(testResults[account.phoneId].details, null, 2)}
                               </pre>
@@ -361,430 +423,270 @@ export default function WhatsAppAdminPage() {
                           </motion.div>
                         )}
                       </AnimatePresence>
-                    </div>
-                  )}
-                </div>
-              ))}
+                    </motion.div>
+                  );
+                })}
 
-              {accounts.length === 0 && (
-                <div className="col-span-2 rounded-2xl bg-white/[0.03] border border-white/[0.06] p-12 text-center">
-                  <WifiOff className="mx-auto mb-4 text-white/20" size={48} />
-                  <h3 className="text-lg font-medium text-white/60">Belum Ada Akun</h3>
-                  <p className="text-sm text-white/30 mt-2 max-w-md mx-auto">
-                    Tambahkan KIRIMDEV_PHONE_ID_1 dan KIRIMDEV_PHONE_NUMBER_1 di file .env.local
-                  </p>
-                </div>
-              )}
-            </div>
-
-            {/* Quick Stats */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="rounded-2xl bg-white/[0.03] border border-white/[0.06] p-5">
-                <div className="flex items-center gap-2 text-white/40 text-sm mb-2">
-                  <Smartphone size={16} />
-                  Akun Terhubung
-                </div>
-                <p className="text-3xl font-bold text-emerald-400">{accounts.length}</p>
-              </div>
-              <div className="rounded-2xl bg-white/[0.03] border border-white/[0.06] p-5">
-                <div className="flex items-center gap-2 text-white/40 text-sm mb-2">
-                  <Terminal size={16} />
-                  Total Commands
-                </div>
-                <p className="text-3xl font-bold text-cyan-400">{commands.length}</p>
-              </div>
-              <div className="rounded-2xl bg-white/[0.03] border border-white/[0.06] p-5">
-                <div className="flex items-center gap-2 text-white/40 text-sm mb-2">
-                  <CheckCircle2 size={16} />
-                  Commands Aktif
-                </div>
-                <p className="text-3xl font-bold text-violet-400">
-                  {commands.filter((c) => c.enabled).length}
-                </p>
-              </div>
-            </div>
-          </motion.div>
-        )}
-
-        {activeTab === "commands" && (
-          <motion.div
-            key="commands"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="space-y-4"
-          >
-            <div className="rounded-2xl bg-white/[0.03] border border-white/[0.06] p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-semibold flex items-center gap-2">
-                  <Terminal className="text-cyan-400" size={20} />
-                  Admin Commands
-                </h2>
-                <span className="text-xs text-white/30 bg-white/5 px-3 py-1 rounded-full">
-                  {commands.filter((c) => c.enabled).length}/{commands.length} aktif
-                </span>
-              </div>
-
-              <div className="mb-6 space-y-2">
-                <p className="text-sm text-white/40">
-                  Gunakan <strong className="text-emerald-400">Nomor Pribadi (Admin)</strong> Anda untuk mengirim command ini ke Chat WhatsApp KirimDev (bot).
-                </p>
-                <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl flex items-start gap-3">
-                  <Info className="text-red-400 mt-0.5 flex-shrink-0" size={16} />
-                  <p className="text-xs text-red-300">
-                    <strong>PENTING:</strong> Meta API <strong>TIDAK MENGIZINKAN</strong> nomor WhatsApp Business untuk membalas pesan ke nomornya sendiri. Jika Anda mengirim chat dari nomor bot ke dirinya sendiri, akan gagal (Error #100).
-                  </p>
-                </div>
-              </div>
-
-              <div className="space-y-3">
-                {commands.map((cmd) => (
-                  <div
-                    key={cmd.name}
-                    className={`rounded-xl border p-4 transition-all ${
-                      cmd.enabled
-                        ? "bg-white/[0.02] border-white/[0.08] hover:border-emerald-500/30"
-                        : "bg-white/[0.01] border-white/[0.04] opacity-60"
-                    }`}
-                  >
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-3 mb-1">
-                          <code className="text-emerald-400 font-bold text-base bg-emerald-500/10 px-2.5 py-0.5 rounded-lg">
-                            {cmd.name}
-                          </code>
-                          <span
-                            className={`text-xs px-2 py-0.5 rounded-full ${
-                              cmd.enabled
-                                ? "bg-emerald-500/10 text-emerald-400"
-                                : "bg-red-500/10 text-red-400"
-                            }`}
-                          >
-                            {cmd.enabled ? "Aktif" : "Nonaktif"}
-                          </span>
-                        </div>
-                        <p className="text-sm text-white/60 mt-2">{cmd.description}</p>
-                        <p className="text-xs text-white/30 mt-1.5 font-mono">
-                          Contoh: {cmd.usage}
-                        </p>
-                      </div>
-                      <button
-                        className="p-2 rounded-lg hover:bg-white/5 transition-colors"
-                        title={cmd.enabled ? "Nonaktifkan" : "Aktifkan"}
-                      >
-                        {cmd.enabled ? (
-                          <ToggleRight className="text-emerald-400" size={24} />
-                        ) : (
-                          <ToggleLeft className="text-white/30" size={24} />
-                        )}
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </motion.div>
-        )}
-
-        {activeTab === "webhook" && (
-          <motion.div
-            key="webhook"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="space-y-4"
-          >
-            {/* Webhook URL Card */}
-            <div className="rounded-2xl bg-white/[0.03] border border-white/[0.06] p-6">
-              <h2 className="text-lg font-semibold flex items-center gap-2 mb-4">
-                <Zap className="text-amber-400" size={20} />
-                Webhook URL
-              </h2>
-              <div className="flex items-center gap-2">
-                <div className="flex-1 bg-black/30 rounded-xl px-4 py-3 font-mono text-sm text-emerald-400 border border-white/[0.06]">
-                  {webhookUrl || "https://your-domain.com/api/webhook/whatsapp"}
-                </div>
-                <button
-                  onClick={handleCopyWebhook}
-                  className="flex items-center gap-2 px-4 py-3 rounded-xl bg-white/5 hover:bg-white/10 transition-colors text-sm"
-                >
-                  {copied ? <CheckCircle2 size={16} className="text-emerald-400" /> : <Copy size={16} />}
-                  {copied ? "Copied!" : "Copy"}
-                </button>
-              </div>
-            </div>
-
-            {/* Step-by-step Tutorial */}
-            <div className="rounded-2xl bg-white/[0.03] border border-white/[0.06] p-6">
-              <h2 className="text-lg font-semibold flex items-center gap-2 mb-6">
-                <Info className="text-blue-400" size={20} />
-                Tutorial Setup Webhook KirimDev
-              </h2>
-
-              <div className="space-y-6">
-                {/* Step 1 */}
-                <div className="flex gap-4">
-                  <div className="flex-shrink-0 w-10 h-10 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-400 font-bold text-sm">
-                    1
-                  </div>
-                  <div className="flex-1">
-                    <h3 className="font-medium mb-2">Buka Dashboard KirimDev</h3>
-                    <p className="text-sm text-white/50 mb-3">
-                      Login ke{" "}
-                      <a
-                        href="https://app.kirim.dev"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-emerald-400 hover:underline inline-flex items-center gap-1"
-                      >
-                        app.kirim.dev <ExternalLink size={12} />
-                      </a>{" "}
-                      lalu masuk ke menu <strong>Settings → Webhook</strong>
+                {accounts.length === 0 && (
+                  <div className="col-span-2 rounded-3xl bg-white/5 border border-white/10 p-16 text-center backdrop-blur-md">
+                    <WifiOff className="mx-auto mb-6 text-white/20" size={64} />
+                    <h3 className="text-2xl font-bold text-white/80 mb-2">Belum Ada Akun</h3>
+                    <p className="text-white/40 max-w-md mx-auto">
+                      Harap konfigurasi KIRIMDEV_PHONE_ID_1 dan KIRIMDEV_PHONE_NUMBER_1 di file <code className="text-emerald-400 px-2 py-1 bg-emerald-400/10 rounded-md">.env.local</code>
                     </p>
                   </div>
+                )}
+              </div>
+            </motion.div>
+          )}
+
+          {activeTab === "commands" && (
+            <motion.div
+              key="commands"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.3 }}
+              className="space-y-6"
+            >
+              <div className="rounded-3xl bg-black/40 border border-white/10 backdrop-blur-xl p-8">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8 border-b border-white/10 pb-6">
+                  <div>
+                    <h2 className="text-2xl font-bold flex items-center gap-3">
+                      <Terminal className="text-cyan-400" size={28} />
+                      Interactive Command Center
+                    </h2>
+                    <p className="text-white/50 mt-2 font-medium">
+                      Gunakan <strong className="text-amber-400">Akun 1 (Master)</strong> untuk mengirim pesan ke <strong className="text-blue-400">Akun 2 (Bot)</strong>.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3 bg-white/5 px-4 py-2 rounded-2xl border border-white/5">
+                    <Activity className="text-emerald-400" size={16} />
+                    <span className="font-bold text-lg">{commands.filter((c) => c.enabled).length}</span>
+                    <span className="text-white/40 text-sm">/ {commands.length} Aktif</span>
+                  </div>
                 </div>
 
-                {/* Step 2 */}
-                <div className="flex gap-4">
-                  <div className="flex-shrink-0 w-10 h-10 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-400 font-bold text-sm">
-                    2
-                  </div>
-                  <div className="flex-1">
-                    <h3 className="font-medium mb-2">Klik &quot;Tambah Webhook&quot;</h3>
-                    <p className="text-sm text-white/50 mb-3">Isi form webhook dengan data berikut:</p>
-                    <div className="rounded-xl bg-black/30 border border-white/[0.06] p-4 space-y-3 text-sm">
-                      <div>
-                        <span className="text-white/40">URL endpoint:</span>
-                        <code className="ml-2 text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded">
-                          {webhookUrl || "https://your-domain.com/api/webhook/whatsapp"}
+                <div className="grid gap-4 md:grid-cols-2">
+                  {commands.map((cmd) => (
+                    <div
+                      key={cmd.name}
+                      className={`relative overflow-hidden rounded-2xl border backdrop-blur-md p-6 transition-all duration-300 group ${
+                        cmd.enabled
+                          ? "bg-white/[0.03] border-white/10 hover:border-cyan-500/30 hover:bg-cyan-500/5 shadow-lg"
+                          : "bg-white/[0.01] border-white/5 opacity-60 grayscale"
+                      }`}
+                    >
+                      {cmd.enabled && (
+                        <div className="absolute -right-10 -top-10 w-32 h-32 bg-cyan-500/10 rounded-full blur-2xl group-hover:bg-cyan-500/20 transition-all" />
+                      )}
+                      
+                      <div className="relative z-10 flex items-start justify-between">
+                        <div>
+                          <h3 className="font-bold text-xl text-white flex items-center gap-2">
+                            {cmd.name}
+                          </h3>
+                          <p className="text-sm text-white/50 mt-2 leading-relaxed">
+                            {cmd.description}
+                          </p>
+                        </div>
+                        {cmd.enabled ? (
+                          <div className="px-3 py-1 bg-emerald-500/20 text-emerald-400 text-[10px] font-bold rounded-full border border-emerald-500/30 flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                            ON
+                          </div>
+                        ) : (
+                          <div className="px-3 py-1 bg-white/10 text-white/40 text-[10px] font-bold rounded-full border border-white/10">
+                            OFF
+                          </div>
+                        )}
+                      </div>
+                      
+                      <div className="relative z-10 mt-6 pt-4 border-t border-white/10">
+                        <p className="text-[10px] text-white/40 font-semibold mb-1 uppercase tracking-wider">Usage Syntax</p>
+                        <code className="text-xs bg-black/60 text-cyan-300 px-3 py-2 rounded-lg border border-cyan-500/20 block font-mono">
+                          {cmd.usage}
                         </code>
                       </div>
-                      <div>
-                        <span className="text-white/40">Deskripsi:</span>
-                        <span className="ml-2 text-white/70">Webhook ILJ-Hub Self-Trigger</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Step 3 */}
-                <div className="flex gap-4">
-                  <div className="flex-shrink-0 w-10 h-10 rounded-full bg-amber-500/10 flex items-center justify-center text-amber-400 font-bold text-sm">
-                    3
-                  </div>
-                  <div className="flex-1">
-                    <h3 className="font-medium mb-2 flex items-center gap-2">
-                      Pilih Event yang Di-subscribe
-                      <span className="text-xs bg-amber-500/10 text-amber-400 px-2 py-0.5 rounded-full">
-                        PENTING
-                      </span>
-                    </h3>
-                    <p className="text-sm text-white/50 mb-3">
-                      Centang event berikut. <strong className="text-amber-400">message.received</strong> wajib dicentang agar self-trigger berfungsi:
-                    </p>
-                    <div className="rounded-xl bg-black/30 border border-white/[0.06] p-4 space-y-2 text-sm">
-                      <div className="flex items-center gap-3">
-                        <CheckCircle2 size={16} className="text-emerald-400" />
-                        <code className="text-emerald-400">message.received</code>
-                        <span className="text-xs bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded-full ml-auto">
-                          WAJIB
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <CheckCircle2 size={16} className="text-emerald-400" />
-                        <code className="text-white/60">message.sent</code>
-                        <span className="text-xs bg-cyan-500/10 text-cyan-400 px-2 py-0.5 rounded-full ml-auto">
-                          Disarankan
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <CheckCircle2 size={16} className="text-white/20" />
-                        <code className="text-white/40">message.status</code>
-                        <span className="text-xs text-white/20 ml-auto">Opsional</span>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <CheckCircle2 size={16} className="text-white/20" />
-                        <code className="text-white/40">message.revoked</code>
-                        <span className="text-xs text-white/20 ml-auto">Opsional</span>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <CheckCircle2 size={16} className="text-white/20" />
-                        <code className="text-white/40">message.edited</code>
-                        <span className="text-xs text-white/20 ml-auto">Opsional</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Step 4 */}
-                <div className="flex gap-4">
-                  <div className="flex-shrink-0 w-10 h-10 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-400 font-bold text-sm">
-                    4
-                  </div>
-                  <div className="flex-1">
-                    <h3 className="font-medium mb-2">Pilih Akun WhatsApp</h3>
-                    <p className="text-sm text-white/50 mb-3">
-                      Anda bisa <strong>mengosongkan</strong> pilihan akun agar webhook menerima event dari <strong>semua nomor</strong> yang terhubung 
-                      (Lostamasta + InfoLokerJombang), atau pilih salah satu saja.
-                    </p>
-                    <div className="rounded-xl bg-black/30 border border-white/[0.06] p-4 space-y-2 text-sm">
-                      <div className="flex items-center gap-3">
-                        <div className="w-3 h-3 rounded-full bg-emerald-400" />
-                        <span className="text-white/70">+62 831-2286-6975</span>
-                        <span className="text-white/40">— Lostamasta</span>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <div className="w-3 h-3 rounded-full border border-white/20" />
-                        <span className="text-white/70">+62 897-4266-000</span>
-                        <span className="text-white/40">— InfoLokerJombang</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Step 5 */}
-                <div className="flex gap-4">
-                  <div className="flex-shrink-0 w-10 h-10 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-400 font-bold text-sm">
-                    5
-                  </div>
-                  <div className="flex-1">
-                    <h3 className="font-medium mb-2">Klik &quot;Simpan&quot; & Test</h3>
-                    <p className="text-sm text-white/50 mb-3">
-                      Setelah menyimpan, kembali ke halaman ini dan gunakan tombol{" "}
-                      <strong className="text-emerald-400">&quot;Test Admin Command&quot;</strong> di tab Overview 
-                      untuk memverifikasi webhook sudah terhubung. Pastikan <code className="text-cyan-400">WA_ADMIN_NUMBERS</code> sudah diset.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* ENV Setup Guide */}
-            <div className="rounded-2xl bg-white/[0.03] border border-white/[0.06] p-6">
-              <h2 className="text-lg font-semibold flex items-center gap-2 mb-4">
-                <Shield className="text-violet-400" size={20} />
-                Environment Variables (.env.local)
-              </h2>
-              <p className="text-sm text-white/40 mb-4">
-                Pastikan variabel berikut sudah diset di file <code className="text-violet-400 bg-violet-500/10 px-1.5 py-0.5 rounded">.env.local</code>:
-              </p>
-              <div className="rounded-xl bg-black/50 border border-white/[0.06] p-4 font-mono text-sm space-y-1 overflow-x-auto">
-                <p className="text-white/30"># API Key (sama untuk semua akun)</p>
-                <p><span className="text-cyan-400">KIRIMDEV_API_KEY</span><span className="text-white/30">=</span><span className="text-amber-400">sk-xxxxxxxxxxxxxxxxx</span></p>
-                <p className="mt-3 text-white/30"># Nomor WA Pribadi Anda (Yang Boleh Menjalankan Command - pisahkan dengan koma)</p>
-                <p><span className="text-cyan-400">WA_ADMIN_NUMBERS</span><span className="text-white/30">=</span><span className="text-amber-400">62812345678,62898765432</span></p>
-                <p className="mt-3 text-white/30"># Akun 1: Lostamasta</p>
-                <p><span className="text-cyan-400">KIRIMDEV_PHONE_ID_1</span><span className="text-white/30">=</span><span className="text-amber-400">phone_id_dari_kirimdev</span></p>
-                <p><span className="text-cyan-400">KIRIMDEV_PHONE_NUMBER_1</span><span className="text-white/30">=</span><span className="text-amber-400">6283122866975</span></p>
-                <p className="mt-3 text-white/30"># Akun 2: InfoLokerJombang</p>
-                <p><span className="text-cyan-400">KIRIMDEV_PHONE_ID_2</span><span className="text-white/30">=</span><span className="text-amber-400">phone_id_dari_kirimdev</span></p>
-                <p><span className="text-cyan-400">KIRIMDEV_PHONE_NUMBER_2</span><span className="text-white/30">=</span><span className="text-amber-400">628974266000</span></p>
-              </div>
-            </div>
-          </motion.div>
-        )}
-
-        {activeTab === "test" && (
-          <motion.div
-            key="test"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="space-y-4"
-          >
-            {/* Quick Test */}
-            <div className="rounded-2xl bg-white/[0.03] border border-white/[0.06] p-6">
-              <h2 className="text-lg font-semibold flex items-center gap-2 mb-4">
-                <Bot className="text-emerald-400" size={20} />
-                Quick Admin Command Test
-              </h2>
-              <p className="text-sm text-white/40 mb-4">
-                Pilih akun, dan sistem akan mencoba mengirim pesan test ke nomor pribadi (<code className="text-cyan-400">WA_ADMIN_NUMBERS</code>) Anda:
-              </p>
-              <div className="grid gap-3 md:grid-cols-2">
-                {accounts.map((account) => (
-                  <button
-                    key={account.phoneId}
-                    onClick={() => handleTestSelfTrigger(account.phoneId)}
-                    disabled={sendingTest === account.phoneId}
-                    className="flex items-center gap-3 p-4 rounded-xl bg-emerald-500/5 border border-emerald-500/10 hover:bg-emerald-500/10 transition-all disabled:opacity-50 text-left"
-                  >
-                    <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center">
-                      {sendingTest === account.phoneId ? (
-                        <RefreshCw size={18} className="text-emerald-400 animate-spin" />
-                      ) : (
-                        <Send size={18} className="text-emerald-400" />
-                      )}
-                    </div>
-                    <div>
-                      <p className="font-medium">{account.label}</p>
-                      <p className="text-xs text-white/40">{formatPhone(account.phoneNumber)}</p>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Command Cheatsheet */}
-            <div className="rounded-2xl bg-white/[0.03] border border-white/[0.06] p-6">
-              <h2 className="text-lg font-semibold flex items-center gap-2 mb-4">
-                <Hash className="text-cyan-400" size={20} />
-                Command Cheatsheet
-              </h2>
-              <p className="text-sm text-white/40 mb-4">
-                Gunakan nomor pribadi Anda, kirim pesan ke WhatsApp bisnis Anda:
-              </p>
-              <div className="grid gap-2 md:grid-cols-2">
-                {commands.map((cmd) => (
-                  <div
-                    key={cmd.name}
-                    className="flex items-center gap-3 p-3 rounded-xl bg-black/20 border border-white/[0.04]"
-                  >
-                    <code className="text-emerald-400 font-bold text-sm bg-emerald-500/10 px-2 py-0.5 rounded">
-                      {cmd.name}
-                    </code>
-                    <span className="text-xs text-white/40 flex-1">{cmd.description}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Activity Log */}
-            <div className="rounded-2xl bg-white/[0.03] border border-white/[0.06] p-6">
-              <h2 className="text-lg font-semibold flex items-center gap-2 mb-4">
-                <Clock className="text-amber-400" size={20} />
-                Log Aktivitas
-              </h2>
-              {logs.length === 0 ? (
-                <div className="text-center py-8 text-white/20">
-                  <Clock size={32} className="mx-auto mb-3" />
-                  <p className="text-sm">Belum ada aktivitas. Coba test self-trigger di atas.</p>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {logs.map((log, i) => (
-                    <div
-                      key={i}
-                      className="flex items-center gap-3 p-3 rounded-xl bg-black/20 border border-white/[0.04] text-sm"
-                    >
-                      {log.status === "success" ? (
-                        <CheckCircle2 size={16} className="text-emerald-400 flex-shrink-0" />
-                      ) : log.status === "error" ? (
-                        <XCircle size={16} className="text-red-400 flex-shrink-0" />
-                      ) : (
-                        <Clock size={16} className="text-amber-400 flex-shrink-0 animate-pulse" />
-                      )}
-                      <span className="text-white/40 font-mono text-xs flex-shrink-0">{log.time}</span>
-                      <span className="font-medium flex-shrink-0">{log.command}</span>
-                      <span className="text-white/30 truncate flex-1">{log.response}</span>
                     </div>
                   ))}
                 </div>
-              )}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+              </div>
+            </motion.div>
+          )}
+
+          {activeTab === "webhook" && (
+            <motion.div
+              key="webhook"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.3 }}
+              className="space-y-6"
+            >
+              <div className="rounded-3xl bg-black/40 border border-white/10 backdrop-blur-xl p-8">
+                <div className="mb-8 border-b border-white/10 pb-6">
+                  <h2 className="text-2xl font-bold flex items-center gap-3">
+                    <Zap className="text-amber-400" size={28} />
+                    Webhook Flow
+                  </h2>
+                  <p className="text-white/50 mt-2 font-medium max-w-2xl">
+                    Webhook adalah jembatan komunikasi. Tanpa webhook, bot hanya bisa mengirim pesan. Dengan webhook, bot bisa "mendengarkan" perintah Anda secara real-time.
+                  </p>
+                </div>
+
+                {/* Flowchart Visualizer */}
+                <div className="bg-gradient-to-b from-white/5 to-transparent border border-white/5 rounded-3xl p-8 mb-8 overflow-hidden relative">
+                  <div className="flex flex-col md:flex-row items-center justify-between gap-6 relative z-10">
+                    
+                    {/* Step 1: Admin */}
+                    <div className="flex flex-col items-center text-center w-40">
+                      <div className="w-16 h-16 bg-amber-500/20 rounded-2xl flex items-center justify-center border border-amber-500/30 mb-4 shadow-[0_0_20px_rgba(245,158,11,0.2)]">
+                        <Crown className="text-amber-400" size={32} />
+                      </div>
+                      <h4 className="font-bold text-amber-400">Akun 1</h4>
+                      <p className="text-xs text-white/50 mt-1">Kirim <code>!rekap</code></p>
+                    </div>
+
+                    {/* Arrow 1 */}
+                    <div className="hidden md:flex flex-col items-center">
+                      <div className="text-xs text-white/40 mb-2">WhatsApp Network</div>
+                      <div className="w-32 h-[2px] bg-gradient-to-r from-amber-500/50 to-blue-500/50 relative">
+                        <motion.div 
+                          className="absolute top-1/2 -translate-y-1/2 w-4 h-4 bg-white rounded-full shadow-[0_0_10px_white]"
+                          animate={{ left: ["0%", "100%"] }}
+                          transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Step 2: KirimDev */}
+                    <div className="flex flex-col items-center text-center w-40">
+                      <div className="w-16 h-16 bg-white/10 rounded-2xl flex items-center justify-center border border-white/20 mb-4 backdrop-blur-md">
+                        <Server className="text-white" size={32} />
+                      </div>
+                      <h4 className="font-bold text-white">KirimDev API</h4>
+                      <p className="text-xs text-white/50 mt-1">Menerima Pesan</p>
+                    </div>
+
+                    {/* Arrow 2 */}
+                    <div className="hidden md:flex flex-col items-center">
+                      <div className="text-xs text-emerald-400 mb-2 font-bold animate-pulse">HTTP POST</div>
+                      <div className="w-32 h-[2px] bg-gradient-to-r from-blue-500/50 to-emerald-500/50 relative">
+                        <motion.div 
+                          className="absolute top-1/2 -translate-y-1/2 w-4 h-4 bg-emerald-400 rounded-full shadow-[0_0_15px_rgba(52,211,153,0.8)]"
+                          animate={{ left: ["0%", "100%"] }}
+                          transition={{ duration: 1.5, repeat: Infinity, ease: "linear", delay: 0.5 }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Step 3: Server (Webhook) */}
+                    <div className="flex flex-col items-center text-center w-40">
+                      <div className="w-16 h-16 bg-emerald-500/20 rounded-2xl flex items-center justify-center border border-emerald-500/30 mb-4 shadow-[0_0_20px_rgba(16,185,129,0.2)]">
+                        <Zap className="text-emerald-400" size={32} />
+                      </div>
+                      <h4 className="font-bold text-emerald-400">Webhook ILJ</h4>
+                      <p className="text-xs text-white/50 mt-1">Proses Command</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-black/60 rounded-2xl border border-white/10 p-6">
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                    <div className="flex-1">
+                      <p className="text-sm font-semibold text-white/60 uppercase tracking-wider mb-2">Endpoint URL</p>
+                      <code className="text-sm md:text-base text-emerald-300 font-mono block truncate">
+                        {webhookUrl || "Loading..."}
+                      </code>
+                    </div>
+                    <button
+                      onClick={handleCopyWebhook}
+                      className="flex items-center gap-2 px-6 py-3 rounded-xl bg-white/10 hover:bg-white/20 transition-all font-semibold"
+                    >
+                      {copied ? <Check size={18} className="text-emerald-400" /> : <Copy size={18} />}
+                      {copied ? "Copied!" : "Copy URL"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          )}
+
+          {activeTab === "test" && (
+            <motion.div
+              key="test"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.3 }}
+              className="space-y-6"
+            >
+              <div className="rounded-3xl bg-black/40 border border-white/10 backdrop-blur-xl p-8">
+                <div className="flex items-center justify-between mb-8 border-b border-white/10 pb-6">
+                  <div>
+                    <h2 className="text-2xl font-bold flex items-center gap-3">
+                      <Activity className="text-violet-400" size={28} />
+                      Activity Logs
+                    </h2>
+                    <p className="text-white/50 mt-2 font-medium">History eksekusi test command via dashboard.</p>
+                  </div>
+                  {logs.length > 0 && (
+                    <button 
+                      onClick={() => setLogs([])}
+                      className="text-xs font-bold px-4 py-2 bg-white/5 rounded-xl hover:bg-red-500/20 hover:text-red-400 transition-colors"
+                    >
+                      Clear Logs
+                    </button>
+                  )}
+                </div>
+
+                <div className="space-y-4">
+                  {logs.length === 0 ? (
+                    <div className="text-center py-12 bg-white/5 border border-white/5 rounded-2xl">
+                      <Activity className="mx-auto text-white/20 mb-4" size={48} />
+                      <p className="text-white/40">Belum ada log aktivitas.<br/>Coba jalankan Test Flow di tab Overview.</p>
+                    </div>
+                  ) : (
+                    logs.map((log, i) => (
+                      <div
+                        key={i}
+                        className={`p-5 rounded-2xl border transition-all ${
+                          log.status === "success"
+                            ? "bg-emerald-500/5 border-emerald-500/10"
+                            : "bg-red-500/5 border-red-500/10"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-3">
+                          <span className="font-bold flex items-center gap-2">
+                            {log.status === "success" ? (
+                              <CheckCircle2 className="text-emerald-400" size={18} />
+                            ) : (
+                              <XCircle className="text-red-400" size={18} />
+                            )}
+                            {log.command}
+                          </span>
+                          <span className="text-xs text-white/40 flex items-center gap-1 bg-black/40 px-2 py-1 rounded-md">
+                            <Clock size={12} />
+                            {log.time}
+                          </span>
+                        </div>
+                        <div className="bg-black/60 rounded-xl p-3 border border-white/5">
+                           <p className={`text-sm font-mono ${
+                            log.status === "success" ? "text-emerald-300" : "text-red-300"
+                          }`}>
+                            {log.response}
+                          </p>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
     </div>
   );
 }
