@@ -76,11 +76,11 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ status: 'error', message: 'No phoneId available' }, { status: 500 });
       }
 
-      // Proses command secara async (agar webhook cepat return 200)
-      // KirimDev butuh response dalam < 5 detik
-      processCommand(phoneId, senderPhone, text).catch(err => {
+      try {
+        await processCommand(phoneId, senderPhone, text);
+      } catch (err) {
         console.error('[Webhook] Command processing failed:', err);
-      });
+      }
 
       return NextResponse.json({
         status: 'ok',

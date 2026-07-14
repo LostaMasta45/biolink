@@ -267,35 +267,35 @@ export default function WhatsAppAdminPage() {
             >
               {/* Quick Stats */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="rounded-2xl bg-gradient-to-br from-white/5 to-transparent border border-white/10 backdrop-blur-lg p-6 relative overflow-hidden group">
-                  <div className="absolute top-0 right-0 p-4 opacity-10 transform translate-x-4 -translate-y-4 group-hover:scale-110 transition-transform">
-                    <Smartphone size={80} />
+                <div className="rounded-2xl bg-gradient-to-br from-white/5 to-transparent border border-white/10 backdrop-blur-lg p-4 relative overflow-hidden group">
+                  <div className="absolute top-0 right-0 p-3 opacity-10 transform translate-x-4 -translate-y-4 group-hover:scale-110 transition-transform">
+                    <Smartphone size={60} />
                   </div>
-                  <div className="flex items-center gap-3 text-emerald-400 text-sm mb-3 font-medium">
-                    <div className="p-2 bg-emerald-400/10 rounded-lg"><Smartphone size={16} /></div>
+                  <div className="flex items-center gap-2 text-emerald-400 text-xs mb-2 font-medium">
+                    <div className="p-1.5 bg-emerald-400/10 rounded-lg"><Smartphone size={14} /></div>
                     Akun Terhubung
                   </div>
-                  <p className="text-4xl font-black text-white drop-shadow-md">{accounts.length}</p>
+                  <p className="text-3xl font-black text-white drop-shadow-md">{accounts.length}</p>
                 </div>
-                <div className="rounded-2xl bg-gradient-to-br from-white/5 to-transparent border border-white/10 backdrop-blur-lg p-6 relative overflow-hidden group">
-                  <div className="absolute top-0 right-0 p-4 opacity-10 transform translate-x-4 -translate-y-4 group-hover:scale-110 transition-transform">
-                    <Terminal size={80} />
+                <div className="rounded-2xl bg-gradient-to-br from-white/5 to-transparent border border-white/10 backdrop-blur-lg p-4 relative overflow-hidden group">
+                  <div className="absolute top-0 right-0 p-3 opacity-10 transform translate-x-4 -translate-y-4 group-hover:scale-110 transition-transform">
+                    <Terminal size={60} />
                   </div>
-                  <div className="flex items-center gap-3 text-cyan-400 text-sm mb-3 font-medium">
-                    <div className="p-2 bg-cyan-400/10 rounded-lg"><Terminal size={16} /></div>
+                  <div className="flex items-center gap-2 text-cyan-400 text-xs mb-2 font-medium">
+                    <div className="p-1.5 bg-cyan-400/10 rounded-lg"><Terminal size={14} /></div>
                     Total Commands
                   </div>
-                  <p className="text-4xl font-black text-white drop-shadow-md">{commands.length}</p>
+                  <p className="text-3xl font-black text-white drop-shadow-md">{commands.length}</p>
                 </div>
-                <div className="rounded-2xl bg-gradient-to-br from-white/5 to-transparent border border-white/10 backdrop-blur-lg p-6 relative overflow-hidden group">
-                  <div className="absolute top-0 right-0 p-4 opacity-10 transform translate-x-4 -translate-y-4 group-hover:scale-110 transition-transform">
-                    <CheckCircle2 size={80} />
+                <div className="rounded-2xl bg-gradient-to-br from-white/5 to-transparent border border-white/10 backdrop-blur-lg p-4 relative overflow-hidden group">
+                  <div className="absolute top-0 right-0 p-3 opacity-10 transform translate-x-4 -translate-y-4 group-hover:scale-110 transition-transform">
+                    <CheckCircle2 size={60} />
                   </div>
-                  <div className="flex items-center gap-3 text-violet-400 text-sm mb-3 font-medium">
-                    <div className="p-2 bg-violet-400/10 rounded-lg"><CheckCircle2 size={16} /></div>
+                  <div className="flex items-center gap-2 text-violet-400 text-xs mb-2 font-medium">
+                    <div className="p-1.5 bg-violet-400/10 rounded-lg"><CheckCircle2 size={14} /></div>
                     Commands Aktif
                   </div>
-                  <p className="text-4xl font-black text-white drop-shadow-md">
+                  <p className="text-3xl font-black text-white drop-shadow-md">
                     {commands.filter((c) => c.enabled).length}
                   </p>
                 </div>
@@ -309,9 +309,9 @@ export default function WhatsAppAdminPage() {
                   
                   return (
                     <motion.div
-                      whileHover={{ y: -4 }}
+                      whileHover={{ y: -2 }}
                       key={account.phoneId}
-                      className={`rounded-3xl border backdrop-blur-xl p-6 transition-all shadow-xl ${
+                      className={`rounded-2xl border backdrop-blur-xl p-5 transition-all shadow-xl ${
                         isAdmin 
                           ? "bg-gradient-to-br from-amber-500/10 to-orange-500/5 border-amber-500/20 shadow-amber-500/5" 
                           : isBot
@@ -319,20 +319,20 @@ export default function WhatsAppAdminPage() {
                             : "bg-white/5 border-white/10"
                       }`}
                     >
-                      <div className="flex items-start justify-between mb-6">
-                        <div className="flex items-center gap-4">
-                          <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shadow-inner ${
+                      <div className="flex items-start justify-between mb-4">
+                        <div className="flex items-center gap-3">
+                          <div className={`w-12 h-12 rounded-xl flex items-center justify-center shadow-inner ${
                             isAdmin ? "bg-amber-500/20 text-amber-400" : isBot ? "bg-blue-500/20 text-blue-400" : "bg-white/10 text-white"
                           }`}>
-                            {isAdmin ? <Crown size={28} /> : isBot ? <Bot size={28} /> : <Smartphone size={28} />}
+                            {isAdmin ? <Crown size={24} /> : isBot ? <Bot size={24} /> : <Smartphone size={24} />}
                           </div>
                           <div>
-                            <div className="flex items-center gap-2 mb-1">
-                              <h3 className="font-bold text-xl">{account.label}</h3>
-                              {isAdmin && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30">MASTER</span>}
-                              {isBot && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400 border border-blue-500/30">BOT</span>}
+                            <div className="flex items-center gap-2 mb-0.5">
+                              <h3 className="font-bold text-lg">{account.label}</h3>
+                              {isAdmin && <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30">MASTER</span>}
+                              {isBot && <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400 border border-blue-500/30">BOT</span>}
                             </div>
-                            <p className="text-sm text-white/50 font-mono font-medium">
+                            <p className="text-xs text-white/50 font-mono font-medium">
                               {formatPhone(account.phoneNumber)}
                             </p>
                           </div>
@@ -357,50 +357,50 @@ export default function WhatsAppAdminPage() {
                         )}
                       </div>
 
-                      <div className="grid grid-cols-2 gap-3 text-sm mb-6">
-                        <div className="rounded-2xl bg-black/40 border border-white/5 p-4">
-                          <p className="text-white/40 text-xs font-medium mb-1">Phone ID</p>
+                      <div className="grid grid-cols-2 gap-2 text-sm mb-4">
+                        <div className="rounded-xl bg-black/40 border border-white/5 p-3">
+                          <p className="text-white/40 text-[10px] font-medium mb-1">Phone ID</p>
                           <p className="font-mono text-white/80 truncate text-xs">{account.phoneId}</p>
                         </div>
-                        <div className="rounded-2xl bg-black/40 border border-white/5 p-4">
-                          <p className="text-white/40 text-xs font-medium mb-1">Tugas Akun</p>
-                          <p className="text-white/80 text-xs">
-                            {isAdmin ? "Balas Customer & Terima Laporan" : isBot ? "Proses Command & Kirim Laporan" : "Akun Tambahan"}
+                        <div className="rounded-xl bg-black/40 border border-white/5 p-3">
+                          <p className="text-white/40 text-[10px] font-medium mb-1">Tugas Akun</p>
+                          <p className="text-white/80 text-xs truncate">
+                            {isAdmin ? "Balas & Terima Laporan" : isBot ? "Bot Notifikasi" : "Akun Tambahan"}
                           </p>
                         </div>
                       </div>
 
-                      <div className="flex gap-3">
+                      <div className="flex gap-2">
                         <button
                           onClick={() => handleTestConnection(account.phoneId)}
                           disabled={testingAccount === account.phoneId}
-                          className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition-colors text-sm font-semibold disabled:opacity-50"
+                          className="flex-1 flex items-center justify-center gap-2 py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 transition-colors text-xs font-semibold disabled:opacity-50"
                         >
                           {testingAccount === account.phoneId ? (
-                            <RefreshCw size={16} className="animate-spin text-emerald-400" />
+                            <RefreshCw size={14} className="animate-spin text-emerald-400" />
                           ) : (
-                            <Wifi size={16} className="text-white/60" />
+                            <Wifi size={14} className="text-white/60" />
                           )}
                           Ping API
                         </button>
-                        <button
-                          onClick={() => handleTestSelfTrigger(account.phoneId)}
-                          disabled={sendingTest === account.phoneId}
-                          className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl border transition-colors text-sm font-semibold disabled:opacity-50 ${
-                            isAdmin
-                              ? "bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border-amber-500/30"
-                              : isBot
-                                ? "bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border-blue-500/30"
-                                : "bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border-emerald-500/30"
-                          }`}
-                        >
-                          {sendingTest === account.phoneId ? (
-                            <RefreshCw size={16} className="animate-spin" />
-                          ) : (
-                            <Send size={16} />
-                          )}
-                          Test Flow
-                        </button>
+                        {!isAdmin && (
+                          <button
+                            onClick={() => handleTestSelfTrigger(account.phoneId)}
+                            disabled={sendingTest === account.phoneId}
+                            className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg border transition-colors text-xs font-semibold disabled:opacity-50 ${
+                              isBot
+                                  ? "bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border-blue-500/30"
+                                  : "bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border-emerald-500/30"
+                            }`}
+                          >
+                            {sendingTest === account.phoneId ? (
+                              <RefreshCw size={14} className="animate-spin" />
+                            ) : (
+                              <Send size={14} />
+                            )}
+                            Test Kirim
+                          </button>
+                        )}
                       </div>
 
                       <AnimatePresence>
@@ -449,62 +449,56 @@ export default function WhatsAppAdminPage() {
               transition={{ duration: 0.3 }}
               className="space-y-6"
             >
-              <div className="rounded-3xl bg-black/40 border border-white/10 backdrop-blur-xl p-8">
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8 border-b border-white/10 pb-6">
+              <div className="rounded-2xl bg-black/40 border border-white/10 backdrop-blur-xl p-5">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4 border-b border-white/10 pb-4">
                   <div>
-                    <h2 className="text-2xl font-bold flex items-center gap-3">
-                      <Terminal className="text-cyan-400" size={28} />
+                    <h2 className="text-xl font-bold flex items-center gap-2">
+                      <Terminal className="text-cyan-400" size={24} />
                       Interactive Command Center
                     </h2>
-                    <p className="text-white/50 mt-2 font-medium">
+                    <p className="text-white/50 text-xs mt-1 font-medium">
                       Gunakan <strong className="text-amber-400">Akun 1 (Master)</strong> untuk mengirim pesan ke <strong className="text-blue-400">Akun 2 (Bot)</strong>.
                     </p>
                   </div>
-                  <div className="flex items-center gap-3 bg-white/5 px-4 py-2 rounded-2xl border border-white/5">
-                    <Activity className="text-emerald-400" size={16} />
-                    <span className="font-bold text-lg">{commands.filter((c) => c.enabled).length}</span>
-                    <span className="text-white/40 text-sm">/ {commands.length} Aktif</span>
+                  <div className="flex items-center gap-2 bg-white/5 px-3 py-1.5 rounded-xl border border-white/5">
+                    <Activity className="text-emerald-400" size={14} />
+                    <span className="font-bold text-sm">{commands.filter((c) => c.enabled).length}</span>
+                    <span className="text-white/40 text-xs">/ {commands.length} Aktif</span>
                   </div>
                 </div>
 
-                <div className="grid gap-4 md:grid-cols-2">
+                <div className="grid gap-3 md:grid-cols-3">
                   {commands.map((cmd) => (
                     <div
                       key={cmd.name}
-                      className={`relative overflow-hidden rounded-2xl border backdrop-blur-md p-6 transition-all duration-300 group ${
+                      className={`relative overflow-hidden rounded-xl border backdrop-blur-md p-4 transition-all duration-300 group ${
                         cmd.enabled
-                          ? "bg-white/[0.03] border-white/10 hover:border-cyan-500/30 hover:bg-cyan-500/5 shadow-lg"
+                          ? "bg-white/[0.03] border-white/10 hover:border-cyan-500/30 hover:bg-cyan-500/5"
                           : "bg-white/[0.01] border-white/5 opacity-60 grayscale"
                       }`}
                     >
-                      {cmd.enabled && (
-                        <div className="absolute -right-10 -top-10 w-32 h-32 bg-cyan-500/10 rounded-full blur-2xl group-hover:bg-cyan-500/20 transition-all" />
-                      )}
-                      
                       <div className="relative z-10 flex items-start justify-between">
                         <div>
-                          <h3 className="font-bold text-xl text-white flex items-center gap-2">
+                          <h3 className="font-bold text-base text-white flex items-center gap-2">
                             {cmd.name}
                           </h3>
-                          <p className="text-sm text-white/50 mt-2 leading-relaxed">
-                            {cmd.description}
-                          </p>
                         </div>
                         {cmd.enabled ? (
-                          <div className="px-3 py-1 bg-emerald-500/20 text-emerald-400 text-[10px] font-bold rounded-full border border-emerald-500/30 flex items-center gap-1">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                          <div className="px-2 py-0.5 bg-emerald-500/20 text-emerald-400 text-[9px] font-bold rounded-full border border-emerald-500/30 flex items-center gap-1">
                             ON
                           </div>
                         ) : (
-                          <div className="px-3 py-1 bg-white/10 text-white/40 text-[10px] font-bold rounded-full border border-white/10">
+                          <div className="px-2 py-0.5 bg-white/10 text-white/40 text-[9px] font-bold rounded-full border border-white/10">
                             OFF
                           </div>
                         )}
                       </div>
+                      <p className="text-xs text-white/50 mt-1 mb-3 h-8 overflow-hidden text-ellipsis line-clamp-2">
+                        {cmd.description}
+                      </p>
                       
-                      <div className="relative z-10 mt-6 pt-4 border-t border-white/10">
-                        <p className="text-[10px] text-white/40 font-semibold mb-1 uppercase tracking-wider">Usage Syntax</p>
-                        <code className="text-xs bg-black/60 text-cyan-300 px-3 py-2 rounded-lg border border-cyan-500/20 block font-mono">
+                      <div className="relative z-10 pt-3 border-t border-white/10">
+                        <code className="text-[10px] bg-black/60 text-cyan-300 px-2 py-1.5 rounded border border-cyan-500/20 block font-mono">
                           {cmd.usage}
                         </code>
                       </div>
