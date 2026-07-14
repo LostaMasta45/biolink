@@ -108,6 +108,8 @@ export interface QueuePost {
     status: QueueStatus;
     notes?: string;
     transaction_id?: string;
+    order_id?: string; // Link to payment_orders.order_id
+    caption?: string; // Customer-provided caption for the posting
     created_at: string;
     updated_at: string;
     // Joined data (optional)

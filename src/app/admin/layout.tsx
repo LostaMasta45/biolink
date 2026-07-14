@@ -19,6 +19,7 @@ import {
     Database,
     CreditCard,
     QrCode,
+    MessageSquare,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { Button } from "@/components/ui/button";
@@ -37,6 +38,7 @@ const navItems = [
     { href: "/admin/keuangan", icon: Wallet, label: "Keuangan" },
     { href: "/admin/pembayaran", icon: CreditCard, label: "Pembayaran" },
     { href: "/admin/qris", icon: QrCode, label: "QRIS" },
+    { href: "/admin/whatsapp", icon: MessageSquare, label: "WhatsApp" },
 ];
 
 export default function AdminLayout({

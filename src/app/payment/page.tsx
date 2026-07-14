@@ -1,12 +1,12 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, useRef, Suspense } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
     ShieldCheck, Sparkles, User, Phone, Building2, 
     ArrowLeft, ArrowRight, CreditCard, Loader2, 
     CheckCircle2, Copy, MessageCircle, Instagram, Heart, FileText, Download,
-    Check, Clock, Zap, Home
+    Check, Clock, Zap, Home, Upload, X, ImagePlus, Send, SkipForward
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -17,6 +17,7 @@ import { QrisDisplay } from "@/components/payment/qris-display";
 import { StepIndicator } from "@/components/payment/step-indicator";
 import { PAYMENT_PACKAGES, PAYMENT_ADDONS } from "@/lib/payment-types";
 import { cn } from "@/lib/utils";
+import { uploadPoster } from "@/lib/posting-service";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 
@@ -24,6 +25,7 @@ const STEPS = [
     { label: "Pilih Paket", icon: "1" },
     { label: "Data Diri", icon: "2" },
     { label: "Pembayaran", icon: "3" },
+    { label: "Upload Poster", icon: "4" },
 ];
 
 function PaymentContent() {
@@ -46,6 +48,14 @@ function PaymentContent() {
     const [isSuccess, setIsSuccess] = useState(false);
     const [showConfetti, setShowConfetti] = useState(false);
     const [copied, setCopied] = useState(false);
+
+    // Upload Poster States (Step 4)
+    const [posterFiles, setPosterFiles] = useState<File[]>([]);
+    const [posterPreviews, setPosterPreviews] = useState<string[]>([]);
+    const [posterCaption, setPosterCaption] = useState("");
+    const [isUploading, setIsUploading] = useState(false);
+    const [isDragOver, setIsDragOver] = useState(false);
+    const fileInputRef = useRef<HTMLInputElement>(null);
     const [isDownloading, setIsDownloading] = useState(false);
 
     useEffect(() => {
@@ -180,6 +190,106 @@ function PaymentContent() {
     };
 
     const handlePaymentSuccess = () => {
+        // Instead of showing success, go to Step 4 (Upload Poster)
+        setStep(4);
+    };
+
+    // File handling for poster upload
+    const handleFileSelect = (files: FileList | File[]) => {
+        const fileArray = Array.from(files);
+        const validFiles: File[] = [];
+        const newPreviews: string[] = [];
+
+        fileArray.forEach(file => {
+            if (file.size > 50 * 1024 * 1024) {
+                alert(`File ${file.name} terlalu besar (max 50MB)`);
+                return;
+            }
+            if (!file.type.startsWith('image/')) {
+                alert(`File ${file.name} bukan gambar`);
+                return;
+            }
+            validFiles.push(file);
+            newPreviews.push(URL.createObjectURL(file));
+        });
+
+        setPosterFiles(prev => [...prev, ...validFiles]);
+        setPosterPreviews(prev => [...prev, ...newPreviews]);
+    };
+
+    const removePosterFile = (index: number) => {
+        URL.revokeObjectURL(posterPreviews[index]);
+        setPosterFiles(prev => prev.filter((_, i) => i !== index));
+        setPosterPreviews(prev => prev.filter((_, i) => i !== index));
+    };
+
+    const handleDrop = (e: React.DragEvent) => {
+        e.preventDefault();
+        setIsDragOver(false);
+        if (e.dataTransfer.files.length > 0) {
+            handleFileSelect(e.dataTransfer.files);
+        }
+    };
+
+    const handleUploadSubmit = async () => {
+        if (posterFiles.length === 0) {
+            alert("Pilih minimal 1 poster untuk diupload");
+            return;
+        }
+
+        setIsUploading(true);
+        try {
+            // Upload all files to Supabase Storage (HD, no compression)
+            const uploadedUrls: string[] = [];
+            for (const file of posterFiles) {
+                const { url, error } = await uploadPoster(file);
+                if (error || !url) {
+                    throw new Error(`Gagal upload ${file.name}: ${error}`);
+                }
+                uploadedUrls.push(url);
+            }
+
+            // Call upload-poster API to link posters to posting queue
+            const res = await fetch("/api/payment/upload-poster", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    order_id: paymentData?.order_id,
+                    poster_urls: uploadedUrls,
+                    caption: posterCaption || undefined,
+                }),
+            });
+
+            const data = await res.json();
+            if (!data.success) {
+                throw new Error(data.error || "Gagal menyimpan data poster");
+            }
+
+            // Clean up previews
+            posterPreviews.forEach(url => URL.revokeObjectURL(url));
+
+            // Clear payment cache
+            localStorage.removeItem("ilj_active_payment");
+            localStorage.removeItem("ilj_payment_form");
+
+            // Show success
+            setIsSuccess(true);
+            setShowConfetti(true);
+            setTimeout(() => setShowConfetti(false), 5000);
+        } catch (error) {
+            console.error("Upload error:", error);
+            alert(error instanceof Error ? error.message : "Terjadi kesalahan saat upload poster");
+        } finally {
+            setIsUploading(false);
+        }
+    };
+
+    const handleSkipUpload = () => {
+        // Clear payment cache
+        localStorage.removeItem("ilj_active_payment");
+        localStorage.removeItem("ilj_payment_form");
+
+        // Show success without poster
         setIsSuccess(true);
         setShowConfetti(true);
         setTimeout(() => setShowConfetti(false), 5000);
@@ -761,6 +871,144 @@ function PaymentContent() {
                                 />
                             </motion.div>
                         )}
+
+                        {/* ======= STEP 4: Upload Poster ======= */}
+                        {step === 4 && (
+                            <motion.div
+                                key="step4"
+                                initial={{ opacity: 0, x: 20 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                exit={{ opacity: 0, x: -20 }}
+                            >
+                                <div className="max-w-xl mx-auto space-y-6">
+                                    <div className="text-center mb-6">
+                                        <motion.div
+                                            initial={{ scale: 0 }}
+                                            animate={{ scale: 1 }}
+                                            transition={{ type: "spring", bounce: 0.5 }}
+                                            className="w-16 h-16 rounded-2xl bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-emerald-500/30"
+                                        >
+                                            <CheckCircle2 className="w-8 h-8 text-white" />
+                                        </motion.div>
+                                        <h2 className="text-2xl font-extrabold text-foreground tracking-tight">
+                                            Pembayaran Berhasil! 🎉
+                                        </h2>
+                                        <p className="text-sm text-muted-foreground mt-1.5 font-medium">
+                                            Sekarang upload poster lowongan Anda
+                                        </p>
+                                    </div>
+
+                                    {/* Upload Area */}
+                                    <Card className="p-6 bg-card/40 backdrop-blur-md shadow-lg border-border/40">
+                                        <div className="flex items-center gap-2 mb-4">
+                                            <ImagePlus className="w-4 h-4 text-primary" />
+                                            <h3 className="font-bold text-foreground">Upload Poster Lowongan</h3>
+                                        </div>
+                                        <p className="text-xs text-muted-foreground mb-4">
+                                            Upload poster HD (tanpa kompresi). Format: JPG, PNG, WebP. Maks 50MB per file.
+                                        </p>
+
+                                        {/* Drop Zone */}
+                                        <div
+                                            onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
+                                            onDragLeave={() => setIsDragOver(false)}
+                                            onDrop={handleDrop}
+                                            onClick={() => fileInputRef.current?.click()}
+                                            className={cn(
+                                                "border-2 border-dashed rounded-2xl p-8 text-center cursor-pointer transition-all duration-200",
+                                                isDragOver
+                                                    ? "border-primary bg-primary/5 scale-[1.02]"
+                                                    : "border-border/60 hover:border-primary/50 hover:bg-muted/30"
+                                            )}
+                                        >
+                                            <input
+                                                ref={fileInputRef}
+                                                type="file"
+                                                accept="image/*"
+                                                multiple
+                                                className="hidden"
+                                                onChange={(e) => e.target.files && handleFileSelect(e.target.files)}
+                                            />
+                                            <Upload className={cn(
+                                                "w-10 h-10 mx-auto mb-3 transition-colors",
+                                                isDragOver ? "text-primary" : "text-muted-foreground/50"
+                                            )} />
+                                            <p className="text-sm font-semibold text-foreground mb-1">
+                                                {isDragOver ? "Lepaskan file di sini" : "Klik atau drag & drop poster"}
+                                            </p>
+                                            <p className="text-xs text-muted-foreground">
+                                                Bisa upload lebih dari 1 poster
+                                            </p>
+                                        </div>
+
+                                        {/* Preview Grid */}
+                                        {posterPreviews.length > 0 && (
+                                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mt-4">
+                                                {posterPreviews.map((preview, idx) => (
+                                                    <div key={idx} className="relative group rounded-xl overflow-hidden border border-border/40 shadow-sm">
+                                                        <img
+                                                            src={preview}
+                                                            alt={`Poster ${idx + 1}`}
+                                                            className="w-full h-32 object-cover"
+                                                        />
+                                                        <button
+                                                            onClick={(e) => { e.stopPropagation(); removePosterFile(idx); }}
+                                                            className="absolute top-1.5 right-1.5 w-7 h-7 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-lg"
+                                                        >
+                                                            <X className="w-4 h-4" />
+                                                        </button>
+                                                        <div className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-[10px] font-medium px-2 py-1 text-center">
+                                                            {posterFiles[idx]?.name}
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </Card>
+
+                                    {/* Caption */}
+                                    <Card className="p-6 bg-card/40 backdrop-blur-md shadow-lg border-border/40">
+                                        <div className="flex items-center gap-2 mb-3">
+                                            <FileText className="w-4 h-4 text-primary" />
+                                            <h3 className="font-bold text-foreground">Caption / Catatan</h3>
+                                            <span className="text-xs text-muted-foreground">(Opsional)</span>
+                                        </div>
+                                        <textarea
+                                            value={posterCaption}
+                                            onChange={(e) => setPosterCaption(e.target.value)}
+                                            placeholder="Tambahkan caption atau catatan untuk posting (opsional)..."
+                                            rows={3}
+                                            className="w-full px-4 py-3 rounded-xl border border-border/60 bg-background text-foreground placeholder:text-muted-foreground/70 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all text-sm shadow-sm resize-none"
+                                        />
+                                    </Card>
+
+                                    {/* Action Buttons */}
+                                    <div className="space-y-3 pt-2">
+                                        <Button
+                                            size="lg"
+                                            disabled={posterFiles.length === 0 || isUploading}
+                                            onClick={handleUploadSubmit}
+                                            className="w-full rounded-xl font-bold bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white shadow-lg shadow-emerald-500/30 h-12"
+                                        >
+                                            {isUploading ? (
+                                                <><Loader2 className="w-5 h-5 mr-2 animate-spin" /> Mengupload...</>
+                                            ) : (
+                                                <><Send className="w-5 h-5 mr-2" /> Kirim Poster & Selesai</>
+                                            )}
+                                        </Button>
+                                        <Button
+                                            variant="ghost"
+                                            size="lg"
+                                            disabled={isUploading}
+                                            onClick={handleSkipUpload}
+                                            className="w-full rounded-xl font-semibold h-12 text-muted-foreground"
+                                        >
+                                            <SkipForward className="w-4 h-4 mr-2" /> Lewati, Kirim Poster Nanti
+                                        </Button>
+                                    </div>
+                                </div>
+                            </motion.div>
+                        )}
                     </AnimatePresence>
                 </main>
 
@@ -863,7 +1111,7 @@ function PaymentContent() {
                                 <div className="flex flex-col">
                                     <span className="text-white/70 text-[10px] uppercase tracking-widest font-bold mb-1">Status</span>
                                     <span className="text-white font-bold text-[13px]">
-                                        {step === 1 ? "1. Pilih Paket" : step === 2 ? "2. Data Diri" : "3. Pembayaran"}
+                                        {step === 1 ? "1. Pilih Paket" : step === 2 ? "2. Data Diri" : step === 3 ? "3. Pembayaran" : "4. Upload Poster"}
                                     </span>
                                 </div>
                                 <div className="w-px h-8 bg-white/20 mx-2" />
@@ -1001,6 +1249,92 @@ function PaymentContent() {
                                 </div>
                             </motion.div>
                         )}
+
+                        {/* Step 4 Mobile: Upload Poster */}
+                        {step === 4 && (
+                            <motion.div key="step4-mobile" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="px-1 space-y-5">
+                                {/* Success Badge */}
+                                <div className="text-center">
+                                    <motion.div
+                                        initial={{ scale: 0 }}
+                                        animate={{ scale: 1 }}
+                                        transition={{ type: "spring", bounce: 0.5 }}
+                                        className="w-14 h-14 rounded-2xl bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center mx-auto mb-3 shadow-lg shadow-emerald-500/30"
+                                    >
+                                        <CheckCircle2 className="w-7 h-7 text-white" />
+                                    </motion.div>
+                                    <h3 className="font-black text-[18px] text-slate-800 tracking-tight">Pembayaran Berhasil! 🎉</h3>
+                                    <p className="text-slate-500 text-[13px] font-medium mt-1">Upload poster lowongan Anda</p>
+                                </div>
+
+                                {/* Upload Zone */}
+                                <div className="bg-white rounded-[1.5rem] p-5 shadow-[0_5px_20px_-5px_rgba(0,0,0,0.05)] border border-slate-100">
+                                    <div className="flex items-center gap-2 mb-3">
+                                        <ImagePlus className="w-4 h-4 text-[#0b411d]" />
+                                        <h4 className="font-extrabold text-[14px] text-slate-800">Poster Lowongan</h4>
+                                    </div>
+                                    <p className="text-[12px] text-slate-400 mb-3">Upload poster HD. Format: JPG, PNG, WebP. Maks 50MB.</p>
+
+                                    <div
+                                        onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
+                                        onDragLeave={() => setIsDragOver(false)}
+                                        onDrop={handleDrop}
+                                        onClick={() => fileInputRef.current?.click()}
+                                        className={cn(
+                                            "border-2 border-dashed rounded-2xl p-6 text-center cursor-pointer transition-all",
+                                            isDragOver
+                                                ? "border-[#0b411d] bg-[#0b411d]/5"
+                                                : "border-slate-200 active:border-[#0b411d]/50"
+                                        )}
+                                    >
+                                        <input
+                                            ref={fileInputRef}
+                                            type="file"
+                                            accept="image/*"
+                                            multiple
+                                            className="hidden"
+                                            onChange={(e) => e.target.files && handleFileSelect(e.target.files)}
+                                        />
+                                        <Upload className="w-8 h-8 mx-auto mb-2 text-slate-300" />
+                                        <p className="text-[13px] font-bold text-slate-600">Tap untuk pilih poster</p>
+                                        <p className="text-[11px] text-slate-400 mt-0.5">Bisa upload lebih dari 1</p>
+                                    </div>
+
+                                    {/* Preview */}
+                                    {posterPreviews.length > 0 && (
+                                        <div className="grid grid-cols-2 gap-2.5 mt-3">
+                                            {posterPreviews.map((preview, idx) => (
+                                                <div key={idx} className="relative rounded-xl overflow-hidden border border-slate-100 shadow-sm">
+                                                    <img src={preview} alt={`Poster ${idx + 1}`} className="w-full h-28 object-cover" />
+                                                    <button
+                                                        onClick={(e) => { e.stopPropagation(); removePosterFile(idx); }}
+                                                        className="absolute top-1 right-1 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center shadow-lg"
+                                                    >
+                                                        <X className="w-3.5 h-3.5" />
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Caption */}
+                                <div className="bg-white rounded-[1.5rem] p-5 shadow-[0_5px_20px_-5px_rgba(0,0,0,0.05)] border border-slate-100">
+                                    <div className="flex items-center gap-2 mb-2">
+                                        <FileText className="w-4 h-4 text-[#9a181e]" />
+                                        <h4 className="font-extrabold text-[14px] text-slate-800">Caption</h4>
+                                        <span className="text-[11px] text-slate-400">(Opsional)</span>
+                                    </div>
+                                    <textarea
+                                        value={posterCaption}
+                                        onChange={(e) => setPosterCaption(e.target.value)}
+                                        placeholder="Tambahkan caption atau catatan..."
+                                        rows={3}
+                                        className="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-100 text-slate-800 placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[#0b411d]/30 text-[14px] resize-none"
+                                    />
+                                </div>
+                            </motion.div>
+                        )}
                     </AnimatePresence>
                 </div>
 
@@ -1025,6 +1359,37 @@ function PaymentContent() {
                             >
                                 {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : step === 2 ? "Pay Now →" : "Lanjutkan →"}
                             </Button>
+                        </div>
+                    </div>
+                )}
+
+                {/* Mobile Bottom Bar for Step 4 (Upload Poster) */}
+                {step === 4 && (
+                    <div className="fixed bottom-0 left-0 right-0 bg-[#0b411d] rounded-t-[2.5rem] px-7 py-5 pb-8 z-50 shadow-[0_-10px_40px_rgba(11,65,29,0.3)]">
+                        <div className="flex flex-col gap-2.5">
+                            <button
+                                disabled={posterFiles.length === 0 || isUploading}
+                                onClick={handleUploadSubmit}
+                                className={cn(
+                                    "w-full py-3.5 rounded-full font-bold text-[15px] flex justify-center items-center gap-2 transition-all active:scale-[0.97]",
+                                    posterFiles.length === 0 || isUploading
+                                        ? "bg-white/30 text-white/60"
+                                        : "bg-white text-[#9a181e] shadow-md"
+                                )}
+                            >
+                                {isUploading ? (
+                                    <><Loader2 className="w-5 h-5 animate-spin" /> Mengupload...</>
+                                ) : (
+                                    <><Send className="w-5 h-5" /> Kirim Poster & Selesai</>
+                                )}
+                            </button>
+                            <button
+                                disabled={isUploading}
+                                onClick={handleSkipUpload}
+                                className="w-full py-2.5 text-white/70 font-medium text-[13px] flex justify-center items-center gap-1.5 active:text-white transition-colors"
+                            >
+                                <SkipForward className="w-4 h-4" /> Lewati, Kirim Poster Nanti
+                            </button>
                         </div>
                     </div>
                 )}

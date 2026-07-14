@@ -175,7 +175,7 @@ export async function POST(request: Request) {
                 console.error("Finance sync failed:", err);
             }
 
-            // Auto-create posting queue entry
+            // Auto-create posting queue entry (draft — waiting for poster upload)
             try {
                 const scheduledDate = getTomorrowWIB();
 
@@ -189,7 +189,8 @@ export async function POST(request: Request) {
                         package_id: order.package_id,
                         addons: order.addons || [],
                         total_price: data.amount_paid || order.amount,
-                        status: "queued",
+                        status: "draft",
+                        order_id: data.order_id,
                         notes: `Auto dari QRIS | ${order.customer_name} | Order: ${data.order_id}`,
                     })
                     .select()

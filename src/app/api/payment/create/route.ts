@@ -42,10 +42,14 @@ export async function POST(request: Request) {
         const addonsTotal = selectedAddons.reduce((sum, a) => sum + a.price, 0);
         const totalAmount = selectedPackage.price + addonsTotal;
 
-        // Generate unique order ID
-        const timestamp = Date.now();
+        // Generate unique order ID (Format: ILJ-YYMMDD-XXXX)
+        const date = new Date();
+        // Konversi ke zona waktu Indonesia (WIB) agar tanggal selalu akurat secara lokal
+        const formatter = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Jakarta', year: '2-digit', month: '2-digit', day: '2-digit' });
+        const [{ value: mm }, , { value: dd }, , { value: yy }] = formatter.formatToParts(date);
+        
         const random = Math.random().toString(36).substring(2, 6).toUpperCase();
-        const orderId = `ILJ-${timestamp}-${random}`;
+        const orderId = `ILJ-${yy}${mm}${dd}-${random}`;
 
         // Build keterangan
         const addonNames = selectedAddons.map(a => a.name);

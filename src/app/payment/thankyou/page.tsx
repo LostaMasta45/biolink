@@ -504,34 +504,34 @@ function ThankYouContent() {
                         <Card className="p-6 mb-6">
                             <div className="flex items-center gap-2 mb-4">
                                 <Sparkles className="w-4 h-4 text-primary" />
-                                <h3 className="font-bold text-foreground">Langkah Selanjutnya</h3>
+                                <h3 className="font-bold text-foreground">Status Pesanan Anda</h3>
                             </div>
                             <div className="space-y-3">
                                 <div className="flex gap-3">
-                                    <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
-                                        <span className="text-xs font-bold text-primary">1</span>
+                                    <div className="w-7 h-7 rounded-full bg-emerald-500/10 flex items-center justify-center shrink-0 mt-0.5">
+                                        <CheckCircle2 className="w-4 h-4 text-emerald-500" />
                                     </div>
                                     <div>
-                                        <p className="text-sm font-semibold text-foreground">Konfirmasi via WhatsApp</p>
-                                        <p className="text-xs text-muted-foreground">Kirim bukti pembayaran dan detail loker ke admin</p>
+                                        <p className="text-sm font-semibold text-foreground">Pembayaran Diterima ✅</p>
+                                        <p className="text-xs text-muted-foreground">Pembayaran QRIS Anda sudah terverifikasi otomatis</p>
                                     </div>
                                 </div>
                                 <div className="flex gap-3">
                                     <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
-                                        <span className="text-xs font-bold text-primary">2</span>
+                                        <Clock className="w-4 h-4 text-primary" />
                                     </div>
                                     <div>
-                                        <p className="text-sm font-semibold text-foreground">Kirim Materi Lowongan</p>
-                                        <p className="text-xs text-muted-foreground">Kirimkan poster / detail lowongan kerja yang ingin diposting</p>
+                                        <p className="text-sm font-semibold text-foreground">Poster Sedang Diproses</p>
+                                        <p className="text-xs text-muted-foreground">Tim kami akan segera menjadwalkan posting lowongan Anda</p>
                                     </div>
                                 </div>
                                 <div className="flex gap-3">
                                     <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
-                                        <span className="text-xs font-bold text-primary">3</span>
+                                        <Zap className="w-4 h-4 text-primary" />
                                     </div>
                                     <div>
-                                        <p className="text-sm font-semibold text-foreground">Lowongan Diposting 🎉</p>
-                                        <p className="text-xs text-muted-foreground">Tim kami akan memposting lowongan Anda sesuai paket yang dipilih</p>
+                                        <p className="text-sm font-semibold text-foreground">Lowongan Segera Tayang 🎉</p>
+                                        <p className="text-xs text-muted-foreground">Lowongan Anda akan menjangkau ribuan pencari kerja di Jombang</p>
                                     </div>
                                 </div>
                             </div>
@@ -713,8 +713,8 @@ function ThankYouContent() {
                                 <Clock className="w-4 h-4 text-blue-500" />
                             </div>
                             <p className="text-slate-600 text-[13px] leading-relaxed">
-                                <strong className="text-slate-800 block mb-0.5">Sedang Kami Cek</strong>
-                                Data dan pembayaran sudah diterima. Tim akan segera menghubungi via WhatsApp untuk jadwal tayang.
+                                <strong className="text-slate-800 block mb-0.5">Poster Diterima ✅</strong>
+                                Poster lowongan Anda sudah kami terima dan sedang dalam antrian untuk diposting.
                             </p>
                         </motion.div>
 
