@@ -23,7 +23,11 @@ export async function POST(req: NextRequest) {
     // ─── Ekstrak data dari payload ───
     let eventName = payload.event;
     let senderPhone = payload.data?.from;
-    let text = payload.data?.message?.text || (payload.data as any)?.text?.body || (payload.data as any)?.text;
+    let text = payload.data?.message?.text || 
+               (payload.data as any)?.text?.body || 
+               (payload.data as any)?.text ||
+               (payload.data as any)?.message?.conversation ||
+               (payload.data as any)?.message?.extendedTextMessage?.text;
     if (typeof text === 'object' && text !== null && 'body' in text) {
       text = text.body;
     }
@@ -64,7 +68,7 @@ export async function POST(req: NextRequest) {
 
     console.log('[Webhook] 📨 Event:', eventName, '| From:', senderPhone, '| To:', toPhone, '| PhoneID:', phoneId);
 
-    if (!eventName || !senderPhone || !text) {
+    if (!senderPhone || !text) {
       // Bukan event pesan teks masuk, abaikan saja
       return NextResponse.json({ status: 'ok', action: 'ignored_or_no_text' });
     }
