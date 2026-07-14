@@ -44,8 +44,8 @@ export async function POST(req: NextRequest) {
               text = msg.interactive.list_reply.id;
             }
           }
-          phoneId = value.metadata?.phone_number_id || '';
-          toPhone = value.metadata?.display_phone_number || '';
+          phoneId = value.metadata?.phone_number_id || phoneId;
+          toPhone = value.metadata?.display_phone_number || toPhone;
           eventName = 'message.received'; // asumsikan ini pesan masuk
         }
       }
