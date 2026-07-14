@@ -346,16 +346,22 @@ export const COMMANDS: Record<string, Command> = {
  */
 export async function processCommand(phoneId: string, senderPhone: string, text: string): Promise<boolean> {
   // 1. Cek apakah ada sesi aktif di bot_sessions
-  const { data: session } = await supabase
+  // Kita abaikan phoneId dari parameter saat mencari sesi, karena KirimDev terkadang tidak konsisten
+  // mengirimkan phoneId untuk teks vs button.
+  const { data: sessions } = await supabase
     .from('bot_sessions')
     .select('*')
-    .eq('phone_id', phoneId)
     .eq('sender_phone', senderPhone)
-    .single();
+    .order('created_at', { ascending: false })
+    .limit(1);
+
+  const session = sessions && sessions.length > 0 ? sessions[0] : null;
 
   if (session && session.state !== 'IDLE' && !text.startsWith('!')) {
     // Kita berada dalam percakapan interaktif
-    return await handleConversationState(phoneId, senderPhone, text, session);
+    // Gunakan phone_id yang tersimpan di sesi agar balasan konsisten dari bot yang sama
+    const activePhoneId = session.phone_id || phoneId;
+    return await handleConversationState(activePhoneId, senderPhone, text, session);
   }
 
   // 2. Jika bukan sesi aktif, wajib dimulai dengan "!"
@@ -367,7 +373,7 @@ export async function processCommand(phoneId: string, senderPhone: string, text:
 
   // Khusus untuk reset sesi
   if (commandName === '!cancel') {
-    await supabase.from('bot_sessions').delete().match({ phone_id: phoneId, sender_phone: senderPhone });
+    await supabase.from('bot_sessions').delete().match({ sender_phone: senderPhone });
     await sendTextMessage(phoneId, senderPhone, '✅ Percakapan dibatalkan.');
     return true;
   }
