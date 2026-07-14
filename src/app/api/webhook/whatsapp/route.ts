@@ -37,6 +37,12 @@ export async function POST(req: NextRequest) {
           senderPhone = msg.from;
           if (msg.type === 'text' && msg.text) {
             text = msg.text.body;
+          } else if (msg.type === 'interactive' && msg.interactive) {
+            if (msg.interactive.type === 'button_reply') {
+              text = msg.interactive.button_reply.id;
+            } else if (msg.interactive.type === 'list_reply') {
+              text = msg.interactive.list_reply.id;
+            }
           }
           phoneId = value.metadata?.phone_number_id || '';
           toPhone = value.metadata?.display_phone_number || '';
@@ -58,8 +64,8 @@ export async function POST(req: NextRequest) {
     //  ROUTING LOGIC
     // ═══════════════════════════════════════════
 
-    // CASE 1: ADMIN COMMAND
-    if (isAdminNumber(senderPhone) && text.startsWith('!')) {
+    // CASE 1: ADMIN COMMAND & CONVERSATION STATE
+    if (isAdminNumber(senderPhone)) {
       console.log('[Webhook] 🤖 Admin command detected:', text);
 
       let accountLabel = 'Unknown';

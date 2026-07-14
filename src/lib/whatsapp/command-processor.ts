@@ -1,4 +1,11 @@
-import { sendTextMessage } from './kirimdev-client';
+import { sendTextMessage, sendButtonMessage } from './kirimdev-client';
+import { createClient } from '@supabase/supabase-js';
+
+// Setup Supabase admin client for server-side logic (bypasses RLS if service key is used, or works if public)
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
 
 // ============================================
 // WhatsApp Command System
@@ -32,25 +39,54 @@ export const COMMANDS: Record<string, Command> = {
     usage: '!rekap',
     enabled: true,
     execute: async (phoneId, senderPhone) => {
-      // TODO: Connect ke database Supabase
-      const reply = `📊 *Rekap Hari Ini*\n\nTotal Transaksi: 0\nPendapatan: Rp 0\nStatus: _Belum ada data dari database_`;
+      // Dapatkan data hari ini dari Supabase payment_orders
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      const { data: payments, error } = await supabase
+        .from('payment_orders')
+        .select('*')
+        .gte('created_at', today.toISOString());
+
+      if (error) {
+        await sendTextMessage(phoneId, senderPhone, `❌ Gagal mengambil rekap: ${error.message}`);
+        return;
+      }
+
+      const totalTransactions = payments?.length || 0;
+      const paidTransactions = payments?.filter(p => p.status === 'PAID') || [];
+      const totalRevenue = paidTransactions.reduce((acc, curr) => acc + (curr.amount || 0), 0);
+      
+      const reply = `📊 *Rekap Hari Ini*\n\nTotal Transaksi: ${totalTransactions}\nTransaksi Sukses: ${paidTransactions.length}\n*Pendapatan: Rp ${totalRevenue.toLocaleString('id-ID')}*`;
       await sendTextMessage(phoneId, senderPhone, reply);
     }
   },
 
   '!cek': {
-    description: 'Mengecek status invoice berdasarkan ID',
-    usage: '!cek [ID_INVOICE]',
+    description: 'Mengecek status invoice atau order berdasarkan ID',
+    usage: '!cek [ID_ORDER]',
     enabled: true,
     execute: async (phoneId, senderPhone, args) => {
       if (args.length === 0) {
-        await sendTextMessage(phoneId, senderPhone, '❌ Mohon sertakan ID invoice.\n\nContoh: *!cek INV-12345*');
+        await sendTextMessage(phoneId, senderPhone, '❌ Mohon sertakan ID Order/Invoice.\n\nContoh: *!cek INV-12345*');
         return;
       }
       
-      const invoiceId = args[0];
-      // TODO: Query ke database
-      const reply = `🔍 *Status Invoice*\n\nID: ${invoiceId}\nStatus: _Belum terhubung ke DB_`;
+      const orderId = args[0];
+      
+      // Cek di tabel payment_orders
+      const { data, error } = await supabase
+        .from('payment_orders')
+        .select('*')
+        .eq('order_id', orderId)
+        .single();
+
+      if (error || !data) {
+        await sendTextMessage(phoneId, senderPhone, `❌ Order/Invoice dengan ID *${orderId}* tidak ditemukan.`);
+        return;
+      }
+
+      const reply = `🔍 *Status Order*\n\nID: ${data.order_id}\nKlien: ${data.customer_name}\nLayanan: ${data.package_name}\nNominal: Rp ${(data.amount || 0).toLocaleString('id-ID')}\nStatus: *${data.status}*\n\n_Dibuat: ${new Date(data.created_at).toLocaleString('id-ID')}_`;
       await sendTextMessage(phoneId, senderPhone, reply);
     }
   },
@@ -60,8 +96,64 @@ export const COMMANDS: Record<string, Command> = {
     usage: '!tagihan',
     enabled: true,
     execute: async (phoneId, senderPhone) => {
-      const reply = `⚠️ *Invoice Pending*\n\nSaat ini belum ada data yang bisa ditarik dari database.`;
+      const { data, error } = await supabase
+        .from('payment_orders')
+        .select('*')
+        .eq('status', 'PENDING')
+        .order('created_at', { ascending: false })
+        .limit(10);
+
+      if (error || !data || data.length === 0) {
+        await sendTextMessage(phoneId, senderPhone, `✅ *Kabar Baik!*\n\nSaat ini tidak ada tagihan/invoice yang tertunggak (Pending).`);
+        return;
+      }
+
+      const totalPending = data.reduce((acc, curr) => acc + (curr.amount || 0), 0);
+      const tagihanList = data.map(d => `- ${d.order_id} | ${d.customer_name} | Rp ${(d.amount || 0).toLocaleString('id-ID')}`).join('\n');
+
+      const reply = `⚠️ *Ada ${data.length} Invoice Pending*\n\nTotal Potensi Pendapatan: *Rp ${totalPending.toLocaleString('id-ID')}*\n\n${tagihanList}\n\n_Ketik !tagih [ID_ORDER] untuk mengirimkan pengingat ke klien tersebut._`;
       await sendTextMessage(phoneId, senderPhone, reply);
+    }
+  },
+
+  '!tagih': {
+    description: 'Mengirimkan pesan pengingat pembayaran ke klien',
+    usage: '!tagih [ID_ORDER]',
+    enabled: true,
+    execute: async (phoneId, senderPhone, args) => {
+      if (args.length === 0) {
+        await sendTextMessage(phoneId, senderPhone, '❌ Mohon sertakan ID Order.\n\nContoh: *!tagih INV-12345*');
+        return;
+      }
+
+      const orderId = args[0];
+
+      const { data, error } = await supabase
+        .from('payment_orders')
+        .select('*')
+        .eq('order_id', orderId)
+        .single();
+
+      if (error || !data) {
+        await sendTextMessage(phoneId, senderPhone, `❌ Order/Invoice dengan ID *${orderId}* tidak ditemukan.`);
+        return;
+      }
+
+      if (data.status === 'PAID') {
+        await sendTextMessage(phoneId, senderPhone, `⚠️ Klien ${data.customer_name} *SUDAH LUNAS*. Tidak perlu ditagih lagi.`);
+        return;
+      }
+
+      const wa = data.customer_whatsapp;
+      const nominal = data.amount || 0;
+      const payUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'https://infolokerjombang.net'}/pay/${orderId}`;
+
+      // Pesan ke klien
+      const clientMsg = `Halo Kak ${data.customer_name} 👋\n\nSekadar mengingatkan bahwa tagihan untuk layanan *${data.package_name}* senilai *Rp ${nominal.toLocaleString('id-ID')}* belum dibayarkan.\n\nSilakan selesaikan pembayaran Anda melalui link berikut:\n🔗 ${payUrl}\n\nJika sudah membayar, mohon abaikan pesan ini. Terima kasih! 🙏`;
+      await sendTextMessage(phoneId, wa, clientMsg);
+
+      // Konfirmasi ke admin
+      await sendTextMessage(phoneId, senderPhone, `🔔 _Pesan pengingat pembayaran telah berhasil dikirim ke ${data.customer_name} (${wa})._`);
     }
   },
 
@@ -76,18 +168,172 @@ export const COMMANDS: Record<string, Command> = {
   },
 
   '!klien': {
-    description: 'Mencari data klien (nama/nomor)',
-    usage: '!klien [NAMA]',
+    description: 'Mencari histori klien berdasarkan nomor WA',
+    usage: '!klien [NOMOR_WA]',
     enabled: true,
     execute: async (phoneId, senderPhone, args) => {
       if (args.length === 0) {
-        await sendTextMessage(phoneId, senderPhone, '❌ Mohon sertakan nama klien.\n\nContoh: *!klien Budi*');
+        await sendTextMessage(phoneId, senderPhone, '❌ Mohon sertakan Nomor WA klien (628...).\n\nContoh: *!klien 6281234567*');
         return;
       }
       
-      const nama = args.join(' ');
-      const reply = `👤 *Hasil Pencarian Klien*\n\nQuery: "${nama}"\nHasil: _Belum terhubung ke DB_`;
+      const wa = args[0].replace(/[^0-9]/g, '');
+      
+      const { data, error } = await supabase
+        .from('payment_orders')
+        .select('*')
+        .like('customer_whatsapp', `%${wa}%`)
+        .order('created_at', { ascending: false })
+        .limit(5);
+
+      if (error || !data || data.length === 0) {
+        await sendTextMessage(phoneId, senderPhone, `❌ Tidak ada riwayat transaksi untuk nomor WA *${wa}*.`);
+        return;
+      }
+
+      const totalSpent = data.filter(d => d.status === 'PAID').reduce((acc, curr) => acc + (curr.amount || 0), 0);
+      const historyList = data.map(d => `- ${d.order_id} (${d.status})`).join('\n');
+
+      const reply = `👤 *Data Klien: ${data[0].customer_name}*\nWA: ${wa}\n\n*Total Belanja:* Rp ${totalSpent.toLocaleString('id-ID')}\n*Histori Terakhir:*\n${historyList}`;
       await sendTextMessage(phoneId, senderPhone, reply);
+    }
+  },
+
+  '!invoice': {
+    description: 'Membuat tagihan instan untuk dikirim ke nomor klien',
+    usage: '!invoice [NOMOR_WA] [NOMINAL] [NAMA_LAYANAN]',
+    enabled: true,
+    execute: async (phoneId, senderPhone, args) => {
+      if (args.length < 3) {
+        await sendTextMessage(phoneId, senderPhone, '❌ Format salah. Gunakan: *!invoice [NOMOR_WA] [NOMINAL] [NAMA_LAYANAN]*\nContoh: *!invoice 628123 150000 Premium*');
+        return;
+      }
+
+      const wa = args[0].replace(/[^0-9]/g, '');
+      const nominal = parseInt(args[1].replace(/[^0-9]/g, ''));
+      const layanan = args.slice(2).join(' ');
+      const orderId = `INV-${Date.now().toString().slice(-6)}`;
+
+      // Insert ke payment_orders
+      const { error } = await supabase.from('payment_orders').insert({
+        order_id: orderId,
+        customer_name: 'Klien Instan',
+        customer_whatsapp: wa,
+        customer_company: '-',
+        package_id: 999,
+        package_name: layanan,
+        amount: nominal,
+        total_amount: nominal,
+        status: 'PENDING'
+      });
+
+      if (error) {
+        await sendTextMessage(phoneId, senderPhone, `❌ Gagal membuat invoice: ${error.message}`);
+        return;
+      }
+
+      // Link pembayaran (asumsi menggunakan direct_url atau URL aplikasi)
+      const payUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'https://infolokerjombang.net'}/pay/${orderId}`;
+      
+      const adminReply = `✅ *Invoice Berhasil Dibuat!*\nID: ${orderId}\nNominal: Rp ${nominal.toLocaleString('id-ID')}\nLink: ${payUrl}\n\n_Sedang mengirim link ke ${wa}..._`;
+      await sendTextMessage(phoneId, senderPhone, adminReply);
+
+      // Kirim pesan tagihan ke Klien dari Bot
+      const clientMsg = `Halo! 👋\n\nBerikut adalah link tagihan Anda untuk layanan *${layanan}* senilai *Rp ${nominal.toLocaleString('id-ID')}*.\n\nKlik link berikut untuk melakukan pembayaran (Mendukung QRIS, e-Wallet, dll):\n🔗 ${payUrl}\n\nTerima kasih! 🙏`;
+      await sendTextMessage(phoneId, wa, clientMsg);
+    }
+  },
+  '!template': {
+    description: 'Manajemen template pesan WA (!template list | !template kirim [KODE] [WA])',
+    usage: '!template',
+    enabled: true,
+    execute: async (phoneId, senderPhone, args) => {
+      const action = args[0]?.toLowerCase();
+
+      if (action === 'list') {
+        const { data, error } = await supabase.from('whatsapp_templates').select('code, name');
+        if (error || !data) {
+          await sendTextMessage(phoneId, senderPhone, `❌ Gagal memuat template: ${error?.message || 'DB Error'}`);
+          return;
+        }
+        const list = data.map(d => `- *${d.code}* (${d.name})`).join('\n');
+        await sendTextMessage(phoneId, senderPhone, `📋 *Daftar Template:*\n\n${list}\n\n_Kirim template dengan: !template kirim [KODE] [NOMOR_WA]_`);
+        return;
+      }
+
+      if (action === 'kirim') {
+        const code = args[1]?.toUpperCase();
+        const wa = args[2]?.replace(/[^0-9]/g, '');
+
+        if (!code || !wa) {
+          await sendTextMessage(phoneId, senderPhone, '❌ Format salah. Gunakan: *!template kirim [KODE] [NOMOR_WA]*');
+          return;
+        }
+
+        const { data, error } = await supabase.from('whatsapp_templates').select('content').eq('code', code).single();
+        if (error || !data) {
+          await sendTextMessage(phoneId, senderPhone, `❌ Template dengan kode *${code}* tidak ditemukan.`);
+          return;
+        }
+
+        await sendTextMessage(phoneId, wa, data.content);
+        await sendTextMessage(phoneId, senderPhone, `✅ Template *${code}* berhasil dikirim ke ${wa}.`);
+        return;
+      }
+
+      await sendTextMessage(phoneId, senderPhone, '❌ Aksi tidak valid. Gunakan: *!template list* atau *!template kirim*');
+    }
+  },
+  '!buat_invoice': {
+    description: 'Memulai form interaktif pembuatan invoice',
+    usage: '!buat_invoice',
+    enabled: true,
+    execute: async (phoneId, senderPhone) => {
+      // Set state to AWAIT_INV_TYPE
+      await supabase.from('bot_sessions').upsert({
+        phone_id: phoneId,
+        sender_phone: senderPhone,
+        state: 'AWAIT_INV_TYPE',
+        data: {}
+      });
+
+      await sendButtonMessage(
+        phoneId, 
+        senderPhone, 
+        '📋 *Pilih Jenis Invoice:*\n\nSilakan klik salah satu tombol di bawah ini:', 
+        [
+          { id: '!inv_lowongan', title: 'Invoice Lowongan' },
+          { id: '!inv_umum', title: 'Invoice Lengkap' }
+        ]
+      );
+    }
+  },
+  '!inv_lowongan': {
+    description: 'Internal Handler untuk tombol Invoice Lowongan',
+    usage: '!inv_lowongan',
+    enabled: true,
+    execute: async (phoneId, senderPhone) => {
+      await supabase.from('bot_sessions').upsert({
+        phone_id: phoneId,
+        sender_phone: senderPhone,
+        state: 'LOWONGAN_AWAIT_NAME',
+        data: { type: 'lowongan' }
+      });
+      await sendTextMessage(phoneId, senderPhone, '🏢 Masukkan *Nama Perusahaan/Klien*:');
+    }
+  },
+  '!inv_umum': {
+    description: 'Internal Handler untuk tombol Invoice Umum',
+    usage: '!inv_umum',
+    enabled: true,
+    execute: async (phoneId, senderPhone) => {
+      await supabase.from('bot_sessions').upsert({
+        phone_id: phoneId,
+        sender_phone: senderPhone,
+        state: 'UMUM_AWAIT_NAME',
+        data: { type: 'umum' }
+      });
+      await sendTextMessage(phoneId, senderPhone, '🏢 Masukkan *Nama PT / Klien*:');
     }
   }
 };
@@ -99,37 +345,51 @@ export const COMMANDS: Record<string, Command> = {
  * @param text - Teks pesan
  */
 export async function processCommand(phoneId: string, senderPhone: string, text: string): Promise<boolean> {
+  // 1. Cek apakah ada sesi aktif di bot_sessions
+  const { data: session } = await supabase
+    .from('bot_sessions')
+    .select('*')
+    .eq('phone_id', phoneId)
+    .eq('sender_phone', senderPhone)
+    .single();
+
+  if (session && session.state !== 'IDLE' && !text.startsWith('!')) {
+    // Kita berada dalam percakapan interaktif
+    return await handleConversationState(phoneId, senderPhone, text, session);
+  }
+
+  // 2. Jika bukan sesi aktif, wajib dimulai dengan "!"
   if (!text.startsWith('!')) return false;
 
   const args = text.split(' ');
   const commandName = args[0].toLowerCase();
   const commandArgs = args.slice(1);
 
-  const command = COMMANDS[commandName];
-  
-  if (!command) {
-    await sendTextMessage(
-      phoneId,
-      senderPhone,
-      `❌ Command *${commandName}* tidak ditemukan.\n\nKetik *!help* untuk melihat daftar command.`
-    );
+  // Khusus untuk reset sesi
+  if (commandName === '!cancel') {
+    await supabase.from('bot_sessions').delete().match({ phone_id: phoneId, sender_phone: senderPhone });
+    await sendTextMessage(phoneId, senderPhone, '✅ Percakapan dibatalkan.');
     return true;
   }
 
+  const command = COMMANDS[commandName];
+  
+  if (!command) {
+    // Abaikan jika bukan command yang dikenali (bisa jadi balasan biasa ke customer, tapi karena admin, kita cek)
+    return false;
+  }
+
   if (!command.enabled) {
-    await sendTextMessage(
-      phoneId,
-      senderPhone,
-      `⚠️ Command *${commandName}* sedang dinonaktifkan oleh admin.`
-    );
+    await sendTextMessage(phoneId, senderPhone, `⚠️ Command *${commandName}* sedang dinonaktifkan.`);
     return true;
   }
 
   try {
-    // Kirim indikator "sedang memproses..."
-    await sendTextMessage(phoneId, senderPhone, `⏳ Memproses *${commandName}*...`);
+    // Jangan kirim "Memproses..." untuk command interaktif
+    if (commandName !== '!buat_invoice' && commandName !== '!inv_lowongan' && commandName !== '!inv_umum') {
+      await sendTextMessage(phoneId, senderPhone, `⏳ Memproses *${commandName}*...`);
+    }
 
-    // Execute command
     await command.execute(phoneId, senderPhone, commandArgs);
     console.log(`[Command] ✅ ${commandName} executed successfully for ${senderPhone}`);
     return true;
@@ -137,12 +397,149 @@ export async function processCommand(phoneId: string, senderPhone: string, text:
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : 'Unknown error';
     console.error(`[Command] ❌ Error executing ${commandName}:`, errorMsg);
-
-    await sendTextMessage(
-      phoneId,
-      senderPhone,
-      `❌ *Error saat menjalankan ${commandName}:*\n\n\`${errorMsg}\`\n\nSilakan coba lagi atau hubungi developer.`
-    );
+    await sendTextMessage(phoneId, senderPhone, `❌ *Error saat menjalankan ${commandName}:*\n\n\`${errorMsg}\``);
     return false;
+  }
+}
+
+// ============================================
+// STATE MACHINE HANDLER
+// ============================================
+
+async function handleConversationState(phoneId: string, senderPhone: string, text: string, session: any): Promise<boolean> {
+  const state = session.state;
+  let data = session.data || {};
+  let nextState = 'IDLE';
+  let reply = '';
+
+  try {
+    // === ALUR LOWONGAN ===
+    if (state === 'LOWONGAN_AWAIT_NAME') {
+      data.customer_name = text.trim();
+      nextState = 'LOWONGAN_AWAIT_WA';
+      reply = '📱 Masukkan *Nomor WA Klien* (Contoh: 628...):';
+    } 
+    else if (state === 'LOWONGAN_AWAIT_WA') {
+      data.wa = text.replace(/[^0-9]/g, '');
+      nextState = 'LOWONGAN_AWAIT_AMOUNT';
+      reply = '💰 Masukkan *Nominal / Harga* (Angka saja, misal 150000):';
+    } 
+    else if (state === 'LOWONGAN_AWAIT_AMOUNT') {
+      data.amount = parseInt(text.replace(/[^0-9]/g, ''));
+      const orderId = `INV-${Date.now().toString().slice(-6)}`;
+      
+      // Save to DB
+      await supabase.from('payment_orders').insert({
+        order_id: orderId,
+        customer_name: data.customer_name,
+        customer_whatsapp: data.wa,
+        customer_company: data.customer_name,
+        package_id: 999,
+        package_name: 'Loker Highlight',
+        amount: data.amount,
+        total_amount: data.amount,
+        status: 'PENDING'
+      });
+
+      const payUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'https://infolokerjombang.net'}/pay/${orderId}`;
+      reply = `✅ *Invoice Lowongan Berhasil Dibuat!*\n\nID: ${orderId}\nKlien: ${data.customer_name}\nNominal: Rp ${data.amount.toLocaleString('id-ID')}\n\n_Pesan tagihan beserta Smart Link telah dikirim ke klien._`;
+      nextState = 'IDLE';
+
+      // Kirim ke Klien
+      const clientMsg = `Halo Kak ${data.customer_name} 👋\n\nBerikut adalah link Invoice untuk pemasangan *Loker Highlight* senilai *Rp ${data.amount.toLocaleString('id-ID')}*.\n\n🔗 ${payUrl}\n\nKlik link di atas untuk melihat detail tagihan dan *mengunduh PDF Invoice* secara otomatis.\n\nTerima kasih! 🙏`;
+      await sendTextMessage(phoneId, data.wa, clientMsg);
+    }
+    
+    // === ALUR UMUM (LENGKAP) ===
+    else if (state === 'UMUM_AWAIT_NAME') {
+      data.customer_name = text.trim();
+      nextState = 'UMUM_AWAIT_WA';
+      reply = '📱 Masukkan *Nomor WA Klien*:';
+    }
+    else if (state === 'UMUM_AWAIT_WA') {
+      data.wa = text.replace(/[^0-9]/g, '');
+      nextState = 'UMUM_AWAIT_PACKAGE';
+      reply = '📦 Masukkan *Nama Paket / Layanan Utama*:';
+    }
+    else if (state === 'UMUM_AWAIT_PACKAGE') {
+      data.package_name = text.trim();
+      nextState = 'UMUM_AWAIT_PRICE';
+      reply = '💰 Masukkan *Harga Layanan Utama* (Angka saja):';
+    }
+    else if (state === 'UMUM_AWAIT_PRICE') {
+      data.amount = parseInt(text.replace(/[^0-9]/g, ''));
+      nextState = 'UMUM_AWAIT_ADDON';
+      reply = '➕ Masukkan *Tambahan / Add-ons* (Ketik "TIDAK" jika tidak ada):';
+    }
+    else if (state === 'UMUM_AWAIT_ADDON') {
+      if (text.toUpperCase() === 'TIDAK') {
+        data.addons = [];
+        data.addon_names = [];
+        nextState = 'UMUM_AWAIT_STATUS';
+        reply = '💳 Ketik *1* jika LUNAS, ketik *2* jika PENDING:';
+      } else {
+        data.addon_names = [text.trim()];
+        nextState = 'UMUM_AWAIT_ADDON_PRICE';
+        reply = '💰 Masukkan *Harga Tambahan* tersebut (Angka saja):';
+      }
+    }
+    else if (state === 'UMUM_AWAIT_ADDON_PRICE') {
+      data.addons = [parseInt(text.replace(/[^0-9]/g, ''))];
+      nextState = 'UMUM_AWAIT_STATUS';
+      reply = '💳 Ketik *1* jika LUNAS, ketik *2* jika PENDING:';
+    }
+    else if (state === 'UMUM_AWAIT_STATUS') {
+      const isLunas = text.trim() === '1';
+      const status = isLunas ? 'PAID' : 'PENDING';
+      const orderId = `INV-${Date.now().toString().slice(-6)}`;
+      const addonTotal = (data.addons || []).reduce((a: number,b: number) => a+b, 0);
+      const totalAmount = data.amount + addonTotal;
+
+      await supabase.from('payment_orders').insert({
+        order_id: orderId,
+        customer_name: data.customer_name,
+        customer_whatsapp: data.wa,
+        customer_company: data.customer_name,
+        package_id: 999,
+        package_name: data.package_name,
+        amount: data.amount,
+        total_amount: totalAmount,
+        addons: data.addons || [],
+        addon_names: data.addon_names || [],
+        status: status,
+        paid_at: isLunas ? new Date().toISOString() : null
+      });
+
+      const payUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'https://infolokerjombang.net'}/pay/${orderId}`;
+      reply = `✅ *Invoice Lengkap Berhasil Dibuat!*\n\nID: ${orderId}\nTotal: Rp ${totalAmount.toLocaleString('id-ID')}\nStatus: *${status}*\n\n_Pesan tagihan telah dikirim ke klien._`;
+      nextState = 'IDLE';
+
+      // Kirim ke klien
+      let clientMsg = `Halo Kak ${data.customer_name} 👋\n\nBerikut adalah link Invoice untuk *${data.package_name}* senilai *Rp ${totalAmount.toLocaleString('id-ID')}*.\n\n🔗 ${payUrl}\n\nKlik link di atas untuk melihat rincian tagihan dan *mengunduh PDF Invoice*.`;
+      if (isLunas) {
+        clientMsg = `Halo Kak ${data.customer_name} 👋\n\nTerima kasih, pembayaran Anda untuk *${data.package_name}* senilai *Rp ${totalAmount.toLocaleString('id-ID')}* telah kami terima (LUNAS).\n\nAnda dapat mengunduh bukti PDF Invoice melalui link berikut:\n🔗 ${payUrl}`;
+      }
+      await sendTextMessage(phoneId, data.wa, clientMsg);
+    }
+    else {
+      reply = '❌ Sesi tidak valid. Ketik *!cancel* untuk membatalkan.';
+    }
+
+    // Update session state
+    if (nextState === 'IDLE') {
+      await supabase.from('bot_sessions').delete().match({ phone_id: phoneId, sender_phone: senderPhone });
+    } else {
+      await supabase.from('bot_sessions').update({ state: nextState, data }).match({ phone_id: phoneId, sender_phone: senderPhone });
+    }
+
+    if (reply) {
+      await sendTextMessage(phoneId, senderPhone, reply);
+    }
+    return true;
+
+  } catch (error) {
+    console.error('State Machine Error:', error);
+    await sendTextMessage(phoneId, senderPhone, `❌ Terjadi kesalahan pengisian form. Ketik *!cancel* untuk mereset.`);
+    return true;
   }
 }

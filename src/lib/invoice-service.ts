@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/client";
 import type { InvoiceData, InvoiceItemData, Client, BankAccount } from "./invoice-types";
 import { formatInvoiceMessage, sendTelegramMessage } from "./telegram-service";
+import { sendNotifToAdmin } from "@/lib/whatsapp/kirimdev-client";
 
 // ============================================
 // INVOICE SERVICES
@@ -86,6 +87,17 @@ export async function saveInvoice(invoice: InvoiceData): Promise<{ data: Invoice
             await sendTelegramMessage(message);
         } catch (err) {
             console.error("Failed to send telegram notification for invoice", err);
+        }
+
+        // Send WhatsApp Notification (only for new invoices)
+        if (!isUpdate) {
+            try {
+                const totalAmount = invoice.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+                const waMessage = `🚨 *INVOICE BARU DIBUAT!* 🚨\n\n*ID:* ${invoice.invoice_number}\n*Klien:* ${invoice.client_name}\n*Total:* Rp ${totalAmount.toLocaleString('id-ID')}\n*Status:* 🟡 Menunggu Pembayaran\n\n👉 _Link Tagihan:_\n${process.env.NEXT_PUBLIC_APP_URL || 'https://infolokerjombang.net'}/admin/invoices/${invoiceResult?.id}`;
+                await sendNotifToAdmin(waMessage);
+            } catch (err) {
+                console.error("Failed to send WA notification for invoice", err);
+            }
         }
 
         return { data: { ...invoice, id: invoiceResult?.id }, error: null };

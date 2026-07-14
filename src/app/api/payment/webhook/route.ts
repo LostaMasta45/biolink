@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import type { KlikQRISWebhookPayload } from "@/lib/payment-types";
 import { getTodayWIB, getTomorrowWIB, generateInvoiceNumber } from "@/lib/utils";
+import { sendNotifToAdmin } from "@/lib/whatsapp/kirimdev-client";
+import { sendTelegramMessage } from "@/lib/telegram-service";
 
 function getSupabase() {
     return createClient(
@@ -143,6 +145,14 @@ export async function POST(request: Request) {
                 .from("payment_orders")
                 .update(updateData)
                 .eq("order_id", data.order_id);
+                
+            // === WhatsApp Notification to Admin ===
+            try {
+                const notifMsg = `✅ *PEMBAYARAN BERHASIL!* 🎉\n\nUang sejumlah *Rp ${(data.amount_paid || order.total_amount).toLocaleString('id-ID')}* telah masuk via QRIS.\n\n*Klien:* ${order.customer_name} (${order.customer_company})\n*Layanan:* ${order.package_name}\n*Order ID:* ${data.order_id}\n\nLayanan sudah masuk antrean posting (Draft). Cek dashboard untuk memproses poster.`;
+                await sendNotifToAdmin(notifMsg);
+            } catch (waErr) {
+                console.error("WA Notif Failed:", waErr);
+            }
 
             // Auto-sync to finance (transactions table)
             try {

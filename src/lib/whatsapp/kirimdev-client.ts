@@ -98,11 +98,69 @@ export async function sendTextMessage(
     }
 
     const data = await res.json();
-    console.log(`[KirimDev] ✅ Pesan terkirim via ${phoneId} ke ${to}`);
     return { success: true };
-  } catch (error) {
-    console.error('[KirimDev] Network error:', error);
-    return { success: false, error: (error as Error).message };
+  } catch (err: any) {
+    console.error(`[KirimDev] Exception pada sendTextMessage:`, err);
+    return { success: false, error: err.message };
+  }
+}
+
+/**
+ * Kirim pesan interaktif (Tombol) via KirimDev API
+ * 
+ * @param phoneId - Phone ID akun pengirim
+ * @param to - Nomor tujuan
+ * @param text - Teks pesan
+ * @param buttons - Array berisi { id: string, title: string } (maksimal 3 tombol)
+ */
+export async function sendButtonMessage(
+  phoneId: string,
+  to: string,
+  text: string,
+  buttons: { id: string; title: string }[]
+): Promise<{ success: boolean; error?: string }> {
+  const apiKey = process.env.KIRIMDEV_API_KEY;
+  if (!apiKey) {
+    return { success: false, error: 'KIRIMDEV_API_KEY belum dikonfigurasi' };
+  }
+
+  try {
+    const res = await fetch(`https://api.kirimdev.com/v1/${phoneId}/messages`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        to: normalizePhone(to),
+        type: 'interactive',
+        interactive: {
+          type: 'button',
+          body: { text },
+          action: {
+            buttons: buttons.map(btn => ({
+              type: 'reply',
+              reply: {
+                id: btn.id,
+                title: btn.title
+              }
+            }))
+          }
+        }
+      }),
+    });
+
+    if (!res.ok) {
+      const errorText = await res.text();
+      console.error(`[KirimDev] Gagal kirim button via ${phoneId}:`, errorText);
+      return { success: false, error: errorText };
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    console.error(`[KirimDev] Exception pada sendButtonMessage:`, err);
+    return { success: false, error: err.message };
   }
 }
 
