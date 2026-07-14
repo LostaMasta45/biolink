@@ -19,11 +19,14 @@ function getAccounts(): WhatsAppAccount[] {
   const accounts: WhatsAppAccount[] = [];
 
   // Akun 1: Lostamasta
-  if (process.env.KIRIMDEV_PHONE_ID_1) {
+  // Mendukung KIRIMDEV_PHONE_ID (tanpa _1) ATAU KIRIMDEV_PHONE_ID_1
+  const phoneId1 = process.env.KIRIMDEV_PHONE_ID_1 || process.env.KIRIMDEV_PHONE_ID;
+  const phoneNumber1 = process.env.KIRIMDEV_PHONE_NUMBER_1 || process.env.KIRIMDEV_PHONE_NUMBER || '';
+  if (phoneId1) {
     accounts.push({
-      phoneId: process.env.KIRIMDEV_PHONE_ID_1,
+      phoneId: phoneId1,
       label: 'Lostamasta',
-      phoneNumber: process.env.KIRIMDEV_PHONE_NUMBER_1 || '',
+      phoneNumber: phoneNumber1,
     });
   }
 
@@ -33,15 +36,6 @@ function getAccounts(): WhatsAppAccount[] {
       phoneId: process.env.KIRIMDEV_PHONE_ID_2,
       label: 'InfoLokerJombang',
       phoneNumber: process.env.KIRIMDEV_PHONE_NUMBER_2 || '',
-    });
-  }
-
-  // Fallback: gunakan env lama (KIRIMDEV_PHONE_ID) jika ada
-  if (accounts.length === 0 && process.env.KIRIMDEV_PHONE_ID) {
-    accounts.push({
-      phoneId: process.env.KIRIMDEV_PHONE_ID,
-      label: 'Default',
-      phoneNumber: process.env.KIRIMDEV_PHONE_NUMBER || '',
     });
   }
 
