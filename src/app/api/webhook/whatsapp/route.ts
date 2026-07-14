@@ -23,7 +23,10 @@ export async function POST(req: NextRequest) {
     // ─── Ekstrak data dari payload ───
     let eventName = payload.event;
     let senderPhone = payload.data?.from;
-    let text = payload.data?.message?.text;
+    let text = payload.data?.message?.text || payload.data?.text?.body || payload.data?.text;
+    if (typeof text === 'object' && text !== null && 'body' in text) {
+      text = text.body;
+    }
     let phoneId = payload.data?.phoneId || '';
     let toPhone = payload.data?.to || '';
 
@@ -66,7 +69,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ status: 'ok', action: 'ignored_or_no_text' });
     }
 
-    text = text.trim();
+    text = String(text).trim();
 
     // ═══════════════════════════════════════════
     //  ROUTING LOGIC
