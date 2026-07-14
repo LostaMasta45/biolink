@@ -328,7 +328,7 @@ export default function InvoiceClient({ order }: InvoiceClientProps) {
                             <p className="text-slate-500">{order.customer_whatsapp}</p>
                         </div>
                         <div className="text-right">
-                            <Badge variant={isPaid ? "default" : "secondary"} className={\`\${isPaid ? "bg-emerald-500 hover:bg-emerald-600" : "bg-amber-500 hover:bg-amber-600"} text-white px-4 py-1.5 text-sm uppercase tracking-wider\`}>
+                            <Badge variant={isPaid ? "default" : "secondary"} className={`${isPaid ? "bg-emerald-500 hover:bg-emerald-600" : "bg-amber-500 hover:bg-amber-600"} text-white px-4 py-1.5 text-sm uppercase tracking-wider`}>
                                 {isPaid ? (
                                     <span className="flex items-center"><CheckCircle2 className="w-4 h-4 mr-1.5" /> LUNAS</span>
                                 ) : (
