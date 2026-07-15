@@ -455,7 +455,7 @@ async function handleConversationState(phoneId: string, senderPhone: string, tex
       data.amount = parseInt(text.replace(/[^0-9]/g, ''));
       const orderId = `INV-${Date.now().toString().slice(-6)}`;
       
-      // Save to DB
+      // Save to payment_orders (legacy)
       await supabase.from('payment_orders').insert({
         order_id: orderId,
         customer_name: data.customer_name,
@@ -467,6 +467,34 @@ async function handleConversationState(phoneId: string, senderPhone: string, tex
         total_amount: data.amount,
         status: 'PENDING'
       });
+
+      // Save to invoices (dashboard)
+      const { data: invData } = await supabase.from('invoices').insert({
+        invoice_number: orderId,
+        client_name: data.customer_name,
+        client_phone: data.wa,
+        invoice_date: new Date().toISOString(),
+        subtotal: data.amount,
+        discount_type: 'nominal',
+        discount_value: 0,
+        discount_amount: 0,
+        tax_enabled: false,
+        tax_percent: 0,
+        tax_amount: 0,
+        total: data.amount,
+        status: 'sent',
+        template: 'modern'
+      }).select().single();
+
+      if (invData?.id) {
+        await supabase.from('invoice_items').insert({
+          invoice_id: invData.id,
+          description: 'Loker Highlight',
+          quantity: 1,
+          price: data.amount,
+          sort_order: 0
+        });
+      }
 
       const payUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'https://infolokerjombang.net'}/pay/${orderId}`;
       
@@ -521,6 +549,7 @@ async function handleConversationState(phoneId: string, senderPhone: string, tex
       const addonTotal = (data.addons || []).reduce((a: number,b: number) => a+b, 0);
       const totalAmount = data.amount + addonTotal;
 
+      // Save to payment_orders (legacy)
       await supabase.from('payment_orders').insert({
         order_id: orderId,
         customer_name: data.customer_name,
@@ -535,6 +564,51 @@ async function handleConversationState(phoneId: string, senderPhone: string, tex
         status: status,
         paid_at: isLunas ? new Date().toISOString() : null
       });
+
+      // Save to invoices (dashboard)
+      const { data: invData } = await supabase.from('invoices').insert({
+        invoice_number: orderId,
+        client_name: data.customer_name,
+        client_phone: data.wa,
+        invoice_date: new Date().toISOString(),
+        subtotal: totalAmount,
+        discount_type: 'nominal',
+        discount_value: 0,
+        discount_amount: 0,
+        tax_enabled: false,
+        tax_percent: 0,
+        tax_amount: 0,
+        total: totalAmount,
+        status: isLunas ? 'paid' : 'sent',
+        template: 'modern'
+      }).select().single();
+
+      if (invData?.id) {
+        const invoiceItems = [];
+        invoiceItems.push({
+          invoice_id: invData.id,
+          description: data.package_name,
+          quantity: 1,
+          price: data.amount,
+          sort_order: 0
+        });
+
+        if (data.addon_names && data.addons) {
+          data.addon_names.forEach((name: string, i: number) => {
+            if (name && data.addons[i]) {
+              invoiceItems.push({
+                invoice_id: invData.id,
+                description: name,
+                quantity: 1,
+                price: data.addons[i],
+                sort_order: i + 1
+              });
+            }
+          });
+        }
+        
+        await supabase.from('invoice_items').insert(invoiceItems);
+      }
 
       const payUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'https://infolokerjombang.net'}/pay/${orderId}`;
       

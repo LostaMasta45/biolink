@@ -2,8 +2,9 @@
 
 import { useRef, useState } from "react";
 import { formatRupiah, formatDate } from "@/lib/utils";
-import { Download } from "lucide-react";
+import { Download, FileText, FileImage } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
 import toast from "react-hot-toast";
@@ -16,90 +17,49 @@ export default function InvoiceClient({ order }: InvoiceClientProps) {
     const invoiceRef = useRef<HTMLDivElement>(null);
     const [isDownloading, setIsDownloading] = useState(false);
 
-    const isPaid = order.status === "PAID";
-    const invoiceDate = new Date(order.created_at || Date.now()).toISOString();
+    const isPaid = order.status === "PAID" || order.status === "paid";
+    const invoiceDate = new Date(order.created_at || order.invoice_date || Date.now()).toISOString();
     
     // Construct items list for UI & PDF
-    const items = [
-        {
-            description: order.package_name,
-            quantity: 1,
-            price: order.amount,
-        }
-    ];
-
-    if (order.addon_names && order.addons) {
-        order.addon_names.forEach((name: string, idx: number) => {
-            if (name && order.addons[idx]) {
-                items.push({
-                    description: name,
-                    quantity: 1,
-                    price: order.addons[idx],
-                });
+    let items: any[] = [];
+    if (order.is_new_format && order.raw_items) {
+        items = order.raw_items;
+    } else {
+        items = [
+            {
+                description: order.package_name,
+                quantity: 1,
+                price: order.amount,
             }
-        });
+        ];
+
+        if (order.addon_names && order.addons) {
+            order.addon_names.forEach((name: string, idx: number) => {
+                if (name && order.addons[idx]) {
+                    items.push({
+                        description: name,
+                        quantity: 1,
+                        price: order.addons[idx],
+                    });
+                }
+            });
+        }
     }
 
-    const subtotal = items.reduce((sum, item) => sum + item.quantity * item.price, 0);
-    const total = order.total_amount || subtotal;
+    const subtotal = order.subtotal || items.reduce((sum, item) => sum + item.quantity * item.price, 0);
+    const discountAmount = order.discount_amount || 0;
+    const taxAmount = order.tax_amount || 0;
+    const total = order.total_amount || order.total || (subtotal - discountAmount + taxAmount);
     const statusWatermark = isPaid ? "LUNAS" : "PENDING";
 
-    const handleDownload = async () => {
+    const handleDownload = async (format: "pdf" | "png" | "jpg") => {
         if (!invoiceRef.current) return;
         setIsDownloading(true);
-        const loadingToast = toast.loading("Generating PDF...");
+        const loadingToast = toast.loading(`Generating ${format.toUpperCase()}...`);
 
         try {
-            // Kita render ulang iframe sementara khusus untuk html2canvas 
-            // agar memastikan scaling persis 794px terlepas dari ukuran layar mobile/desktop
-            const invoiceHtml = invoiceRef.current.outerHTML;
-            const styleSheets = Array.from(document.styleSheets)
-                .map(styleSheet => {
-                    try {
-                        return Array.from(styleSheet.cssRules)
-                            .map(rule => rule.cssText)
-                            .join('');
-                    } catch (e) {
-                        return '';
-                    }
-                })
-                .join('\n');
-
-            const iframe = document.createElement('iframe');
-            iframe.style.position = 'absolute';
-            iframe.style.left = '-9999px';
-            iframe.style.top = '0';
-            iframe.style.width = '794px';
-            iframe.style.height = '1123px';
-            iframe.style.border = 'none';
-            document.body.appendChild(iframe);
-
-            const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
-            if (!iframeDoc) throw new Error('Cannot create iframe');
-
-            iframeDoc.open();
-            iframeDoc.write(`
-                <!DOCTYPE html>
-                <html>
-                <head>
-                    <meta charset="UTF-8">
-                    <style>
-                        ${styleSheets}
-                        /* Pastikan font Tailwind ter-load dengan baik dan reset margin */
-                        body { margin: 0; padding: 0; background: white; -webkit-font-smoothing: antialiased; font-family: ui-sans-serif, system-ui, sans-serif; }
-                    </style>
-                </head>
-                <body>
-                    ${invoiceHtml}
-                </body>
-                </html>
-            `);
-            iframeDoc.close();
-
-            await new Promise(resolve => setTimeout(resolve, 500)); // Tunggu font dan image load
-
-            // Gunakan body iframe sebagai referensi html2canvas
-            const targetElement = iframeDoc.body.firstElementChild as HTMLElement;
+            // Gunakan referensi container yang asli di layar
+            const targetElement = invoiceRef.current;
             
             const canvas = await html2canvas(targetElement, {
                 scale: 2,
@@ -110,24 +70,29 @@ export default function InvoiceClient({ order }: InvoiceClientProps) {
                 windowWidth: 794,
             });
 
-            document.body.removeChild(iframe);
-
             const safeSenderName = (order.customer_name || "Invoice").replace(/[^a-zA-Z0-9\s-]/g, "").replace(/\s+/g, "_").substring(0, 30);
             const fileName = `${order.order_id}_${safeSenderName}`;
 
-            const imgData = canvas.toDataURL("image/png");
-            const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
-            const imgWidth = 210;
-            const imgHeight = (canvas.height * imgWidth) / canvas.width;
-            pdf.addImage(imgData, "PNG", 0, 0, imgWidth, imgHeight);
-            pdf.save(`${fileName}.pdf`);
+            if (format === "pdf") {
+                const imgData = canvas.toDataURL("image/png");
+                const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+                const imgWidth = 210;
+                const imgHeight = (canvas.height * imgWidth) / canvas.width;
+                pdf.addImage(imgData, "PNG", 0, 0, imgWidth, imgHeight);
+                pdf.save(`${fileName}.pdf`);
+            } else {
+                const link = document.createElement("a");
+                link.download = `${fileName}.${format}`;
+                link.href = canvas.toDataURL(`image/${format === "jpg" ? "jpeg" : "png"}`, 0.95);
+                link.click();
+            }
 
             toast.dismiss(loadingToast);
             toast.success("Download berhasil!");
         } catch (err) {
             console.error("Download error:", err);
             toast.dismiss(loadingToast);
-            toast.error("Gagal generate PDF. Coba lagi.");
+            toast.error("Gagal generate file. Coba lagi.");
         } finally {
             setIsDownloading(false);
         }
@@ -179,10 +144,10 @@ export default function InvoiceClient({ order }: InvoiceClientProps) {
 
                         {/* INFO PENGIRIM & PENERIMA */}
                         <div className="grid grid-cols-2 gap-12 mb-10">
-                            <div>
-                                <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Dari</div>
-                                <div className="font-bold text-lg mb-1">InfoLokerJombang</div>
-                                <div className="text-sm text-slate-600">@infolokerjombang</div>
+                            <div className="space-y-1">
+                                <h2 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-3">Dari</h2>
+                                <div className="font-bold text-slate-800 text-lg">{order.sender_name || "InfoLokerJombang"}</div>
+                                <div className="text-slate-500 font-medium">@infolokerjombang</div>
                                 <div className="text-sm text-slate-600">Jombang, Jawa Timur</div>
                             </div>
                             <div className="bg-blue-50/50 p-6 rounded-xl border border-blue-100">
@@ -224,27 +189,49 @@ export default function InvoiceClient({ order }: InvoiceClientProps) {
                                 {!isPaid && (
                                     <div className="p-5 rounded-xl border border-dashed border-slate-300 bg-slate-50 mb-6">
                                         <div className="text-xs font-bold text-slate-400 uppercase mb-3">Panduan Pembayaran</div>
-                                        <div className="font-bold text-lg mb-1">BCA / DANA / OVO</div>
-                                        <div className="text-sm text-slate-500">Silakan hubungi admin via WhatsApp untuk nomor rekening / QRIS.</div>
+                                        {order.bank_name ? (
+                                            <>
+                                                <div className="font-bold text-lg mb-1">{order.bank_name}</div>
+                                                <div className="text-sm font-mono text-slate-700 mb-1">{order.bank_account_number}</div>
+                                                <div className="text-xs text-slate-500">a.n. {order.bank_account_name}</div>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <div className="font-bold text-lg mb-1">BCA / DANA / OVO</div>
+                                                <div className="text-sm text-slate-500">Silakan hubungi admin via WhatsApp untuk nomor rekening / QRIS.</div>
+                                            </>
+                                        )}
                                     </div>
                                 )}
                                 <div>
                                     <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Catatan</div>
-                                    <div className="text-sm text-slate-600 leading-relaxed">
-                                        {isPaid 
+                                    <div className="text-sm text-slate-600 leading-relaxed whitespace-pre-line">
+                                        {order.notes ? order.notes : (isPaid 
                                             ? 'Terima kasih, pembayaran telah kami terima.' 
-                                            : 'Mohon selesaikan pembayaran agar pesanan dapat segera diproses.'}
+                                            : 'Mohon selesaikan pembayaran agar pesanan dapat segera diproses.')}
                                     </div>
                                 </div>
                             </div>
                             
                             <div className="flex justify-end">
                                 <div className="bg-slate-50 p-6 rounded-xl w-72 h-fit border border-slate-100">
-                                    <div className="flex justify-between items-center text-sm mb-4 border-b border-slate-200 pb-4">
+                                    <div className="flex justify-between items-center text-sm mb-4">
                                         <span className="text-slate-500 font-medium">Subtotal</span>
                                         <span className="font-semibold text-slate-700">{formatRupiah(subtotal)}</span>
                                     </div>
-                                    <div className="flex justify-between items-end">
+                                    {discountAmount > 0 && (
+                                        <div className="flex justify-between items-center text-sm mb-4 text-red-500">
+                                            <span className="font-medium">Diskon</span>
+                                            <span className="font-semibold">-{formatRupiah(discountAmount)}</span>
+                                        </div>
+                                    )}
+                                    {taxAmount > 0 && (
+                                        <div className="flex justify-between items-center text-sm mb-4">
+                                            <span className="text-slate-500 font-medium">PPN {order.tax_percent ? `(${order.tax_percent}%)` : ''}</span>
+                                            <span className="font-semibold text-slate-700">{formatRupiah(taxAmount)}</span>
+                                        </div>
+                                    )}
+                                    <div className="flex justify-between items-end border-t border-slate-200 pt-4 mt-2">
                                         <span className="text-slate-500 font-medium">Total Tagihan</span>
                                         <span className="text-2xl font-bold text-blue-600">{formatRupiah(total)}</span>
                                     </div>
@@ -264,15 +251,32 @@ export default function InvoiceClient({ order }: InvoiceClientProps) {
 
             {/* FLOATING DOWNLOAD BUTTON */}
             <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50">
-                <Button 
-                    size="lg" 
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-xl rounded-full px-8 h-14 text-base font-semibold shadow-emerald-600/20"
-                    onClick={handleDownload}
-                    disabled={isDownloading}
-                >
-                    <Download className="mr-2 h-5 w-5" />
-                    {isDownloading ? "Memproses PDF..." : "Download Invoice"}
-                </Button>
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <Button 
+                            size="lg" 
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-xl rounded-full px-8 h-14 text-base font-semibold shadow-emerald-600/20"
+                            disabled={isDownloading}
+                        >
+                            <Download className="mr-2 h-5 w-5" />
+                            {isDownloading ? "Memproses..." : "Download Invoice"}
+                        </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="center" className="w-56 mb-2 p-2 rounded-xl border border-slate-200 shadow-xl bg-white">
+                        <DropdownMenuItem onClick={() => handleDownload("pdf")} className="cursor-pointer py-3 rounded-lg hover:bg-emerald-50 hover:text-emerald-700 focus:bg-emerald-50 focus:text-emerald-700 transition-colors">
+                            <FileText className="mr-3 h-5 w-5 text-emerald-600" /> 
+                            <span className="font-medium text-slate-700">Download PDF</span>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleDownload("png")} className="cursor-pointer py-3 rounded-lg hover:bg-blue-50 hover:text-blue-700 focus:bg-blue-50 focus:text-blue-700 transition-colors mt-1">
+                            <FileImage className="mr-3 h-5 w-5 text-blue-600" /> 
+                            <span className="font-medium text-slate-700">Download PNG Image</span>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleDownload("jpg")} className="cursor-pointer py-3 rounded-lg hover:bg-amber-50 hover:text-amber-700 focus:bg-amber-50 focus:text-amber-700 transition-colors mt-1">
+                            <FileImage className="mr-3 h-5 w-5 text-amber-600" /> 
+                            <span className="font-medium text-slate-700">Download JPG Image</span>
+                        </DropdownMenuItem>
+                    </DropdownMenuContent>
+                </DropdownMenu>
             </div>
         </div>
     );

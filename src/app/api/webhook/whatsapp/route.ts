@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { isAdminNumber, getAccountByPhoneId, getAllAccounts, getAccountByPhone } from '@/lib/whatsapp/kirimdev-client';
 import { processCommand } from '@/lib/whatsapp/command-processor';
 import type { KirimDevWebhookPayload } from '@/lib/whatsapp/types';
+import { processCustomerMessage, logWebhookEvent } from '@/services/whatsapp-execution-engine';
 
 // ============================================
 // WhatsApp Webhook Receiver
@@ -30,6 +31,10 @@ export async function POST(req: NextRequest) {
     // Log raw payload structure for debugging (truncated)
     const payloadKeys = Object.keys(payload);
     console.log('[Webhook] 📦 Payload keys:', payloadKeys.join(', '), '| Has entry:', !!payload.entry, '| Has data:', !!(payload as any).data);
+
+    // Log the incoming webhook to the database
+    const eventType = payload.event || (payload.entry ? 'cloud_api_event' : 'unknown');
+    await logWebhookEvent('incoming', eventType, 'success', payload);
 
     // ─── Ekstrak data dari payload ───
     let eventName = payload.event;
@@ -76,7 +81,7 @@ export async function POST(req: NextRequest) {
 
     // Fallback: Jika phoneId kosong, gunakan akun pertama yang terdaftar
     if (!phoneId) {
-      const accounts = getAllAccounts();
+      const accounts = await getAllAccounts();
       if (accounts.length > 0) {
         phoneId = accounts[0].phoneId;
         console.log('[Webhook] 🔄 phoneId fallback to account[0]:', phoneId);
@@ -96,7 +101,7 @@ export async function POST(req: NextRequest) {
     //  ROUTING LOGIC
     // ═══════════════════════════════════════════
 
-    const isAdmin = isAdminNumber(senderPhone);
+    const isAdmin = await isAdminNumber(senderPhone);
     console.log('[Webhook] 🔐 isAdmin:', isAdmin, '| senderPhone:', senderPhone);
 
     // CASE 1: ADMIN COMMAND & CONVERSATION STATE
@@ -105,12 +110,12 @@ export async function POST(req: NextRequest) {
 
       let accountLabel = 'Unknown';
       if (phoneId) {
-        const account = getAccountByPhoneId(phoneId);
+        const account = await getAccountByPhoneId(phoneId);
         accountLabel = account?.label || 'Unknown';
       }
 
       if (!phoneId && toPhone) {
-        const account = getAccountByPhone(toPhone);
+        const account = await getAccountByPhone(toPhone);
         if (account) {
           phoneId = account.phoneId;
           accountLabel = account.label;
@@ -140,24 +145,20 @@ export async function POST(req: NextRequest) {
     }
 
     // CASE 2: PESAN DARI CUSTOMER
-    // Biarkan KirimDev Automation Rules yang handle auto-reply
-    // Di sini kita hanya log atau trigger notifikasi tambahan jika perlu
-
     console.log('[Webhook] 👤 Customer message from:', senderPhone, '| Text:', text.substring(0, 50));
 
-    // (Opsional) Contoh: kirim notifikasi ke admin jika ada kata "urgent"
-    // if (text.toLowerCase().includes('urgent')) {
-    //   await sendNotifToAdmin(`🚨 Pesan URGENT dari ${payload.data.pushName || senderPhone}:\n\n${text}`);
-    // }
+    // Kirim pesan ke Execution Engine (WhatsApp Manager)
+    await processCustomerMessage(phoneId, senderPhone, text);
 
     return NextResponse.json({
       status: 'ok',
       type: 'customer',
-      action: 'delegated_to_kirimdev',
+      action: 'processed_by_execution_engine',
     });
 
   } catch (error) {
     console.error('[Webhook] ❌ Error:', error);
+    await logWebhookEvent('incoming', 'error', 'failed', { error: (error as Error).message });
     return NextResponse.json(
       { error: 'Internal Server Error', message: (error as Error).message },
       { status: 500 }
@@ -176,11 +177,12 @@ export async function GET(req: NextRequest) {
     return new NextResponse(challenge, { status: 200 });
   }
 
+  const accounts = await getAllAccounts();
   return NextResponse.json({
     status: 'active',
     service: 'ILJ-Hub WhatsApp Webhook',
     timestamp: new Date().toISOString(),
-    accounts: getAllAccounts().map(a => ({
+    accounts: accounts.map(a => ({
       label: a.label,
       phoneId: a.phoneId ? '***' + a.phoneId.slice(-4) : 'N/A',
     })),

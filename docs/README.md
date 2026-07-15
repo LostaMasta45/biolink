@@ -51,3 +51,9 @@ Dashboard ini TIDAK membuat ulang fitur Kirim.dev seperti:
 - Team Inbox
 
 Karena semuanya sudah tersedia di Kirim.dev.
+
+---
+
+## Dokumentasi Implementasi
+
+Walkthrough setup, route, penggunaan setiap modul, endpoint internal, dan hasil verifikasi tersedia di [13-implementation-walkthrough.md](./13-implementation-walkthrough.md).

@@ -57,40 +57,49 @@ export default function AdminLayout({
         router.refresh();
     };
 
+    const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+
     return (
-        <div className="min-h-screen bg-background flex flex-col lg:flex-row">
+        <div className="min-h-screen bg-background flex flex-col lg:flex-row overflow-x-hidden w-full">
             {/* Desktop Sidebar (Hidden on Mobile) */}
-            <aside className="hidden lg:flex fixed top-0 left-0 z-50 h-screen w-72 bg-card border-r border-border flex-col">
+            <aside className={cn(
+                "hidden lg:flex fixed top-0 left-0 z-50 h-screen bg-card border-r border-border flex-col transition-all duration-300",
+                isSidebarOpen ? "w-72" : "w-20"
+            )}>
                 {/* Logo */}
-                <div className="h-16 flex items-center px-6 border-b border-border">
-                    <Link href="/admin" className="flex items-center gap-3 group">
-                        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-secondary flex items-center justify-center shadow-lg shadow-primary/25 group-hover:scale-110 transition-transform">
+                <div className="h-16 flex items-center px-4 border-b border-border justify-between relative">
+                    <Link href="/admin" className={cn("flex items-center gap-3 group", !isSidebarOpen && "mx-auto")}>
+                        <div className="w-8 h-8 shrink-0 rounded-lg bg-gradient-to-br from-primary to-secondary flex items-center justify-center shadow-lg shadow-primary/25 group-hover:scale-110 transition-transform">
                             <span className="text-white font-bold text-xs">ILJ</span>
                         </div>
-                        <div>
-                            <h1 className="font-bold text-foreground leading-none">
-                                ILJ Admin
-                            </h1>
-                            <p className="text-xs text-muted-foreground mt-0.5">
-                                Dashboard
-                            </p>
-                        </div>
+                        {isSidebarOpen && (
+                            <div className="min-w-0 transition-opacity duration-300">
+                                <h1 className="font-bold text-foreground leading-none truncate">
+                                    ILJ Admin
+                                </h1>
+                                <p className="text-xs text-muted-foreground mt-0.5 truncate">
+                                    Dashboard
+                                </p>
+                            </div>
+                        )}
                     </Link>
                 </div>
 
                 {/* User Info */}
                 <div className="p-4">
-                    <div className="flex items-center gap-3 p-3 rounded-xl bg-card border border-border/50 shadow-sm">
-                        <Avatar className="h-9 w-9 border border-border">
+                    <div className={cn("flex items-center gap-3 rounded-xl bg-card border border-border/50 shadow-sm transition-all", isSidebarOpen ? "p-3" : "p-2 justify-center")}>
+                        <Avatar className="h-9 w-9 shrink-0 border border-border">
                             <AvatarImage src="/profile.png" />
                             <AvatarFallback className="bg-primary/10 text-primary">A</AvatarFallback>
                         </Avatar>
-                        <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium truncate">Admin ILJ</p>
-                            <p className="text-xs text-muted-foreground truncate">
-                                admin@infoloker.com
-                            </p>
-                        </div>
+                        {isSidebarOpen && (
+                            <div className="flex-1 min-w-0 transition-opacity duration-300">
+                                <p className="text-sm font-medium truncate">Admin ILJ</p>
+                                <p className="text-xs text-muted-foreground truncate">
+                                    admin@infoloker.com
+                                </p>
+                            </div>
+                        )}
                     </div>
                 </div>
 
@@ -105,20 +114,22 @@ export default function AdminLayout({
                                 <Link
                                     key={item.href}
                                     href={item.href}
+                                    title={!isSidebarOpen ? item.label : undefined}
                                 >
                                     <Button
                                         variant={isActive ? "secondary" : "ghost"}
                                         className={cn(
-                                            "w-full justify-start h-11 mb-1 font-medium",
+                                            "mb-1 font-medium transition-all duration-300",
+                                            isSidebarOpen ? "w-full justify-start h-11 px-4" : "w-11 h-11 justify-center px-0 mx-auto flex",
                                             isActive
                                                 ? "bg-primary/10 text-primary hover:bg-primary/15"
                                                 : "text-muted-foreground hover:text-foreground hover:bg-muted"
                                         )}
                                     >
-                                        <Icon className={cn("w-4 h-4 mr-3", isActive && "text-primary")} />
-                                        {item.label}
-                                        {isActive && (
-                                            <ChevronRight className="w-3 h-3 ml-auto opacity-50" />
+                                        <Icon className={cn("w-4 h-4 shrink-0", isSidebarOpen && "mr-3", isActive && "text-primary")} />
+                                        {isSidebarOpen && <span className="truncate">{item.label}</span>}
+                                        {isSidebarOpen && isActive && (
+                                            <ChevronRight className="w-3 h-3 ml-auto shrink-0 opacity-50" />
                                         )}
                                     </Button>
                                 </Link>
@@ -129,20 +140,44 @@ export default function AdminLayout({
                     <Separator className="my-4" />
 
                     <div className="space-y-1">
-                        <p className="px-4 text-xs font-medium text-muted-foreground mb-2">
-                            System
-                        </p>
-                        <Button variant="ghost" className="w-full justify-start h-9 text-muted-foreground">
-                            <Settings className="w-4 h-4 mr-3" />
-                            Settings
+                        {isSidebarOpen && (
+                            <p className="px-4 text-xs font-medium text-muted-foreground mb-2">
+                                System
+                            </p>
+                        )}
+                        <Button 
+                            variant="ghost" 
+                            className={cn(
+                                "text-muted-foreground transition-all duration-300",
+                                isSidebarOpen ? "w-full justify-start h-9 px-4" : "w-11 h-11 justify-center px-0 mx-auto flex"
+                            )}
+                            title={isSidebarOpen ? "Sembunyikan Sidebar" : "Tampilkan Sidebar"}
+                            onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+                        >
+                            <Menu className={cn("w-4 h-4 shrink-0")} />
+                        </Button>
+                        <Button 
+                            variant="ghost" 
+                            className={cn(
+                                "text-muted-foreground transition-all duration-300 mt-1",
+                                isSidebarOpen ? "w-full justify-start h-9 px-4" : "w-11 h-11 justify-center px-0 mx-auto flex"
+                            )}
+                            title={!isSidebarOpen ? "Settings" : undefined}
+                        >
+                            <Settings className={cn("w-4 h-4 shrink-0", isSidebarOpen && "mr-3")} />
+                            {isSidebarOpen && <span>Settings</span>}
                         </Button>
                         <Button
                             variant="ghost"
-                            className="w-full justify-start h-9 text-destructive hover:text-destructive hover:bg-destructive/10"
+                            className={cn(
+                                "text-destructive hover:text-destructive hover:bg-destructive/10 transition-all duration-300",
+                                isSidebarOpen ? "w-full justify-start h-9 px-4" : "w-11 h-11 justify-center px-0 mx-auto flex mt-1"
+                            )}
+                            title={!isSidebarOpen ? "Logout" : undefined}
                             onClick={handleLogout}
                         >
-                            <LogOut className="w-4 h-4 mr-3" />
-                            Logout
+                            <LogOut className={cn("w-4 h-4 shrink-0", isSidebarOpen && "mr-3")} />
+                            {isSidebarOpen && <span>Logout</span>}
                         </Button>
                     </div>
                 </ScrollArea>
@@ -152,10 +187,18 @@ export default function AdminLayout({
             <MobileNav />
 
             {/* Main Content */}
-            <div className="flex-1 flex flex-col min-h-screen lg:pl-72 transition-all duration-300">
+            <div className={cn(
+                "flex-1 flex flex-col min-h-screen transition-all duration-300 w-full overflow-x-hidden",
+                isSidebarOpen ? "lg:pl-72" : "lg:pl-20"
+            )}>
                 {/* Desktop Header (Hidden on Mobile) */}
-                <header className="sticky top-0 z-40 w-full h-16 bg-background/80 backdrop-blur-md border-b border-border hidden lg:flex items-center justify-between px-8">
+                <header className="sticky top-0 z-40 w-full h-16 bg-background/80 backdrop-blur-md border-b border-border hidden lg:flex items-center justify-between px-6">
                     <div className="flex items-center gap-4">
+                        {!isSidebarOpen && (
+                            <Button variant="ghost" size="icon" onClick={() => setIsSidebarOpen(true)} className="text-muted-foreground hover:text-foreground">
+                                <Menu className="w-5 h-5" />
+                            </Button>
+                        )}
                         <div className="flex items-center text-sm text-muted-foreground">
                             <span className="hover:text-foreground cursor-pointer transition-colors">Admin</span>
                             <ChevronRight className="w-4 h-4 mx-2" />

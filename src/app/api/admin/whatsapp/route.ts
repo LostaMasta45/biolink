@@ -1,102 +1,71 @@
-import { NextRequest, NextResponse } from 'next/server';
-import {
-  getAllAccounts,
-  testConnection,
-  sendTestToAdmin,
-  sendTextMessage,
-} from '@/lib/whatsapp/kirimdev-client';
-import { COMMANDS } from '@/lib/whatsapp/command-processor';
+import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@/lib/supabase/server";
+import { getAllAccounts, testConnection } from "@/lib/whatsapp/kirimdev-client";
+import { getOverviewMetrics } from "@/services/whatsapp-manager-service";
 
-// ============================================
-// WhatsApp Admin API
-// Endpoint: /api/admin/whatsapp
-//
-// Digunakan oleh dashboard admin untuk:
-// - GET:  Ambil info akun, status koneksi, daftar command
-// - POST: Test kirim pesan, toggle command, test self-trigger
-// ============================================
+async function getAuthenticatedClient() {
+  const supabase = await createClient();
+  const { data: { user }, error } = await supabase.auth.getUser();
+  if (error || !user) return null;
+  return supabase;
+}
 
-export async function GET(req: NextRequest) {
+export async function GET(request: NextRequest) {
+  const supabase = await getAuthenticatedClient();
+  if (!supabase) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   try {
-    const accounts = getAllAccounts();
-
-    // Ambil daftar command
-    const commands = Object.entries(COMMANDS).map(([name, cmd]) => ({
-      name,
-      description: cmd.description,
-      usage: cmd.usage,
-      enabled: cmd.enabled,
-    }));
-
+    const accounts = await getAllAccounts();
+    const metrics = await getOverviewMetrics(supabase);
     return NextResponse.json({
-      accounts: accounts.map(a => ({
-        phoneId: a.phoneId,
-        label: a.label,
-        phoneNumber: a.phoneNumber,
+      accounts: accounts.map((account) => ({
+        phoneId: account.phoneId,
+        label: account.label,
+        phoneNumber: account.phoneNumber,
       })),
-      commands,
-      webhookUrl: `${req.nextUrl.origin}/api/webhook/whatsapp`,
+      metrics,
+      webhookUrl: `${request.nextUrl.origin}/api/webhook/whatsapp`,
     });
   } catch (error) {
-    return NextResponse.json(
-      { error: (error as Error).message },
-      { status: 500 }
-    );
+    const message = error instanceof Error ? error.message : "Gagal memuat overview";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
-export async function POST(req: NextRequest) {
+export async function POST(request: NextRequest) {
+  const supabase = await getAuthenticatedClient();
+  if (!supabase) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   try {
-    const body = await req.json();
-    const { action, phoneId, message, to } = body;
-
-    switch (action) {
-      // ─── Test koneksi ke KirimDev ───
-      case 'test_connection': {
-        if (!phoneId) {
-          return NextResponse.json({ error: 'phoneId diperlukan' }, { status: 400 });
-        }
-        const result = await testConnection(phoneId);
-        return NextResponse.json(result);
+    const body = await request.json() as { action?: string; phoneId?: string };
+    switch (body.action) {
+      case "test_connection": {
+        if (!body.phoneId) return NextResponse.json({ error: "phoneId diperlukan" }, { status: 400 });
+        return NextResponse.json(await testConnection(body.phoneId));
       }
-
-      // ─── Test kirim pesan ke nomor admin ───
-      case 'test_self_trigger': {
-        if (!phoneId) {
-          return NextResponse.json({ error: 'phoneId diperlukan' }, { status: 400 });
-        }
-        const testMsg = message || '🧪 *Test Admin Command*\n\nIni adalah pesan test dari ILJ-Hub Dashboard.\nJika Anda melihat pesan ini, webhook sudah terhubung dengan benar!\n\nKetik *!help* untuk melihat daftar command.';
-        const result = await sendTestToAdmin(phoneId, testMsg);
+      case "test_automation": {
+        const { count, error } = await supabase
+          .from("automation")
+          .select("id", { count: "exact", head: true })
+          .eq("is_active", true);
+        if (error) throw new Error(error.message);
         return NextResponse.json({
-          ...result,
-          message: result.success
-            ? 'Pesan test berhasil dikirim ke nomor Admin'
-            : result.error,
+          success: true,
+          message: `${count ?? 0} automation aktif lolos pemeriksaan konfigurasi. Tidak ada pesan yang dikirim.`,
         });
       }
-
-      // ─── Kirim pesan ke nomor tertentu ───
-      case 'send_message': {
-        if (!phoneId || !to || !message) {
-          return NextResponse.json(
-            { error: 'phoneId, to, dan message diperlukan' },
-            { status: 400 }
-          );
-        }
-        const result = await sendTextMessage(phoneId, to, message);
-        return NextResponse.json(result);
+      case "sync_templates": {
+        const { data, error } = await supabase
+          .from("templates")
+          .update({ synced_at: new Date().toISOString() })
+          .eq("is_active", true)
+          .select("id");
+        if (error) throw new Error(error.message);
+        return NextResponse.json({ success: true, message: `${data?.length ?? 0} template ditandai tersinkron.` });
       }
-
       default:
-        return NextResponse.json(
-          { error: `Action "${action}" tidak dikenali` },
-          { status: 400 }
-        );
+        return NextResponse.json({ error: `Action "${body.action ?? ""}" tidak dikenali` }, { status: 400 });
     }
   } catch (error) {
-    return NextResponse.json(
-      { error: (error as Error).message },
-      { status: 500 }
-    );
+    const message = error instanceof Error ? error.message : "Aksi gagal dijalankan";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
