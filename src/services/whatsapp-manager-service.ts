@@ -87,6 +87,7 @@ function parsePayload(resource: ManagerResource, payload: unknown): Record<strin
       const parsed = automationSchema.parse(payload);
       return {
         name: parsed.name,
+        phone_id: parsed.phone_id ?? null,
         trigger_type: parsed.trigger_type,
         condition_config: {
           field: parsed.condition_field,

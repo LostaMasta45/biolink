@@ -50,6 +50,7 @@ export interface WhatsAppTemplate {
 export interface AutomationRule {
   id: string;
   name: string;
+  phone_id: string | null;
   trigger_type: string;
   condition_config: Record<string, string>;
   action_type: string;

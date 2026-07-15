@@ -25,7 +25,7 @@ import { automationSchema, type AutomationFormValues } from "@/validation/whatsa
 const defaults: AutomationFormValues = {
   name: "", trigger_type: "Saat pesan masuk", condition_field: "keyword",
   condition_operator: "equals", condition_value: "", action_type: "Kirim template",
-  action_config_value: "", template_id: null, is_active: true,
+  action_config_value: "", template_id: null, is_active: true, phone_id: null,
 };
 
 export function AutomationManager() {
@@ -39,6 +39,9 @@ export function AutomationManager() {
   const actionType = useWatch({ control: form.control, name: "action_type" }) ?? defaults.action_type;
   const templateId = useWatch({ control: form.control, name: "template_id" });
   const active = useWatch({ control: form.control, name: "is_active" }) ?? true;
+  const phoneId = useWatch({ control: form.control, name: "phone_id" });
+  const settingsRes = useManagerResource<any>("settings");
+  const settings = settingsRes.data?.[0];
 
   useEffect(() => {
     if (!open) return;
@@ -53,6 +56,7 @@ export function AutomationManager() {
       action_config_value: editing.action_config.value ?? "",
       template_id: editing.template_id,
       is_active: editing.is_active,
+      phone_id: editing.phone_id,
     });
   }, [editing, form, open]);
 
@@ -99,6 +103,17 @@ export function AutomationManager() {
         <DialogContent className="max-w-2xl"><DialogHeader><DialogTitle>{editing ? "Edit Automation" : "Automation Baru"}</DialogTitle><DialogDescription>Automation hanya menyimpan konfigurasi dan tidak mengirim pesan dari browser.</DialogDescription></DialogHeader>
           <form onSubmit={submit} className="space-y-4">
             <div className="space-y-2"><Label htmlFor="automation-name">Nama</Label><Input id="automation-name" {...form.register("name")} />{form.formState.errors.name && <p className="text-xs text-destructive">{form.formState.errors.name.message}</p>}</div>
+            <div className="space-y-2">
+              <Label>Target Akun (Nomor Pengirim)</Label>
+              <Select value={phoneId ?? "none"} onValueChange={(value) => form.setValue("phone_id", value === "none" ? null : value)}>
+                <SelectTrigger><SelectValue placeholder="Pilih target akun" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Semua Nomor</SelectItem>
+                  {settings?.phone_id_admin && <SelectItem value={settings.phone_id_admin}>Admin Utama ({settings.phone_id_admin})</SelectItem>}
+                  {settings?.phone_id_bot && <SelectItem value={settings.phone_id_bot}>Akun Bot ({settings.phone_id_bot})</SelectItem>}
+                </SelectContent>
+              </Select>
+            </div>
             <div className="space-y-2"><Label>Trigger</Label><Select value={triggerType} onValueChange={(value) => form.setValue("trigger_type", value)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{AUTOMATION_TRIGGERS.map((trigger) => <SelectItem key={trigger} value={trigger}>{trigger}</SelectItem>)}</SelectContent></Select></div>
             <div className="grid gap-3 rounded-xl border p-4 sm:grid-cols-3"><div className="space-y-2"><Label>Field</Label><Input {...form.register("condition_field")} /></div><div className="space-y-2"><Label>Operator</Label><Select value={conditionOperator} onValueChange={(value) => form.setValue("condition_operator", value)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="equals">equals</SelectItem><SelectItem value="contains">contains</SelectItem><SelectItem value="not_equals">not equals</SelectItem></SelectContent></Select></div><div className="space-y-2"><Label>Value</Label><Input {...form.register("condition_value")} /></div></div>
             <div className="space-y-2"><Label>Action</Label><Select value={actionType} onValueChange={(value) => form.setValue("action_type", value)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{AUTOMATION_ACTIONS.map((action) => <SelectItem key={action} value={action}>{action}</SelectItem>)}</SelectContent></Select></div>

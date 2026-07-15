@@ -43,6 +43,7 @@ export const templateSchema = z.object({
 
 export const automationSchema = z.object({
   name: z.string().trim().min(2).max(100),
+  phone_id: z.string().nullable().optional(),
   trigger_type: z.string().trim().min(1),
   condition_field: z.string().trim().min(1),
   condition_operator: z.string().trim().min(1),
@@ -74,9 +75,9 @@ export const flowNodeSchema = z.object({
 });
 
 export const autoReplySchema = z.object({
-  keyword: z.string().trim().toLowerCase().min(2).max(100),
-  phone_id: z.string().trim().nullable().optional(),
-  template_id: z.string().uuid(),
+  phone_id: z.string().nullable().optional(),
+  keyword: z.string().trim().optional(),
+  template_id: z.string().uuid({ message: "Template wajib dipilih" }),
   flow_id: z.string().uuid().nullable().optional(),
   is_active: z.boolean(),
 });

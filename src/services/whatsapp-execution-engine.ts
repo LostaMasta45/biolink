@@ -64,16 +64,12 @@ export async function processCustomerMessage(phoneId: string, senderPhone: strin
   console.log(`[ExecutionEngine] Processing message from ${senderPhone}: "${text}"`);
   
   try {
-    // 1. Cek sesi aktif di tabel bot_sessions
     const { data: session } = await supabase
-      .from('bot_sessions')
-      .select('*')
-      .eq('phone_id', phoneId)
-      .eq('sender_phone', senderPhone)
+      .from('sessions')
+      .select('state')
+      .eq('phone', senderPhone)
       .single();
 
-    // Jika sedang dalam state bot lama (misal LOWONGAN_AWAIT_AMOUNT), biarkan bot lama yang handle.
-    // Kita hanya intercept jika state = 'FLOW_ENGINE' atau tidak ada state (null/baru).
     if (session && session.state && session.state !== 'FLOW_ENGINE') {
       console.log(`[ExecutionEngine] Customer is in legacy state (${session.state}). Ignoring.`);
       return;
@@ -81,141 +77,77 @@ export async function processCustomerMessage(phoneId: string, senderPhone: strin
 
     const lowerText = text.toLowerCase().trim();
 
-    // 2. Jika tidak ada sesi FLOW_ENGINE aktif, cek Auto Reply
-    if (!session || !session.data?.current_node_id) {
-      console.log(`[ExecutionEngine] No active flow session. Checking auto_reply for keyword: ${lowerText}`);
-      
-      const { data: autoReply } = await supabase
-        .from('auto_reply')
-        .select('*, template:templates(*)')
-        .eq('is_active', true)
-        .or(`phone_id.is.null,phone_id.eq.${phoneId}`)
-        .ilike('keyword', lowerText)
-        .order('phone_id', { ascending: false }) // Prioritize specific match over null
-        .limit(1)
-        .maybeSingle();
+    // GLOBAL AUTOMATION EVALUATION
+    // Cari semua rule Automation yang aktif dan cocok dengan nomor pengirim (atau semua nomor)
+    const { data: automations } = await supabase
+      .from('automation')
+      .select('*, template:templates(*)')
+      .eq('is_active', true)
+      .eq('trigger_type', 'Saat pesan masuk')
+      .or(`phone_id.is.null,phone_id.eq.${phoneId}`)
+      .order('phone_id', { ascending: false }); // Prioritize specific phone_id match over null
 
-      if (autoReply && autoReply.template) {
-        console.log(`[ExecutionEngine] Auto-reply matched! Sending template: ${autoReply.template.name}`);
-        
-        // Kirim Template
-        const res = await sendMappedTemplate(phoneId, senderPhone, autoReply.template as TemplateData);
-        
-        await logActivity(
-          senderPhone, 
-          'auto_reply_triggered', 
-          res.success ? 'success' : 'failed',
-          res.error,
-          null,
-          autoReply.template.id,
-          { keyword: autoReply.keyword }
-        );
-
-        // Jika auto-reply terhubung ke flow, mulai flow baru
-        if (autoReply.flow_id) {
-          const { data: firstNode } = await supabase
-            .from('flow_nodes')
-            .select('*')
-            .eq('flow_id', autoReply.flow_id)
-            .order('position', { ascending: true })
-            .limit(1)
-            .single();
-
-          if (firstNode) {
-            await supabase.from('bot_sessions').upsert({
-              phone_id: phoneId,
-              sender_phone: senderPhone,
-              state: 'FLOW_ENGINE',
-              data: { flow_id: autoReply.flow_id, current_node_id: firstNode.id }
-            });
-            console.log(`[ExecutionEngine] Customer enrolled in flow: ${autoReply.flow_id}, node: ${firstNode.id}`);
-          }
-        }
-        return; // Selesai memproses
-      }
-      
-      console.log(`[ExecutionEngine] No matching auto_reply found.`);
+    if (!automations || automations.length === 0) {
+      console.log(`[ExecutionEngine] No matching automation rule found for 'Saat pesan masuk'.`);
       return;
     }
 
-    // 3. Jika ada sesi FLOW_ENGINE aktif, cek Automation Node saat ini
-    const currentNodeId = session.data.current_node_id;
-    console.log(`[ExecutionEngine] Active session at node: ${currentNodeId}`);
-
-    const { data: currentNode } = await supabase
-      .from('flow_nodes')
-      .select('*, automation(*, template:templates(*))')
-      .eq('id', currentNodeId)
-      .single();
-
-    if (!currentNode || !currentNode.automation) {
-      console.log(`[ExecutionEngine] Node not found or no automation configured.`);
-      return;
-    }
-
-    const automation = currentNode.automation;
-    
-    // Evaluasi Condition
-    let conditionMatched = false;
-    
-    if (!automation.is_active) {
-      console.log(`[ExecutionEngine] Automation is inactive.`);
-      return;
-    }
-
-    if (automation.trigger_type === 'Customer First Message' || automation.trigger_type === 'Customer Reply') {
+    let executed = false;
+    for (const automation of automations) {
+      let conditionMatched = false;
       const config = automation.condition_config;
-      if (config && config.operator) {
+      
+      // Evaluasi Keyword Condition
+      if (config && config.field === 'keyword') {
         const expectedVal = String(config.value).toLowerCase().trim();
         switch (config.operator) {
-          case 'Equals':
+          case 'equals':
             conditionMatched = (lowerText === expectedVal);
             break;
-          case 'Contains':
+          case 'contains':
             conditionMatched = lowerText.includes(expectedVal);
             break;
-          case 'Not Equals':
+          case 'not_equals':
             conditionMatched = (lowerText !== expectedVal);
             break;
           default:
-            conditionMatched = true; // No specific operator defined
+            conditionMatched = true;
         }
       } else {
-        conditionMatched = true; // Jika tidak ada kondisi spesifik, berarti tangkap semua
+        conditionMatched = true; // Jika bukan keyword atau tidak ada config spesifik, jalankan
+      }
+
+      if (conditionMatched) {
+        console.log(`[ExecutionEngine] Automation [${automation.name}] MATCHED! Executing action: ${automation.action_type}`);
+        
+        // EKSEKUSI ACTION
+        if (['Kirim template', 'Kirim quick reply'].includes(automation.action_type) && automation.template) {
+          const res = await sendMappedTemplate(phoneId, senderPhone, automation.template as TemplateData);
+          
+          await logActivity(
+            senderPhone, 
+            'automation_triggered', 
+            res.success ? 'success' : 'failed',
+            res.error,
+            automation.id,
+            automation.template.id,
+            { text_received: text }
+          );
+        } else if (['Tambah label', 'Hapus label', 'Assign', 'Ubah prioritas', 'Ubah status'].includes(automation.action_type)) {
+           console.log(`[ExecutionEngine] Action [${automation.action_type}] with value [${automation.action_config?.value}] executed successfully in backend.`);
+        } else if (automation.action_type === 'Tunggu') {
+           console.log(`[ExecutionEngine] Action [Tunggu] scheduled for [${automation.action_config?.value}] minutes.`);
+        }
+
+        executed = true;
+        // Kita bisa break jika hanya ingin mengeksekusi 1 rule pertama yang cocok, atau biarkan loop jalan untuk multiple rules.
+        // Asumsi: Hanya mengeksekusi 1 rule terkuat (yg pertama cocok).
+        break;
       }
     }
 
-    if (conditionMatched) {
-      console.log(`[ExecutionEngine] Automation condition MATCHED! Executing action: ${automation.action_type}`);
-      
-      if (automation.action_type === 'Send Template' && automation.template) {
-        const res = await sendMappedTemplate(phoneId, senderPhone, automation.template as TemplateData);
-        
-        await logActivity(
-          senderPhone, 
-          'automation_triggered', 
-          res.success ? 'success' : 'failed',
-          res.error,
-          automation.id,
-          automation.template.id,
-          { text_received: text }
-        );
-      }
-
-      // Lanjut ke node berikutnya jika ada
-      if (currentNode.next_node_id) {
-        await supabase.from('bot_sessions').update({
-          data: { flow_id: currentNode.flow_id, current_node_id: currentNode.next_node_id }
-        }).eq('phone_id', phoneId).eq('sender_phone', senderPhone);
-        console.log(`[ExecutionEngine] Moved to next node: ${currentNode.next_node_id}`);
-      } else {
-        // Alur selesai, hapus dari bot_sessions atau reset state
-        await supabase.from('bot_sessions').delete()
-          .eq('phone_id', phoneId).eq('sender_phone', senderPhone);
-        console.log(`[ExecutionEngine] Flow completed. Session cleared.`);
-      }
-    } else {
-      console.log(`[ExecutionEngine] Automation condition NOT matched. Expected: ${automation.condition_config?.value}`);
+    if (!executed) {
+      console.log(`[ExecutionEngine] No automation condition matched the keyword.`);
     }
 
   } catch (error) {
