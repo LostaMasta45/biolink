@@ -114,6 +114,7 @@ function parsePayload(resource: ManagerResource, payload: unknown): Record<strin
         action_config: { value: parsed.action_config_value ?? "" },
         template_id: parsed.template_id ?? null,
         is_active: parsed.is_active,
+        phone_id: parsed.phone_id ?? null,
       };
     }
     case "flows":
