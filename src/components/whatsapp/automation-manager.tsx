@@ -115,7 +115,26 @@ export function AutomationManager() {
               </Select>
             </div>
             <div className="space-y-2"><Label>Trigger</Label><Select value={triggerType} onValueChange={(value) => form.setValue("trigger_type", value)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{AUTOMATION_TRIGGERS.map((trigger) => <SelectItem key={trigger} value={trigger}>{trigger}</SelectItem>)}</SelectContent></Select></div>
-            <div className="grid gap-3 rounded-xl border p-4 sm:grid-cols-3"><div className="space-y-2"><Label>Field</Label><Input {...form.register("condition_field")} /></div><div className="space-y-2"><Label>Operator</Label><Select value={conditionOperator} onValueChange={(value) => form.setValue("condition_operator", value)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="equals">equals</SelectItem><SelectItem value="contains">contains</SelectItem><SelectItem value="not_equals">not equals</SelectItem></SelectContent></Select></div><div className="space-y-2"><Label>Value</Label><Input {...form.register("condition_value")} /></div></div>
+            <div className="grid gap-3 rounded-xl border p-4 sm:grid-cols-3">
+              <div className="space-y-2">
+                <Label>Field</Label>
+                <Input {...form.register("condition_field")} />
+                {form.formState.errors.condition_field && <p className="text-xs text-destructive">{form.formState.errors.condition_field.message}</p>}
+              </div>
+              <div className="space-y-2">
+                <Label>Operator</Label>
+                <Select value={conditionOperator} onValueChange={(value) => form.setValue("condition_operator", value, { shouldValidate: true })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent><SelectItem value="equals">equals</SelectItem><SelectItem value="contains">contains</SelectItem><SelectItem value="not_equals">not equals</SelectItem></SelectContent>
+                </Select>
+                {form.formState.errors.condition_operator && <p className="text-xs text-destructive">{form.formState.errors.condition_operator.message}</p>}
+              </div>
+              <div className="space-y-2">
+                <Label>Value</Label>
+                <Input {...form.register("condition_value")} />
+                {form.formState.errors.condition_value && <p className="text-xs text-destructive">{form.formState.errors.condition_value.message}</p>}
+              </div>
+            </div>
             <div className="space-y-2"><Label>Action</Label><Select value={actionType} onValueChange={(value) => form.setValue("action_type", value)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{AUTOMATION_ACTIONS.map((action) => <SelectItem key={action} value={action}>{action}</SelectItem>)}</SelectContent></Select></div>
             
             {["Kirim template", "Kirim quick reply"].includes(actionType) && (
@@ -127,13 +146,14 @@ export function AutomationManager() {
                 )}
                 <div className="space-y-2">
                   <Label>Template</Label>
-                  <Select value={templateId ?? "none"} onValueChange={(value) => form.setValue("template_id", value === "none" ? null : value)}>
+                  <Select value={templateId ?? "none"} onValueChange={(value) => form.setValue("template_id", value === "none" ? null : value, { shouldValidate: true })}>
                     <SelectTrigger><SelectValue placeholder="Pilih template" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">Tanpa template</SelectItem>
                       {templates.data.map((template) => <SelectItem key={template.id} value={template.id}>{template.name}</SelectItem>)}
                     </SelectContent>
                   </Select>
+                  {form.formState.errors.template_id && <p className="text-xs text-destructive">{form.formState.errors.template_id.message}</p>}
                   {actionType === "Kirim quick reply" && <p className="text-xs text-muted-foreground mt-1">Hanya quick reply team-wide yang muncul. Snippet personal tidak bisa dipakai oleh rule otomasi.</p>}
                 </div>
               </div>
