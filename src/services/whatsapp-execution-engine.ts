@@ -81,13 +81,19 @@ export async function processCustomerMessage(phoneId: string, senderPhone: strin
     
     // GLOBAL AUTOMATION EVALUATION
     // Cari semua rule Automation yang aktif dan cocok dengan nomor pengirim (atau semua nomor)
-    const { data: automations, error: autoErr } = await supabase
+    let query = supabase
       .from('automation')
       .select('*, template:templates(*)')
       .eq('is_active', true)
-      .eq('trigger_type', 'Saat pesan masuk')
-      .or(`phone_id.is.null,phone_id.eq.${phoneId}`)
-      .order('phone_id', { ascending: false }); // Prioritize specific phone_id match over null
+      .eq('trigger_type', 'Saat pesan masuk');
+
+    if (phoneId) {
+      query = query.or(`phone_id.is.null,phone_id.eq.${phoneId}`);
+    } else {
+      query = query.is('phone_id', null);
+    }
+
+    const { data: automations, error: autoErr } = await query.order('phone_id', { ascending: false }); // Prioritize specific phone_id match over null
 
     if (autoErr) {
       console.error(`[ExecutionEngine] DB Error fetching automations:`, autoErr);
