@@ -18,7 +18,18 @@ import type { KirimDevWebhookPayload } from '@/lib/whatsapp/types';
 
 export async function POST(req: NextRequest) {
   try {
-    const payload: KirimDevWebhookPayload = await req.json();
+    const rawBody = await req.text();
+    let payload: KirimDevWebhookPayload;
+    try {
+      payload = JSON.parse(rawBody);
+    } catch (parseErr) {
+      console.error('[Webhook] ❌ JSON parse error:', parseErr);
+      return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
+    }
+
+    // Log raw payload structure for debugging (truncated)
+    const payloadKeys = Object.keys(payload);
+    console.log('[Webhook] 📦 Payload keys:', payloadKeys.join(', '), '| Has entry:', !!payload.entry, '| Has data:', !!(payload as any).data);
 
     // ─── Ekstrak data dari payload ───
     let eventName = payload.event;
@@ -53,7 +64,12 @@ export async function POST(req: NextRequest) {
           }
           phoneId = value.metadata?.phone_number_id || phoneId;
           toPhone = value.metadata?.display_phone_number || toPhone;
-          eventName = 'message.received'; // asumsikan ini pesan masuk
+          eventName = 'message.received';
+          console.log('[Webhook] 📋 Cloud API parsed | msgType:', msg.type, '| from:', senderPhone, '| phoneId:', phoneId);
+        } else if (value && value.statuses) {
+          console.log('[Webhook] ⏭️ Status event (not a message), ignoring');
+        } else {
+          console.log('[Webhook] ⚠️ Entry present but no messages[] or statuses[]');
         }
       }
     }
@@ -63,13 +79,14 @@ export async function POST(req: NextRequest) {
       const accounts = getAllAccounts();
       if (accounts.length > 0) {
         phoneId = accounts[0].phoneId;
+        console.log('[Webhook] 🔄 phoneId fallback to account[0]:', phoneId);
       }
     }
 
-    console.log('[Webhook] 📨 Event:', eventName, '| From:', senderPhone, '| To:', toPhone, '| PhoneID:', phoneId);
+    console.log('[Webhook] 📨 Event:', eventName, '| From:', senderPhone, '| Text:', text ? `"${String(text).substring(0, 50)}"` : '(empty)', '| PhoneID:', phoneId);
 
     if (!senderPhone || !text) {
-      // Bukan event pesan teks masuk, abaikan saja
+      console.log('[Webhook] ⏭️ No sender or text, skipping. senderPhone:', senderPhone, '| text:', text);
       return NextResponse.json({ status: 'ok', action: 'ignored_or_no_text' });
     }
 
@@ -79,9 +96,12 @@ export async function POST(req: NextRequest) {
     //  ROUTING LOGIC
     // ═══════════════════════════════════════════
 
+    const isAdmin = isAdminNumber(senderPhone);
+    console.log('[Webhook] 🔐 isAdmin:', isAdmin, '| senderPhone:', senderPhone);
+
     // CASE 1: ADMIN COMMAND & CONVERSATION STATE
-    if (isAdminNumber(senderPhone)) {
-      console.log('[Webhook] 🤖 Admin command detected:', text);
+    if (isAdmin) {
+      console.log('[Webhook] 🤖 Admin message:', `"${text.substring(0, 80)}"`);
 
       let accountLabel = 'Unknown';
       if (phoneId) {
@@ -102,10 +122,13 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ status: 'error', message: 'No phoneId available' }, { status: 500 });
       }
 
+      console.log('[Webhook] 🚀 Calling processCommand | phoneId:', phoneId, '| via:', accountLabel);
+
       try {
-        await processCommand(phoneId, senderPhone, text);
+        const result = await processCommand(phoneId, senderPhone, text);
+        console.log('[Webhook] ✅ processCommand result:', result);
       } catch (err) {
-        console.error('[Webhook] Command processing failed:', err);
+        console.error('[Webhook] ❌ Command processing failed:', err);
       }
 
       return NextResponse.json({
