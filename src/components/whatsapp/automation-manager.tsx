@@ -104,13 +104,13 @@ export function AutomationManager() {
           <form onSubmit={submit} className="space-y-4">
             <div className="space-y-2"><Label htmlFor="automation-name">Nama</Label><Input id="automation-name" {...form.register("name")} />{form.formState.errors.name && <p className="text-xs text-destructive">{form.formState.errors.name.message}</p>}</div>
             <div className="space-y-2">
-              <Label>Target Akun (Nomor Pengirim)</Label>
+              <Label>Target Akun (Nomor yang Dihubungi)</Label>
               <Select value={phoneId ?? "none"} onValueChange={(value) => form.setValue("phone_id", value === "none" ? null : value)}>
                 <SelectTrigger><SelectValue placeholder="Pilih target akun" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">Semua Nomor</SelectItem>
-                  {settings?.phone_id_admin && <SelectItem value={settings.phone_id_admin}>Admin Utama ({settings.phone_id_admin})</SelectItem>}
-                  {settings?.phone_id_bot && <SelectItem value={settings.phone_id_bot}>Akun Bot ({settings.phone_id_bot})</SelectItem>}
+                  {settings?.admin_phone_id && <SelectItem value={settings.admin_phone_id}>Admin Utama ({settings.admin_phone_number || settings.admin_phone_id})</SelectItem>}
+                  {settings?.bot_phone_id && <SelectItem value={settings.bot_phone_id}>Akun Bot ({settings.bot_phone_number || settings.bot_phone_id})</SelectItem>}
                 </SelectContent>
               </Select>
             </div>

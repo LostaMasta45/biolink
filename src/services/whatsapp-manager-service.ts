@@ -75,7 +75,23 @@ export async function listResource(
 
   const { data, error } = await query;
   if (error) throw new Error(error.message);
-  const rows = (data ?? []) as unknown[];
+  let rows = (data ?? []) as unknown[];
+  
+  if (resource === "settings" && rows.length === 0) {
+    rows = [{
+      api_key: process.env.KIRIMDEV_API_KEY || null,
+      admin_phone_id: process.env.KIRIMDEV_PHONE_ID || null,
+      admin_phone_number: process.env.KIRIMDEV_PHONE_NUMBER_1 || null,
+      bot_phone_id: process.env.KIRIMDEV_PHONE_ID_2 || null,
+      bot_phone_number: process.env.KIRIMDEV_PHONE_NUMBER_2 || null,
+      webhook_url: "",
+      timezone: "Asia/Jakarta",
+      retry_count: 3,
+      default_delay: 10,
+      debug_mode: true
+    }];
+  }
+
   return resource === "settings" ? maskSettings(rows) : rows;
 }
 

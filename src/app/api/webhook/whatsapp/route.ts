@@ -98,8 +98,10 @@ export async function POST(req: NextRequest) {
     text = String(text).trim();
 
     // ═══════════════════════════════════════════
-    //  ROUTING LOGIC
+    //  EXECUTION ENGINE (GLOBAL AUTOMATION)
     // ═══════════════════════════════════════════
+    // Jalankan ke semua pengirim (baik admin maupun customer) agar admin bisa mengetes Automation
+    await processCustomerMessage(phoneId, senderPhone, text);
 
     const isAdmin = await isAdminNumber(senderPhone);
     console.log('[Webhook] 🔐 isAdmin:', isAdmin, '| senderPhone:', senderPhone);
@@ -146,9 +148,6 @@ export async function POST(req: NextRequest) {
 
     // CASE 2: PESAN DARI CUSTOMER
     console.log('[Webhook] 👤 Customer message from:', senderPhone, '| Text:', text.substring(0, 50));
-
-    // Kirim pesan ke Execution Engine (WhatsApp Manager)
-    await processCustomerMessage(phoneId, senderPhone, text);
 
     return NextResponse.json({
       status: 'ok',
