@@ -114,8 +114,14 @@ export function TemplateManager() {
             </div>
             <div className="space-y-2"><Label>Jenis</Label><Select value={type} onValueChange={(value) => form.setValue("type", value as TemplateFormValues["type"], { shouldValidate: true })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{TEMPLATE_TYPES.map((item) => <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>)}</SelectContent></Select></div>
             
+            <div className="space-y-2">
+              <Label htmlFor="usage-context">Kapan dipakai (opsional)</Label>
+              <Input id="usage-context" placeholder="Mis. 'Saat pelanggan tanya cara order pertama kali — bukan untuk follow-up'" {...form.register("usage_context")} />
+              <p className="text-xs text-muted-foreground">Dipakai AI Agent untuk memilih snippet yang tepat saat beberapa snippet punya isi mirip. Tim juga lihat ini sebagai pengingat.</p>
+            </div>
+            
             {/* Opsi Header untuk tipe teks atau interaktif */}
-            {["text", "reply_button", "url_button", "list"].includes(type) && (
+            {["text", "reply_button", "url_button", "list", "carousel"].includes(type) && (
               <div className="space-y-2 rounded-xl border p-3">
                 <div className="flex items-center justify-between mb-2">
                   <Label>Header (Opsional)</Label>
@@ -141,13 +147,20 @@ export function TemplateManager() {
             {/* Opsi Media URL Khusus tipe Media Standar */}
             {["image", "video", "document"].includes(type) && <div className="space-y-2"><Label htmlFor="media-url">URL Media</Label><Input id="media-url" placeholder="https://..." {...form.register("media_url")} />{form.formState.errors.media_url && <p className="text-xs text-destructive">{form.formState.errors.media_url.message}</p>}</div>}
             
-            <div className="space-y-2"><Label htmlFor="template-body">{["image", "video", "document"].includes(type) ? "Caption / Body" : "Teks Utama (Body)"}</Label><Textarea id="template-body" rows={5} {...form.register("body")} />{form.formState.errors.body && <p className="text-xs text-destructive">{form.formState.errors.body.message}</p>}</div>
+            <div className="space-y-2"><Label htmlFor="template-body">{["image", "video", "document"].includes(type) ? "Caption / Body" : "Teks Utama / Isi Pesan"}</Label><Textarea id="template-body" rows={5} {...form.register("body")} />{form.formState.errors.body && <p className="text-xs text-destructive">{form.formState.errors.body.message}</p>}</div>
             
-            {["text", "reply_button", "url_button", "list"].includes(type) && <div className="space-y-2"><Label htmlFor="template-footer">Footer (Opsional)</Label><Input id="template-footer" placeholder="Teks kecil di bawah pesan..." {...form.register("footer")} /></div>}
+            {["text", "reply_button", "url_button", "list", "carousel"].includes(type) && <div className="space-y-2"><Label htmlFor="template-footer">Footer (Opsional)</Label><Input id="template-footer" placeholder="Teks kecil di bawah pesan..." {...form.register("footer")} /></div>}
 
             {["reply_button", "url_button"].includes(type) && <div className="space-y-3"><div className="flex items-center justify-between"><Label>Buttons</Label><Button type="button" size="sm" variant="outline" disabled={buttons.fields.length >= 3} onClick={() => buttons.append({ id: crypto.randomUUID(), label: "", url: "" })}><Plus />Tombol</Button></div>{buttons.fields.map((field, index) => <div key={field.id} className="grid gap-2 rounded-xl border p-3 sm:grid-cols-[1fr_1fr_auto]"><Input placeholder="Label" {...form.register(`buttons.${index}.label`)} />{type === "url_button" ? <Input placeholder="https://..." {...form.register(`buttons.${index}.url`)} /> : <div />}<Button type="button" variant="ghost" onClick={() => buttons.remove(index)}>Hapus</Button></div>)}{form.formState.errors.buttons?.root && <p className="text-xs text-destructive">{form.formState.errors.buttons.root.message}</p>}</div>}
 
             {type === "list" && <div className="space-y-3"><div className="flex items-center justify-between"><Label>Sections & Rows</Label><Button type="button" size="sm" variant="outline" onClick={() => sections.append({ title: "", rows: [{ id: crypto.randomUUID(), title: "", description: "" }] })}><Plus />Section</Button></div>{sections.fields.map((section, sectionIndex) => <div key={section.id} className="space-y-2 rounded-xl border p-3"><Input placeholder="Judul section" {...form.register(`sections.${sectionIndex}.title`)} />{watchedSections[sectionIndex]?.rows?.map((row, rowIndex) => <div key={row.id} className="grid gap-2 sm:grid-cols-2"><Input placeholder="Judul row" {...form.register(`sections.${sectionIndex}.rows.${rowIndex}.title`)} /><Input placeholder="Deskripsi" {...form.register(`sections.${sectionIndex}.rows.${rowIndex}.description`)} /></div>)}<div className="flex gap-2"><Button type="button" size="sm" variant="outline" onClick={() => { const current = form.getValues(`sections.${sectionIndex}.rows`) ?? []; form.setValue(`sections.${sectionIndex}.rows`, [...current, { id: crypto.randomUUID(), title: "", description: "" }]); }}>Tambah row</Button><Button type="button" size="sm" variant="ghost" onClick={() => sections.remove(sectionIndex)}>Hapus section</Button></div></div>)}</div>}
+            
+            {type === "carousel" && (
+              <div className="space-y-3 rounded-xl border p-4 bg-muted/20">
+                <p className="text-sm font-medium">Carousel Cards</p>
+                <p className="text-xs text-muted-foreground">Carousel membutuhkan API khusus atau konfigurasi lebih lanjut dari backend.</p>
+              </div>
+            )}
 
             <div className="flex items-center justify-between rounded-xl border p-3"><div><Label htmlFor="template-active">Template aktif</Label><p className="text-xs text-muted-foreground">Template nonaktif tidak dipakai automation.</p></div><Switch id="template-active" checked={active} onCheckedChange={(checked) => form.setValue("is_active", checked)} /></div>
             <DialogFooter><Button type="button" variant="outline" onClick={() => setOpen(false)}>Batal</Button><Button type="submit" disabled={form.formState.isSubmitting}>{form.formState.isSubmitting ? "Menyimpan..." : "Simpan"}</Button></DialogFooter>

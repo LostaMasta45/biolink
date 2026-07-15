@@ -23,9 +23,9 @@ import type { AutomationRule, WhatsAppTemplate } from "@/types/whatsapp-manager"
 import { automationSchema, type AutomationFormValues } from "@/validation/whatsapp-manager";
 
 const defaults: AutomationFormValues = {
-  name: "", trigger_type: "Customer First Message", condition_field: "keyword",
-  condition_operator: "equals", condition_value: "", action_type: "Send Template",
-  template_id: null, is_active: true,
+  name: "", trigger_type: "Saat pesan masuk", condition_field: "keyword",
+  condition_operator: "equals", condition_value: "", action_type: "Kirim template",
+  action_config_value: "", template_id: null, is_active: true,
 };
 
 export function AutomationManager() {
@@ -50,6 +50,7 @@ export function AutomationManager() {
       condition_operator: editing.condition_config.operator ?? "equals",
       condition_value: editing.condition_config.value ?? "",
       action_type: editing.action_type,
+      action_config_value: editing.action_config.value ?? "",
       template_id: editing.template_id,
       is_active: editing.is_active,
     });
@@ -101,7 +102,41 @@ export function AutomationManager() {
             <div className="space-y-2"><Label>Trigger</Label><Select value={triggerType} onValueChange={(value) => form.setValue("trigger_type", value)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{AUTOMATION_TRIGGERS.map((trigger) => <SelectItem key={trigger} value={trigger}>{trigger}</SelectItem>)}</SelectContent></Select></div>
             <div className="grid gap-3 rounded-xl border p-4 sm:grid-cols-3"><div className="space-y-2"><Label>Field</Label><Input {...form.register("condition_field")} /></div><div className="space-y-2"><Label>Operator</Label><Select value={conditionOperator} onValueChange={(value) => form.setValue("condition_operator", value)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="equals">equals</SelectItem><SelectItem value="contains">contains</SelectItem><SelectItem value="not_equals">not equals</SelectItem></SelectContent></Select></div><div className="space-y-2"><Label>Value</Label><Input {...form.register("condition_value")} /></div></div>
             <div className="space-y-2"><Label>Action</Label><Select value={actionType} onValueChange={(value) => form.setValue("action_type", value)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{AUTOMATION_ACTIONS.map((action) => <SelectItem key={action} value={action}>{action}</SelectItem>)}</SelectContent></Select></div>
-            {actionType === "Send Template" && <div className="space-y-2"><Label>Template</Label><Select value={templateId ?? "none"} onValueChange={(value) => form.setValue("template_id", value === "none" ? null : value)}><SelectTrigger><SelectValue placeholder="Pilih template" /></SelectTrigger><SelectContent><SelectItem value="none">Tanpa template</SelectItem>{templates.data.map((template) => <SelectItem key={template.id} value={template.id}>{template.name}</SelectItem>)}</SelectContent></Select></div>}
+            
+            {["Kirim template", "Kirim quick reply"].includes(actionType) && (
+              <div className="space-y-3">
+                {actionType === "Kirim quick reply" && (
+                  <div className="rounded-md border border-amber-500/50 bg-amber-500/10 p-3 text-sm text-amber-600 dark:text-amber-400">
+                    <span className="font-bold">Catatan:</span> Quick reply hanya bisa dikirim jika percakapan masih di dalam jendela 24 jam WhatsApp. Di luar jendela, aksi ini akan di-skip. Untuk pengiriman di luar jendela, tambahkan aksi <span className="font-bold">Kirim template</span> sebagai fallback.
+                  </div>
+                )}
+                <div className="space-y-2">
+                  <Label>Template</Label>
+                  <Select value={templateId ?? "none"} onValueChange={(value) => form.setValue("template_id", value === "none" ? null : value)}>
+                    <SelectTrigger><SelectValue placeholder="Pilih template" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Tanpa template</SelectItem>
+                      {templates.data.map((template) => <SelectItem key={template.id} value={template.id}>{template.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                  {actionType === "Kirim quick reply" && <p className="text-xs text-muted-foreground mt-1">Hanya quick reply team-wide yang muncul. Snippet personal tidak bisa dipakai oleh rule otomasi.</p>}
+                </div>
+              </div>
+            )}
+
+            {["Tambah label", "Hapus label", "Assign", "Ubah prioritas", "Ubah status", "Kirim notifikasi"].includes(actionType) && (
+              <div className="space-y-2">
+                <Label>{actionType}</Label>
+                <Input placeholder="Nilai..." {...form.register("action_config_value")} />
+              </div>
+            )}
+
+            {actionType === "Tunggu" && (
+              <div className="space-y-2">
+                <Label>Waktu Tunggu (Menit)</Label>
+                <Input type="number" placeholder="60" {...form.register("action_config_value")} />
+              </div>
+            )}
             <div className="flex items-center justify-between rounded-xl border p-3"><Label htmlFor="automation-active">Aktif</Label><Switch id="automation-active" checked={active} onCheckedChange={(checked) => form.setValue("is_active", checked)} /></div>
             <DialogFooter><Button type="button" variant="outline" onClick={() => setOpen(false)}>Batal</Button><Button type="submit" disabled={form.formState.isSubmitting}>{form.formState.isSubmitting ? "Menyimpan..." : "Simpan"}</Button></DialogFooter>
           </form>

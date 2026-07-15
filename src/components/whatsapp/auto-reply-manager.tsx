@@ -21,22 +21,25 @@ import { createManagerResource, deleteManagerResource, updateManagerResource } f
 import type { AutoReplyRule, CustomerFlow, WhatsAppTemplate } from "@/types/whatsapp-manager";
 import { autoReplySchema, type AutoReplyFormValues } from "@/validation/whatsapp-manager";
 
-const defaults: AutoReplyFormValues = { keyword: "", template_id: "", flow_id: null, is_active: true };
+const defaults: AutoReplyFormValues = { keyword: "", phone_id: null, template_id: "", flow_id: null, is_active: true };
 
 export function AutoReplyManager() {
   const rules = useManagerResource<AutoReplyRule>("auto_reply");
   const templates = useManagerResource<WhatsAppTemplate>("templates");
   const flows = useManagerResource<CustomerFlow>("flows");
+  const settingsReq = useManagerResource<any>("settings");
+  const settings = settingsReq.data?.[0];
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<AutoReplyRule | null>(null);
   const form = useForm<AutoReplyFormValues>({ resolver: zodResolver(autoReplySchema), defaultValues: defaults });
   const templateId = useWatch({ control: form.control, name: "template_id" }) ?? "";
   const flowId = useWatch({ control: form.control, name: "flow_id" });
+  const phoneId = useWatch({ control: form.control, name: "phone_id" });
   const active = useWatch({ control: form.control, name: "is_active" }) ?? true;
 
   useEffect(() => {
     if (!open) return;
-    form.reset(editing ? { keyword: editing.keyword, template_id: editing.template_id, flow_id: editing.flow_id, is_active: editing.is_active } : defaults);
+    form.reset(editing ? { keyword: editing.keyword, phone_id: editing.phone_id, template_id: editing.template_id, flow_id: editing.flow_id, is_active: editing.is_active } : defaults);
   }, [editing, form, open]);
 
   const submit = form.handleSubmit(async (values) => {
@@ -50,15 +53,16 @@ export function AutoReplyManager() {
     catch (deleteError) { toast.error(deleteError instanceof Error ? deleteError.message : "Gagal menghapus"); }
   };
 
-  if (rules.loading || templates.loading || flows.loading) return <ResourceLoading />;
-  if (rules.error || templates.error || flows.error) return <ResourceError message={rules.error ?? templates.error ?? flows.error ?? "Gagal memuat data"} />;
+  if (rules.loading || templates.loading || flows.loading || settingsReq.loading) return <ResourceLoading />;
+  if (rules.error || templates.error || flows.error || settingsReq.error) return <ResourceError message={rules.error ?? templates.error ?? flows.error ?? settingsReq.error ?? "Gagal memuat data"} />;
   return (
     <div className="space-y-6">
       <PageHeading title="Auto Reply" description="Entry point berbasis keyword pertama sebelum automation mengambil alih." icon={MessageCircleReply} action={<Button onClick={() => { setEditing(null); setOpen(true); }}><Plus />Keyword</Button>} />
-      {rules.data.length === 0 ? <EmptyState title="Belum ada keyword" description="Tambahkan keyword seperti halo, pasang loker, atau lowongan." /> : <div className="grid gap-3 max-w-full">{rules.data.map((rule) => <Card key={rule.id} className="rounded-xl border-border/60 overflow-hidden"><CardContent className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center max-w-full"><div className="flex flex-1 items-center gap-3 overflow-hidden"><div className="rounded-xl bg-primary/10 px-3 py-2 font-mono text-sm text-primary shrink-0">{rule.keyword}</div><ArrowRight className="h-4 w-4 text-muted-foreground shrink-0" /><div className="min-w-0 flex-1"><p className="font-medium truncate">{rule.template?.name ?? "Template tidak tersedia"}</p><p className="text-xs text-muted-foreground truncate">Masuk flow: {rule.flow?.name ?? "Tidak ditentukan"}</p></div></div><div className="shrink-0"><StatusBadge status={rule.is_active ? "active" : "inactive"} label={rule.is_active ? "Aktif" : "Nonaktif"} /></div><div className="flex shrink-0"><Button size="icon" variant="ghost" onClick={() => { setEditing(rule); setOpen(true); }}><Pencil /></Button><DeleteConfirmation label={rule.keyword} onConfirm={() => remove(rule.id)} /></div></CardContent></Card>)}</div>}
+      {rules.data.length === 0 ? <EmptyState title="Belum ada keyword" description="Tambahkan keyword seperti halo, pasang loker, atau lowongan." /> : <div className="grid gap-3 max-w-full">{rules.data.map((rule) => <Card key={rule.id} className="rounded-xl border-border/60 overflow-hidden"><CardContent className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center max-w-full"><div className="flex flex-1 items-center gap-3 overflow-hidden"><div className="rounded-xl bg-primary/10 px-3 py-2 font-mono text-sm text-primary shrink-0">{rule.keyword}</div><ArrowRight className="h-4 w-4 text-muted-foreground shrink-0" /><div className="min-w-0 flex-1"><p className="font-medium truncate">{rule.template?.name ?? "Template tidak tersedia"}</p><p className="text-xs text-muted-foreground truncate">Masuk flow: {rule.flow?.name ?? "Tidak ditentukan"} • Akun: {!rule.phone_id ? "Semua" : rule.phone_id === settings?.admin_phone_id ? "Admin Utama" : rule.phone_id === settings?.bot_phone_id ? "Bot" : rule.phone_id}</p></div></div><div className="shrink-0"><StatusBadge status={rule.is_active ? "active" : "inactive"} label={rule.is_active ? "Aktif" : "Nonaktif"} /></div><div className="flex shrink-0"><Button size="icon" variant="ghost" onClick={() => { setEditing(rule); setOpen(true); }}><Pencil /></Button><DeleteConfirmation label={rule.keyword} onConfirm={() => remove(rule.id)} /></div></CardContent></Card>)}</div>}
 
       <Dialog open={open} onOpenChange={setOpen}><DialogContent className="max-w-[95vw] sm:max-w-md overflow-hidden"><DialogHeader><DialogTitle>{editing ? "Edit Auto Reply" : "Keyword Baru"}</DialogTitle><DialogDescription>Keyword dinormalisasi menjadi huruf kecil dan hanya digunakan sebagai entry point.</DialogDescription></DialogHeader><form onSubmit={submit} className="space-y-4">
         <div className="space-y-2"><Label htmlFor="keyword">Keyword</Label><Input id="keyword" placeholder="halo" {...form.register("keyword")} />{form.formState.errors.keyword && <p className="text-xs text-destructive">{form.formState.errors.keyword.message}</p>}</div>
+        <div className="space-y-2"><Label>Target Akun (Nomor Pengirim)</Label><Select value={phoneId ?? "all"} onValueChange={(val) => form.setValue("phone_id", val === "all" ? null : val)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Semua Nomor</SelectItem>{settings?.admin_phone_id && <SelectItem value={settings.admin_phone_id}>Admin Utama ({settings.admin_phone_number || settings.admin_phone_id})</SelectItem>}{settings?.bot_phone_id && <SelectItem value={settings.bot_phone_id}>Akun Bot ({settings.bot_phone_number || settings.bot_phone_id})</SelectItem>}</SelectContent></Select></div>
         <div className="space-y-2"><Label>Template</Label><Select value={templateId} onValueChange={(value) => form.setValue("template_id", value, { shouldValidate: true })}><SelectTrigger><SelectValue placeholder="Pilih template" /></SelectTrigger><SelectContent>{templates.data.map((template) => <SelectItem key={template.id} value={template.id}>{template.name}</SelectItem>)}</SelectContent></Select></div>
         <div className="space-y-2"><Label>Flow</Label><Select value={flowId ?? "none"} onValueChange={(value) => form.setValue("flow_id", value === "none" ? null : value)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">Tidak ditentukan</SelectItem>{flows.data.map((flow) => <SelectItem key={flow.id} value={flow.id}>{flow.name}</SelectItem>)}</SelectContent></Select></div>
         <div className="flex items-center justify-between rounded-xl border p-3"><Label htmlFor="reply-active">Aktif</Label><Switch id="reply-active" checked={active} onCheckedChange={(checked) => form.setValue("is_active", checked)} /></div>

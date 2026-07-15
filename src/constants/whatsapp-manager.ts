@@ -23,13 +23,14 @@ export const WHATSAPP_NAV_ITEMS = [
 ] as const;
 
 export const TEMPLATE_TYPE_LABELS: Record<TemplateType, string> = {
-  text: "Text",
-  image: "Image",
+  text: "Teks",
+  image: "Gambar",
   video: "Video",
-  document: "Document",
-  reply_button: "Reply Button",
-  url_button: "URL Button",
-  list: "List Message",
+  document: "Dokumen",
+  reply_button: "Tombol balasan",
+  url_button: "Tombol URL",
+  list: "Daftar pilihan",
+  carousel: "Carousel",
 };
 
 export const TEMPLATE_TYPES = Object.entries(TEMPLATE_TYPE_LABELS).map(([value, label]) => ({
@@ -53,17 +54,25 @@ export const DEFAULT_FLOW_NODES = [
 ] as const;
 
 export const AUTOMATION_TRIGGERS = [
-  "Customer First Message",
-  "Flow Step Changed",
-  "Payment Success",
-  "Payment Failed",
-  "Message Delivered",
+  "Saat pesan masuk",
+  "Saat chat baru dimulai",
+  "Saat chat diselesaikan",
+  "Saat chat di-assign",
+  "Saat label ditambahkan",
+  "Saat 24-jam window hampir habis",
+  "Saat chat tidak aktif",
 ] as const;
 
 export const AUTOMATION_ACTIONS = [
-  "Send Template",
-  "Move Flow Step",
-  "Delay",
+  "Tambah label",
+  "Hapus label",
+  "Assign",
+  "Ubah prioritas",
+  "Ubah status",
+  "Kirim template",
+  "Kirim notifikasi",
+  "Kirim quick reply",
+  "Tunggu",
 ] as const;
 
 export const WEBHOOK_EVENTS = [

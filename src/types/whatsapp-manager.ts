@@ -5,7 +5,8 @@ export type TemplateType =
   | "document"
   | "reply_button"
   | "url_button"
-  | "list";
+  | "list"
+  | "carousel";
 
 export type ActivityStatus = "success" | "failed" | "pending";
 export type WebhookStatus = "success" | "failed" | "retry";
@@ -40,6 +41,7 @@ export interface WhatsAppTemplate {
   buttons: TemplateButton[];
   sections: TemplateSection[];
   is_active: boolean;
+  usage_context?: string | null;
   synced_at: string | null;
   created_at: string;
   updated_at: string;
@@ -86,6 +88,7 @@ export interface FlowNode {
 export interface AutoReplyRule {
   id: string;
   keyword: string;
+  phone_id: string | null;
   template_id: string;
   flow_id: string | null;
   is_active: boolean;

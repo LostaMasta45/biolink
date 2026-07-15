@@ -89,8 +89,11 @@ export async function processCustomerMessage(phoneId: string, senderPhone: strin
         .from('auto_reply')
         .select('*, template:templates(*)')
         .eq('is_active', true)
+        .or(`phone_id.is.null,phone_id.eq.${phoneId}`)
         .ilike('keyword', lowerText)
-        .single();
+        .order('phone_id', { ascending: false }) // Prioritize specific match over null
+        .limit(1)
+        .maybeSingle();
 
       if (autoReply && autoReply.template) {
         console.log(`[ExecutionEngine] Auto-reply matched! Sending template: ${autoReply.template.name}`);

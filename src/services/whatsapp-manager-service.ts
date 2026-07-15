@@ -52,12 +52,13 @@ export async function listResource(
   filters: URLSearchParams,
 ): Promise<unknown[]> {
   const resource = resourceSchema.parse(resourceInput);
+  const flowId = filters.get("flow_id");
+  if (flowId === "none" && resource === "flow_nodes") return [];
+
   let query = supabase
     .from(resource)
     .select(SELECTS[resource])
     .order(ORDER_COLUMNS[resource], { ascending: ASCENDING_RESOURCES.has(resource) });
-
-  const flowId = filters.get("flow_id");
   const status = filters.get("status");
   const automationId = filters.get("automation_id");
   const customer = filters.get("customer");
@@ -93,7 +94,7 @@ function parsePayload(resource: ManagerResource, payload: unknown): Record<strin
           value: parsed.condition_value,
         },
         action_type: parsed.action_type,
-        action_config: {},
+        action_config: { value: parsed.action_config_value ?? "" },
         template_id: parsed.template_id ?? null,
         is_active: parsed.is_active,
       };

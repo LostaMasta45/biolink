@@ -20,13 +20,14 @@ export const templateSectionSchema = z.object({
 export const templateSchema = z.object({
   name: z.string().trim().min(2, "Nama minimal 2 karakter").max(100),
   category: z.string().trim().min(2, "Kategori wajib diisi").max(60),
-  type: z.enum(["text", "image", "video", "document", "reply_button", "url_button", "list"]),
+  type: z.enum(["text", "image", "video", "document", "reply_button", "url_button", "list", "carousel"]),
   header: optionalText,
   body: z.string().trim().min(1, "Isi pesan wajib diisi").max(4096),
   footer: optionalText,
   media_url: z.string().url("URL media tidak valid").nullable().optional().or(z.literal("")),
   buttons: z.array(templateButtonSchema).max(3),
   sections: z.array(templateSectionSchema).max(10),
+  usage_context: optionalText,
   is_active: z.boolean(),
 }).superRefine((value, context) => {
   if (["image", "video", "document"].includes(value.type) && !value.media_url) {
@@ -47,11 +48,12 @@ export const automationSchema = z.object({
   condition_operator: z.string().trim().min(1),
   condition_value: z.string().trim().min(1),
   action_type: z.string().trim().min(1),
+  action_config_value: z.string().trim().optional(),
   template_id: z.string().uuid().nullable().optional(),
   is_active: z.boolean(),
 }).superRefine((value, context) => {
-  if (value.action_type === "Send Template" && !value.template_id) {
-    context.addIssue({ code: "custom", path: ["template_id"], message: "Template wajib dipilih untuk action Send Template" });
+  if (["Kirim template", "Kirim quick reply"].includes(value.action_type) && !value.template_id) {
+    context.addIssue({ code: "custom", path: ["template_id"], message: "Template wajib dipilih" });
   }
 });
 
@@ -73,6 +75,7 @@ export const flowNodeSchema = z.object({
 
 export const autoReplySchema = z.object({
   keyword: z.string().trim().toLowerCase().min(2).max(100),
+  phone_id: z.string().trim().nullable().optional(),
   template_id: z.string().uuid(),
   flow_id: z.string().uuid().nullable().optional(),
   is_active: z.boolean(),
