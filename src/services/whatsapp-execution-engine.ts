@@ -72,20 +72,27 @@ export async function processCustomerMessage(phoneId: string, senderPhone: strin
 
     if (session && session.state && session.state !== 'FLOW_ENGINE') {
       console.log(`[ExecutionEngine] Customer is in legacy state (${session.state}). Ignoring.`);
-      return;
+      // return; // COMMENT OUT RETURN SEMENTARA UNTUK TESTING
     }
 
     const lowerText = text.toLowerCase().trim();
 
+    console.log(`[ExecutionEngine] Querying automations for phoneId: ${phoneId}`);
     // GLOBAL AUTOMATION EVALUATION
     // Cari semua rule Automation yang aktif dan cocok dengan nomor pengirim (atau semua nomor)
-    const { data: automations } = await supabase
+    const { data: automations, error: autoErr } = await supabase
       .from('automation')
       .select('*, template:templates(*)')
       .eq('is_active', true)
       .eq('trigger_type', 'Saat pesan masuk')
       .or(`phone_id.is.null,phone_id.eq.${phoneId}`)
       .order('phone_id', { ascending: false }); // Prioritize specific phone_id match over null
+
+    if (autoErr) {
+      console.error(`[ExecutionEngine] DB Error fetching automations:`, autoErr);
+    }
+
+    console.log(`[ExecutionEngine] Found ${automations?.length || 0} active automation rules matching phoneId ${phoneId} (or null)`);
 
     if (!automations || automations.length === 0) {
       console.log(`[ExecutionEngine] No matching automation rule found for 'Saat pesan masuk'.`);
@@ -96,6 +103,7 @@ export async function processCustomerMessage(phoneId: string, senderPhone: strin
     for (const automation of automations) {
       let conditionMatched = false;
       const config = automation.condition_config;
+      console.log(`[ExecutionEngine] Evaluating rule: ${automation.name} | config:`, config);
       
       // Evaluasi Keyword Condition
       if (config && config.field === 'keyword') {
