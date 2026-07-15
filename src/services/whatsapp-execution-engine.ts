@@ -79,11 +79,6 @@ export async function processCustomerMessage(phoneId: string, senderPhone: strin
 
     console.log(`[ExecutionEngine] Querying automations for phoneId: ${phoneId}`);
     
-    // DEBUG FILE
-    const fs = require('fs');
-    const debugPath = 'webhook_debug.txt';
-    fs.appendFileSync(debugPath, `\n\n--- NEW MESSAGE ---\nTime: ${new Date().toISOString()}\nSender: ${senderPhone}\nPhoneId: ${phoneId}\nText: ${text}\n`);
-    
     // GLOBAL AUTOMATION EVALUATION
     // Cari semua rule Automation yang aktif dan cocok dengan nomor pengirim (atau semua nomor)
     const { data: automations, error: autoErr } = await supabase
@@ -96,18 +91,12 @@ export async function processCustomerMessage(phoneId: string, senderPhone: strin
 
     if (autoErr) {
       console.error(`[ExecutionEngine] DB Error fetching automations:`, autoErr);
-      fs.appendFileSync(debugPath, `DB ERROR: ${JSON.stringify(autoErr)}\n`);
     }
 
     console.log(`[ExecutionEngine] Found ${automations?.length || 0} active automation rules matching phoneId ${phoneId} (or null)`);
-    fs.appendFileSync(debugPath, `Found ${automations?.length || 0} rules.\n`);
-    if (automations) {
-      fs.appendFileSync(debugPath, `Rules DB: ${JSON.stringify(automations)}\n`);
-    }
 
     if (!automations || automations.length === 0) {
       console.log(`[ExecutionEngine] No matching automation rule found for 'Saat pesan masuk'.`);
-      fs.appendFileSync(debugPath, `Exiting early: no matching rules.\n`);
       return;
     }
 
@@ -116,7 +105,6 @@ export async function processCustomerMessage(phoneId: string, senderPhone: strin
       let conditionMatched = false;
       const config = automation.condition_config;
       console.log(`[ExecutionEngine] Evaluating rule: ${automation.name} | config:`, config);
-      fs.appendFileSync(debugPath, `Eval Rule: ${automation.name}, config: ${JSON.stringify(config)}\n`);
       
       // Evaluasi Keyword Condition
       if (config && config.field === 'keyword') {
@@ -140,13 +128,12 @@ export async function processCustomerMessage(phoneId: string, senderPhone: strin
 
       if (conditionMatched) {
         console.log(`[ExecutionEngine] Automation [${automation.name}] MATCHED! Executing action: ${automation.action_type}`);
-        fs.appendFileSync(debugPath, `Automation [${automation.name}] MATCHED! Executing action: ${automation.action_type}\n`);
         
         // EKSEKUSI ACTION
         if (['Kirim template', 'Kirim quick reply'].includes(automation.action_type) && automation.template) {
-          fs.appendFileSync(debugPath, `Sending template: ${automation.template.name}\n`);
+          console.log(`[ExecutionEngine] Sending template: ${automation.template.name}`);
           const res = await sendMappedTemplate(phoneId, senderPhone, automation.template as TemplateData);
-          fs.appendFileSync(debugPath, `sendMappedTemplate result: ${JSON.stringify(res)}\n`);
+          console.log(`[ExecutionEngine] sendMappedTemplate result: ${JSON.stringify(res)}`);
           
           await logActivity(
             senderPhone, 

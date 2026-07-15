@@ -20,6 +20,7 @@ import { processCustomerMessage, logWebhookEvent } from '@/services/whatsapp-exe
 export async function POST(req: NextRequest) {
   try {
     const rawBody = await req.text();
+    
     let payload: KirimDevWebhookPayload;
     try {
       payload = JSON.parse(rawBody);
