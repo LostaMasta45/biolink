@@ -289,13 +289,16 @@ export const COMMANDS: Record<string, Command> = {
     usage: '!buat_invoice',
     enabled: true,
     execute: async (phoneId, senderPhone) => {
-      // Set state to AWAIT_INV_TYPE
-      await supabase.from('bot_sessions').upsert({
+      // Hapus semua sesi lama untuk sender ini (agar tidak ada duplikat karena phoneId berbeda)
+      await supabase.from('bot_sessions').delete().eq('sender_phone', senderPhone);
+      // Insert sesi baru
+      await supabase.from('bot_sessions').insert({
         phone_id: phoneId,
         sender_phone: senderPhone,
         state: 'AWAIT_INV_TYPE',
         data: {}
-      }, { onConflict: 'phone_id,sender_phone' });
+      });
+      console.log(`[BotSession] ✅ Created session for ${senderPhone} | state=AWAIT_INV_TYPE | phoneId=${phoneId}`);
 
       await sendButtonMessage(
         phoneId, 
@@ -313,12 +316,15 @@ export const COMMANDS: Record<string, Command> = {
     usage: '!inv_lowongan',
     enabled: true,
     execute: async (phoneId, senderPhone) => {
-      await supabase.from('bot_sessions').upsert({
+      // Hapus semua sesi lama, lalu insert baru (menghindari duplikat karena phoneId berbeda)
+      await supabase.from('bot_sessions').delete().eq('sender_phone', senderPhone);
+      await supabase.from('bot_sessions').insert({
         phone_id: phoneId,
         sender_phone: senderPhone,
         state: 'LOWONGAN_AWAIT_NAME',
         data: { type: 'lowongan' }
-      }, { onConflict: 'phone_id,sender_phone' });
+      });
+      console.log(`[BotSession] ✅ Created session for ${senderPhone} | state=LOWONGAN_AWAIT_NAME | phoneId=${phoneId}`);
       await sendTextMessage(phoneId, senderPhone, '🏢 Masukkan *Nama Perusahaan/Klien*:');
     }
   },
@@ -327,12 +333,15 @@ export const COMMANDS: Record<string, Command> = {
     usage: '!inv_umum',
     enabled: true,
     execute: async (phoneId, senderPhone) => {
-      await supabase.from('bot_sessions').upsert({
+      // Hapus semua sesi lama, lalu insert baru (menghindari duplikat karena phoneId berbeda)
+      await supabase.from('bot_sessions').delete().eq('sender_phone', senderPhone);
+      await supabase.from('bot_sessions').insert({
         phone_id: phoneId,
         sender_phone: senderPhone,
         state: 'UMUM_AWAIT_NAME',
         data: { type: 'umum' }
-      }, { onConflict: 'phone_id,sender_phone' });
+      });
+      console.log(`[BotSession] ✅ Created session for ${senderPhone} | state=UMUM_AWAIT_NAME | phoneId=${phoneId}`);
       await sendTextMessage(phoneId, senderPhone, '🏢 Masukkan *Nama PT / Klien*:');
     }
   }
@@ -348,14 +357,21 @@ export async function processCommand(phoneId: string, senderPhone: string, text:
   // 1. Cek apakah ada sesi aktif di bot_sessions
   // Kita abaikan phoneId dari parameter saat mencari sesi, karena KirimDev terkadang tidak konsisten
   // mengirimkan phoneId untuk teks vs button.
-  const { data: sessions } = await supabase
+  const { data: sessions, error: sessionError } = await supabase
     .from('bot_sessions')
     .select('*')
     .eq('sender_phone', senderPhone)
-    .order('created_at', { ascending: false })
+    .order('updated_at', { ascending: false })
     .limit(1);
 
+  if (sessionError) {
+    console.error(`[BotSession] ❌ Error fetching session for ${senderPhone}:`, sessionError.message);
+  }
+
   const session = sessions && sessions.length > 0 ? sessions[0] : null;
+  if (session) {
+    console.log(`[BotSession] 📋 Found session for ${senderPhone} | state=${session.state} | phone_id=${session.phone_id}`);
+  }
 
   if (session && session.state !== 'IDLE' && !text.startsWith('!')) {
     // Kita berada dalam percakapan interaktif
@@ -373,7 +389,8 @@ export async function processCommand(phoneId: string, senderPhone: string, text:
 
   // Khusus untuk reset sesi
   if (commandName === '!cancel') {
-    await supabase.from('bot_sessions').delete().match({ sender_phone: senderPhone });
+    await supabase.from('bot_sessions').delete().eq('sender_phone', senderPhone);
+    console.log(`[BotSession] 🗑️ Session cancelled for ${senderPhone}`);
     await sendTextMessage(phoneId, senderPhone, '✅ Percakapan dibatalkan.');
     return true;
   }
@@ -414,10 +431,13 @@ export async function processCommand(phoneId: string, senderPhone: string, text:
 
 async function handleConversationState(phoneId: string, senderPhone: string, text: string, session: any): Promise<boolean> {
   const state = session.state;
+  const sessionPhoneId = session.phone_id; // phoneId yang tersimpan di sesi (bisa berbeda dari param phoneId)
   let data = session.data || {};
   let nextState = 'IDLE';
   let reply = '';
   const inputText = text.trim();
+
+  console.log(`[StateMachine] 🔄 Processing | state=${state} | input="${inputText.substring(0, 50)}" | phoneId(webhook)=${phoneId} | phoneId(session)=${sessionPhoneId}`);
 
   try {
     // === ALUR LOWONGAN ===
@@ -532,11 +552,21 @@ async function handleConversationState(phoneId: string, senderPhone: string, tex
       reply = '❌ Sesi tidak valid. Ketik *!cancel* untuk membatalkan.';
     }
 
-    // Update session state
+    // Update session state — gunakan sender_phone saja untuk match
+    // karena phoneId bisa berbeda antara text vs button webhook dari KirimDev
     if (nextState === 'IDLE') {
-      await supabase.from('bot_sessions').delete().match({ phone_id: phoneId, sender_phone: senderPhone });
+      await supabase.from('bot_sessions').delete().eq('sender_phone', senderPhone);
+      console.log(`[StateMachine] 🗑️ Session completed & deleted for ${senderPhone}`);
     } else {
-      await supabase.from('bot_sessions').update({ state: nextState, data }).match({ phone_id: phoneId, sender_phone: senderPhone });
+      const { error: updateError } = await supabase
+        .from('bot_sessions')
+        .update({ state: nextState, data, updated_at: new Date().toISOString() })
+        .eq('sender_phone', senderPhone);
+      if (updateError) {
+        console.error(`[StateMachine] ❌ Failed to update session for ${senderPhone}:`, updateError.message);
+      } else {
+        console.log(`[StateMachine] ✅ Session updated for ${senderPhone} | nextState=${nextState}`);
+      }
     }
 
     if (reply) {
