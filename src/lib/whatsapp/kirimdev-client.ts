@@ -212,6 +212,83 @@ export async function sendButtonMessage(
 }
 
 /**
+ * Kirim pesan CTA URL (Interactive) via KirimDev API
+ * 
+ * @param phoneId - Phone ID akun pengirim
+ * @param to - Nomor tujuan
+ * @param body - Teks utama
+ * @param displayText - Teks pada tombol URL
+ * @param url - URL tujuan tombol
+ * @param header - Opsional objek header (teks/media)
+ * @param footer - Opsional teks footer
+ */
+export async function sendCtaUrlMessage(
+  phoneId: string,
+  to: string,
+  body: string,
+  displayText: string,
+  url: string,
+  header?: { type: 'text' | 'image' | 'video' | 'document'; text?: string; link?: string },
+  footer?: string
+): Promise<{ success: boolean; error?: string }> {
+  const apiKey = await getDynamicApiKey();
+  if (!apiKey) {
+    return { success: false, error: 'KIRIMDEV_API_KEY belum dikonfigurasi' };
+  }
+
+  try {
+    const interactivePayload: any = {
+      type: 'cta_url',
+      body: { text: body },
+      action: {
+        name: 'cta_url',
+        parameters: {
+          display_text: displayText,
+          url: url
+        }
+      }
+    };
+
+    if (footer) {
+      interactivePayload.footer = { text: footer };
+    }
+
+    if (header) {
+      if (header.type === 'text' && header.text) {
+        interactivePayload.header = { type: 'text', text: header.text };
+      } else if (['image', 'video', 'document'].includes(header.type) && header.link) {
+        interactivePayload.header = { type: header.type, [header.type]: { link: header.link } };
+      }
+    }
+
+    const res = await fetch(`https://api.kirimdev.com/v1/${phoneId}/messages`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        to: normalizePhone(to),
+        type: 'interactive',
+        interactive: interactivePayload
+      }),
+    });
+
+    if (!res.ok) {
+      const errorText = await res.text();
+      console.error(`[KirimDev] Gagal kirim CTA URL via ${phoneId}:`, errorText);
+      return { success: false, error: errorText };
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    console.error(`[KirimDev] Exception pada sendCtaUrlMessage:`, err);
+    return { success: false, error: err.message };
+  }
+}
+
+/**
  * Kirim pesan List Menu (Interactive) via KirimDev API
  * 
  * @param phoneId - Phone ID akun pengirim

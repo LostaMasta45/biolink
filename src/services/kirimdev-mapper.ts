@@ -1,4 +1,4 @@
-import { sendTextMessage, sendButtonMessage, sendListMessage, sendMediaMessage, sendTemplateMessage } from '@/lib/whatsapp/kirimdev-client';
+import { sendTextMessage, sendButtonMessage, sendListMessage, sendMediaMessage, sendTemplateMessage, sendCtaUrlMessage } from '@/lib/whatsapp/kirimdev-client';
 
 export interface TemplateData {
   id: string;
@@ -62,15 +62,29 @@ export async function sendMappedTemplate(phoneId: string, to: string, template: 
         );
       }
       case 'url_button':
-        // Kirim.dev API tidak mendukung url_button secara native via interactive message tanpa pre-approved Meta Template.
-        // Sebagai fallback, kita gabungkan teks dan tampilkan URL-nya di dalam body.
-        let urlText = [template.header, template.body, template.footer].filter(Boolean).join('\n\n');
-        if (template.buttons && template.buttons.length > 0) {
-           template.buttons.forEach(btn => {
-             urlText += `\n\n🔗 ${btn.title}: ${btn.url}`;
-           });
+        if (!template.buttons || template.buttons.length === 0) {
+          return { success: false, error: 'Buttons are missing for url_button template' };
         }
-        return await sendTextMessage(phoneId, to, urlText);
+
+        let headerUrlObj: any = undefined;
+        if (template.media_url) {
+          const ext = template.media_url.split('.').pop()?.toLowerCase() || '';
+          const mediaType = ['mp4', 'avi', 'mov'].includes(ext) ? 'video' : ['pdf', 'doc', 'docx'].includes(ext) ? 'document' : 'image';
+          headerUrlObj = { type: mediaType, link: template.media_url };
+        } else if (template.header) {
+          headerUrlObj = { type: 'text', text: template.header };
+        }
+
+        const btnUrl = template.buttons[0]; // cta_url only supports 1 button natively
+        return await sendCtaUrlMessage(
+          phoneId,
+          to,
+          template.body,
+          btnUrl.title || btnUrl.label || 'Link',
+          btnUrl.url || 'https://google.com',
+          headerUrlObj,
+          template.footer || undefined
+        );
 
       case 'list': {
         if (!template.sections || template.sections.length === 0) {
