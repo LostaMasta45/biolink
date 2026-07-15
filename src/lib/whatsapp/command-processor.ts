@@ -469,12 +469,11 @@ async function handleConversationState(phoneId: string, senderPhone: string, tex
       });
 
       const payUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'https://infolokerjombang.net'}/pay/${orderId}`;
-      reply = `✅ *Invoice Lowongan Berhasil Dibuat!*\n\nID: ${orderId}\nKlien: ${data.customer_name}\nNominal: Rp ${data.amount.toLocaleString('id-ID')}\n\n_Pesan tagihan beserta Smart Link telah dikirim ke klien._`;
-      nextState = 'IDLE';
-
-      // Kirim ke Klien
+      
       const clientMsg = `Halo Kak ${data.customer_name} 👋\n\nBerikut adalah link Invoice untuk pemasangan *Loker Highlight* senilai *Rp ${data.amount.toLocaleString('id-ID')}*.\n\n🔗 ${payUrl}\n\nKlik link di atas untuk melihat detail tagihan dan *mengunduh PDF Invoice* secara otomatis.\n\nTerima kasih! 🙏`;
-      await sendTextMessage(phoneId, data.wa, clientMsg);
+      
+      reply = `✅ *Invoice Lowongan Berhasil Dibuat!*\n\nID: ${orderId}\nKlien: ${data.customer_name}\nNominal: Rp ${data.amount.toLocaleString('id-ID')}\n\n_Silakan forward pesan di bawah ini ke klien:_\n\n${clientMsg}`;
+      nextState = 'IDLE';
     }
     
     // === ALUR UMUM (LENGKAP) ===
@@ -538,15 +537,14 @@ async function handleConversationState(phoneId: string, senderPhone: string, tex
       });
 
       const payUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'https://infolokerjombang.net'}/pay/${orderId}`;
-      reply = `✅ *Invoice Lengkap Berhasil Dibuat!*\n\nID: ${orderId}\nTotal: Rp ${totalAmount.toLocaleString('id-ID')}\nStatus: *${status}*\n\n_Pesan tagihan telah dikirim ke klien._`;
-      nextState = 'IDLE';
-
-      // Kirim ke klien
+      
       let clientMsg = `Halo Kak ${data.customer_name} 👋\n\nBerikut adalah link Invoice untuk *${data.package_name}* senilai *Rp ${totalAmount.toLocaleString('id-ID')}*.\n\n🔗 ${payUrl}\n\nKlik link di atas untuk melihat rincian tagihan dan *mengunduh PDF Invoice*.`;
       if (isLunas) {
         clientMsg = `Halo Kak ${data.customer_name} 👋\n\nTerima kasih, pembayaran Anda untuk *${data.package_name}* senilai *Rp ${totalAmount.toLocaleString('id-ID')}* telah kami terima (LUNAS).\n\nAnda dapat mengunduh bukti PDF Invoice melalui link berikut:\n🔗 ${payUrl}`;
       }
-      await sendTextMessage(phoneId, data.wa, clientMsg);
+
+      reply = `✅ *Invoice Lengkap Berhasil Dibuat!*\n\nID: ${orderId}\nTotal: Rp ${totalAmount.toLocaleString('id-ID')}\nStatus: *${status}*\n\n_Silakan forward pesan di bawah ini ke klien:_\n\n${clientMsg}`;
+      nextState = 'IDLE';
     }
     else {
       reply = '❌ Sesi tidak valid. Ketik *!cancel* untuk membatalkan.';
