@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { auditApiSend } from "@/services/whatsapp-audit-service";
+import { emitNotification } from "@/services/whatsapp-notification-service";
 
 function getSupabase() {
     return createClient(
@@ -44,83 +44,6 @@ async function sendTelegramWithPhoto(photoUrl: string, caption: string) {
         }
     } catch (err) {
         console.error("Telegram notification failed:", err);
-    }
-}
-
-// Send Telegram text notification (server-side)
-async function sendTelegramText(text: string) {
-    const botToken = process.env.TELEGRAM_BOT_TOKEN;
-    const chatId = process.env.TELEGRAM_ADMIN_CHAT_ID;
-
-    if (!botToken || !chatId) return;
-
-    try {
-        await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                chat_id: chatId,
-                text,
-                parse_mode: "HTML",
-                disable_web_page_preview: true,
-            }),
-        });
-    } catch (err) {
-        console.error("Telegram notification failed:", err);
-    }
-}
-
-// Send WhatsApp confirmation to customer using Kirimdev API (text message fallback)
-async function sendWhatsappConfirmation(phoneNumber: string, customerName: string, companyName: string) {
-    const apiKey = process.env.KIRIMDEV_API_KEY;
-    const phoneId = process.env.KIRIMDEV_PHONE_ID;
-
-    if (!apiKey || !phoneId || !phoneNumber) return;
-
-    // Format phone number
-    let formattedPhone = phoneNumber.replace(/[^0-9]/g, '');
-    if (formattedPhone.startsWith('0')) {
-        formattedPhone = '62' + formattedPhone.substring(1);
-    } else if (!formattedPhone.startsWith('62')) {
-        formattedPhone = '62' + formattedPhone;
-    }
-
-    try {
-        const res = await fetch(`https://api.kirimdev.com/v1/${phoneId}/messages`, {
-            method: "POST",
-            headers: {
-                "Authorization": `Bearer ${apiKey}`,
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-                messaging_product: "whatsapp",
-                to: formattedPhone,
-                type: "text",
-                text: {
-                    body: `Halo ${customerName} 👋\n\nPoster lowongan *${companyName}* sudah kami terima! ✅\n\nTim kami akan segera memproses dan menjadwalkan posting sesuai paket yang Anda pilih.\n\nTerima kasih telah mempercayakan InfoLokerJombang! 🙏\n\n— Admin InfoLokerJombang`
-                }
-            }),
-        });
-
-        const responseText = await res.text();
-        await auditApiSend({
-            customer: formattedPhone,
-            senderPhoneId: phoneId,
-            messageType: "text",
-            success: res.ok,
-            httpStatus: res.status,
-            latencyMs: 0,
-            error: res.ok ? undefined : responseText,
-            source: "poster_upload_confirmation_legacy",
-            response: responseText.slice(0, 2000),
-        });
-        if (!res.ok) {
-            console.error("WhatsApp confirmation failed:", responseText);
-        } else {
-            console.log("WhatsApp poster confirmation sent to", formattedPhone);
-        }
-    } catch (err) {
-        console.error("WhatsApp confirmation error:", err);
     }
 }
 
@@ -263,13 +186,22 @@ ${poster_urls.length > 1 ? `\n🖼️ <b>Jumlah Poster:</b> ${poster_urls.length
             }
         }
 
-        // Send WhatsApp confirmation to customer
+        // Send WhatsApp confirmation through Notification Center
         if (postingEntry.whatsapp_number) {
-            await sendWhatsappConfirmation(
-                postingEntry.whatsapp_number,
-                customerName,
-                companyName
-            );
+            const notification = await emitNotification({
+                eventKey: "poster.received.customer",
+                customerPhone: postingEntry.whatsapp_number,
+                dedupeId: postingEntry.order_id || String(postingEntry.id),
+                variables: {
+                    customer_name: customerName,
+                    company_name: companyName,
+                    package_name: packageName,
+                    order_id: postingEntry.order_id || "-",
+                    poster_count: poster_urls.length,
+                    scheduled_date: postingEntry.scheduled_date || "-",
+                },
+            });
+            if (notification.status === "failed") console.error("WhatsApp poster confirmation failed:", notification.error);
         }
 
         return NextResponse.json({

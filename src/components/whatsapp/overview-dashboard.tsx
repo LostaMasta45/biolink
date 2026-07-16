@@ -10,6 +10,7 @@ import {
   Server,
   MessageCircleReply,
   Bot,
+  BellRing,
   Clock3,
   ShieldAlert,
   UserRoundCheck,
@@ -53,6 +54,10 @@ const emptyMetrics: OverviewMetrics = {
   webhookEventsToday: 0,
   skippedToday: 0,
   activeHandovers: 0,
+  activeNotificationRules: 0,
+  notificationQueue: 0,
+  notificationFailedToday: 0,
+  activeBotCommands: 0,
 };
 
 export function OverviewDashboard() {
@@ -122,6 +127,10 @@ export function OverviewDashboard() {
     { label: "Gagal Hari Ini", value: data.metrics.failedJobsToday, icon: ShieldAlert },
     { label: "Handover Aktif", value: data.metrics.activeHandovers, icon: UserRoundCheck },
     { label: "Dilewati Hari Ini", value: data.metrics.skippedToday, icon: ShieldAlert },
+    { label: "Rule Notifikasi", value: data.metrics.activeNotificationRules, icon: MessageCircleReply },
+    { label: "Antrean Notifikasi", value: data.metrics.notificationQueue, icon: Clock3 },
+    { label: "Notif Gagal Hari Ini", value: data.metrics.notificationFailedToday, icon: ShieldAlert },
+    { label: "Command Bot", value: data.metrics.activeBotCommands, icon: Bot },
   ];
 
   return (
@@ -167,6 +176,7 @@ export function OverviewDashboard() {
           <Button variant="outline" onClick={() => runAction("sync_templates")} disabled={Boolean(running)}><FileText />Sync Template</Button>
           <Button variant="outline" onClick={() => runAction("test_auto_reply")} disabled={Boolean(running)}><MessageCircleReply />Periksa Auto Reply</Button>
           <Button variant="outline" onClick={() => runAction("process_auto_reply_queue")} disabled={Boolean(running)}><Clock3 />Proses Antrean</Button>
+          <Button variant="outline" onClick={() => runAction("process_notification_queue")} disabled={Boolean(running)}><BellRing />Proses Notifikasi</Button>
           <Button variant="outline" onClick={() => runAction("send_test_to_admin")} disabled={Boolean(running) || data.accounts.length < 2}><Bot />Tes Bot → Admin</Button>
         </CardContent>
       </Card>

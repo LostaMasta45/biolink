@@ -63,3 +63,5 @@ Catatan insiden, tutorial pengujian, SOP customer service, troubleshooting, dan 
 Implementasi prioritas 1–6, durable queue, audit log API/webhook, upgrade Overview, migration, dan prosedur tes dua nomor tersedia di [16-implementation-automation-v2-dan-audit-log.md](./16-implementation-automation-v2-dan-audit-log.md).
 
 Matriks field pesan KirimDev/Meta, UX form per tipe, carousel, media header, read receipt, dan migration v3 tersedia di [17-template-message-kirimdev-meta.md](./17-template-message-kirimdev-meta.md).
+
+Notification Center, copywriting event payment/invoice/poster, antrean notifikasi, routing Admin Utama/Bot, command menu, keamanan command, migration, dan tutorial tes tersedia di [18-notification-center-dan-admin-bot.md](./18-notification-center-dan-admin-bot.md).

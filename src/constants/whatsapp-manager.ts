@@ -5,6 +5,8 @@ import {
   GitBranch,
   LayoutDashboard,
   MessageCircleReply,
+  BellRing,
+  Bot,
   Settings,
   Webhook,
 } from "lucide-react";
@@ -13,8 +15,10 @@ import type { TemplateType } from "@/types/whatsapp-manager";
 export const WHATSAPP_NAV_ITEMS = [
   { href: "/admin/whatsapp", label: "Overview", icon: LayoutDashboard },
   { href: "/admin/whatsapp/flow-builder", label: "Flow Builder", icon: GitBranch },
-  { href: "/admin/whatsapp/templates", label: "Templates", icon: FileText },
+  { href: "/admin/whatsapp/templates", label: "Pesan Tersimpan", icon: FileText },
   { href: "/admin/whatsapp/auto-reply", label: "Auto Reply", icon: MessageCircleReply },
+  { href: "/admin/whatsapp/notifications", label: "Notification Center", icon: BellRing },
+  { href: "/admin/whatsapp/commands", label: "Bot Commands", icon: Bot },
   { href: "/admin/whatsapp/logs", label: "Logs", icon: Activity },
   { href: "/admin/whatsapp/webhook", label: "Webhook", icon: Webhook },
   { href: "/admin/whatsapp/settings", label: "Settings", icon: Settings },

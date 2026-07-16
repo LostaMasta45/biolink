@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   getAccountByPhone,
-  getAccountByPhoneId,
   getAllAccounts,
   isAdminNumber,
   markMessageAsRead,
@@ -195,6 +194,31 @@ export async function POST(req: NextRequest) {
       if (!receipt.success) console.warn("[Webhook] Mark as read gagal:", receipt.error);
     }
   }
+
+  const accounts = await getAllAccounts();
+  const botAccount = accounts[1];
+  const senderIsAdmin = await isAdminNumber(inbound.senderPhone);
+
+  // Command dan jawaban state-machine hanya boleh melalui Admin Utama -> Bot.
+  if (senderIsAdmin) {
+    if (!botAccount?.phoneId || phoneId !== botAccount.phoneId) {
+      await writeWebhookLog("incoming", "admin_command.wrong_account", "success", { event_id: eventId, phone_id: phoneId });
+      return NextResponse.json({ status: "ok", action: "admin_command_ignored", reason: "commands_must_be_sent_to_bot" });
+    }
+    try {
+      const handled = await processCommand(phoneId, inbound.senderPhone, text);
+      return NextResponse.json({ status: "ok", type: "admin_command", handled, command: text.split(/\s+/)[0], via: botAccount.label });
+    } catch (error) {
+      console.error("[Webhook] Command processing failed:", error);
+      return NextResponse.json({ status: "error", action: "admin_command_failed" }, { status: 500 });
+    }
+  }
+
+  // Nomor Bot tidak melayani customer; seluruh customer service tetap melalui Admin Utama.
+  if (botAccount?.phoneId && phoneId === botAccount.phoneId) {
+    return NextResponse.json({ status: "ok", action: "ignored_customer_on_admin_bot" });
+  }
+
   const execution = await processCustomerMessage(phoneId, inbound.senderPhone, text, { eventId });
 
   if (execution.status === "failed") {
@@ -235,22 +259,6 @@ export async function POST(req: NextRequest) {
       reason: execution.reason,
     }, Date.now() - startedAt);
     return NextResponse.json({ status: "ok", action: "auto_reply_skipped", reason: execution.reason });
-  }
-
-  // Pesan admin yang bukan keyword tetap diteruskan ke command processor lama.
-  if (await isAdminNumber(inbound.senderPhone)) {
-    const account = phoneId ? await getAccountByPhoneId(phoneId) : undefined;
-    try {
-      await processCommand(phoneId, inbound.senderPhone, text);
-    } catch (error) {
-      console.error("[Webhook] Command processing failed:", error);
-    }
-    return NextResponse.json({
-      status: "ok",
-      type: "admin_command",
-      command: text.split(/\s+/)[0],
-      via: account?.label ?? "Unknown",
-    });
   }
 
   return NextResponse.json({ status: "ok", type: "customer", action: "no_keyword_match" });

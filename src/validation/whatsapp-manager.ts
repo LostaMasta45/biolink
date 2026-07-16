@@ -156,6 +156,41 @@ export const settingsSchema = z.object({
   show_typing_indicator: z.boolean(),
 });
 
+export const notificationRuleSchema = z.object({
+  event_key: z.string().trim().regex(/^[a-z0-9_.-]+$/, "Event key hanya boleh huruf kecil, angka, titik, garis bawah, atau strip").max(100),
+  name: z.string().trim().min(2).max(100),
+  description: optionalText,
+  recipient_type: z.enum(["customer", "admin", "custom"]),
+  custom_recipient: optionalText,
+  sender_role: z.enum(["admin", "bot"]),
+  template_id: z.string().uuid("Pilih Pesan Tersimpan").nullable().optional(),
+  is_active: z.boolean(),
+  delay_seconds: z.number().int().min(0).max(86400),
+  max_attempts: z.number().int().min(1).max(10),
+  dedupe_window_seconds: z.number().int().min(1).max(604800),
+  variable_defaults: z.record(z.string(), z.string()),
+}).superRefine((value, context) => {
+  if (value.recipient_type === "custom" && !value.custom_recipient?.replace(/\D/g, "")) {
+    context.addIssue({ code: "custom", path: ["custom_recipient"], message: "Nomor tujuan wajib diisi" });
+  }
+  if (value.recipient_type === "admin" && value.sender_role !== "bot") {
+    context.addIssue({ code: "custom", path: ["sender_role"], message: "Notifikasi ke Admin Utama wajib dikirim oleh Bot" });
+  }
+});
+
+export const botCommandSchema = z.object({
+  command: z.string().trim().regex(/^![a-z0-9_]+$/, "Command harus seperti !rekap"),
+  aliases: z.array(z.string().trim().regex(/^![a-z0-9_]+$/)).max(10),
+  category: z.string().trim().min(2).max(50),
+  description: z.string().trim().min(2).max(160),
+  usage: z.string().trim().min(2).max(160),
+  handler_key: z.string().trim().min(1).max(80),
+  is_active: z.boolean(),
+  show_in_menu: z.boolean(),
+  admin_only: z.literal(true),
+  sort_order: z.number().int().min(0).max(10000),
+});
+
 export const resourceSchema = z.enum([
   "templates",
   "automation",
@@ -164,6 +199,9 @@ export const resourceSchema = z.enum([
   "auto_reply",
   "logs",
   "webhook_logs",
+  "notification_rules",
+  "notification_jobs",
+  "bot_commands",
   "settings",
 ]);
 
@@ -172,3 +210,5 @@ export type AutomationFormValues = z.input<typeof automationSchema>;
 export type FlowFormValues = z.input<typeof flowSchema>;
 export type AutoReplyFormValues = z.input<typeof autoReplySchema>;
 export type SettingsFormValues = z.input<typeof settingsSchema>;
+export type NotificationRuleFormValues = z.input<typeof notificationRuleSchema>;
+export type BotCommandFormValues = z.input<typeof botCommandSchema>;

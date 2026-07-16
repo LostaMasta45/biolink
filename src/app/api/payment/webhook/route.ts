@@ -2,15 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import type { KlikQRISWebhookPayload } from "@/lib/payment-types";
 import { getTodayWIB, getTomorrowWIB, generateInvoiceNumber } from "@/lib/utils";
-import { sendNotifToAdmin } from "@/lib/whatsapp/kirimdev-client";
-import { auditApiSend } from "@/services/whatsapp-audit-service";
-
-interface PaymentNotificationOrder {
-    amount: number;
-    customer_name?: string;
-    package_name?: string;
-    order_id: string;
-}
+import { emitNotification, formatRupiahValue } from "@/services/whatsapp-notification-service";
 
 function getSupabase() {
     return createClient(
@@ -39,77 +31,6 @@ async function sendTelegramNotification(text: string) {
         });
     } catch (err) {
         console.error("Telegram notification failed:", err);
-    }
-}
-
-// Send WhatsApp notification using Kirimdev API
-async function sendWhatsappNotification(phoneNumber: string, order: PaymentNotificationOrder) {
-    const apiKey = process.env.KIRIMDEV_API_KEY;
-    const phoneId = process.env.KIRIMDEV_PHONE_ID;
-
-    if (!apiKey || !phoneId || !phoneNumber) {
-        console.warn("KIRIMDEV credentials not set or phone number missing.");
-        return;
-    }
-
-    // Format phone number to start with 62 (without +)
-    let formattedPhone = phoneNumber.replace(/[^0-9]/g, '');
-    if (formattedPhone.startsWith('0')) {
-        formattedPhone = '62' + formattedPhone.substring(1);
-    } else if (!formattedPhone.startsWith('62')) {
-        formattedPhone = '62' + formattedPhone;
-    }
-    const totalFormatted = order.amount.toLocaleString("id-ID");
-    
-    try {
-        const res = await fetch(`https://api.kirimdev.com/v1/${phoneId}/messages`, {
-            method: "POST",
-            headers: { 
-                "Authorization": `Bearer ${apiKey}`,
-                "Content-Type": "application/json" 
-            },
-            body: JSON.stringify({
-                messaging_product: "whatsapp",
-                to: formattedPhone,
-                type: "template",
-                template: {
-                    name: "invoice_pembayaran",
-                    language: { code: "id" },
-                    components: [
-                        {
-                            type: "body",
-                            parameters: [
-                                { type: "text", text: order.customer_name || 'Pelanggan' },
-                                { type: "text", text: order.package_name || 'Paket Anda' },
-                                { type: "text", text: totalFormatted },
-                                { type: "text", text: order.order_id }
-                            ]
-                        }
-                    ]
-                }
-            }),
-        });
-
-        const responseText = await res.text();
-        await auditApiSend({
-            customer: formattedPhone,
-            senderPhoneId: phoneId,
-            messageType: "template",
-            success: res.ok,
-            httpStatus: res.status,
-            latencyMs: 0,
-            error: res.ok ? undefined : responseText,
-            source: "payment_success_customer_legacy",
-            correlationId: String(order.order_id ?? ""),
-            response: responseText.slice(0, 2000),
-        });
-        if (!res.ok) {
-            console.error("WhatsApp notification failed:", responseText);
-        } else {
-            console.log("WhatsApp notification sent successfully to", formattedPhone);
-        }
-    } catch (err) {
-        console.error("WhatsApp notification error:", err);
     }
 }
 
@@ -166,13 +87,20 @@ export async function POST(request: Request) {
                 .update(updateData)
                 .eq("order_id", data.order_id);
                 
-            // === WhatsApp Notification to Admin ===
-            try {
-                const notifMsg = `✅ *PEMBAYARAN BERHASIL!* 🎉\n\nUang sejumlah *Rp ${(data.amount_paid || order.total_amount).toLocaleString('id-ID')}* telah masuk via QRIS.\n\n*Klien:* ${order.customer_name} (${order.customer_company})\n*Layanan:* ${order.package_name}\n*Order ID:* ${data.order_id}\n\nLayanan sudah masuk antrean posting (Draft). Cek dashboard untuk memproses poster.`;
-                await sendNotifToAdmin(notifMsg);
-            } catch (waErr) {
-                console.error("WA Notif Failed:", waErr);
-            }
+            const paidAmount = data.amount_paid || order.total_amount || order.amount;
+            const notificationVariables = {
+                customer_name: order.customer_name || "Pelanggan",
+                company_name: order.customer_company || "-",
+                package_name: order.package_name || "Paket Anda",
+                amount: formatRupiahValue(paidAmount),
+                order_id: data.order_id,
+            };
+            const adminNotification = await emitNotification({
+                eventKey: "payment.paid.admin",
+                variables: notificationVariables,
+                dedupeId: data.order_id,
+            });
+            if (adminNotification.status === "failed") console.error("WA admin notification failed:", adminNotification.error);
 
             // Auto-sync to finance (transactions table)
             try {
@@ -313,8 +241,13 @@ ${order.addon_names?.length > 0 ? `➕ <b>Add-on:</b> ${order.addon_names.join("
 
             await sendTelegramNotification(telegramMessage);
 
-            // Send WhatsApp notification to Customer
-            await sendWhatsappNotification(order.customer_whatsapp, order);
+            const customerNotification = await emitNotification({
+                eventKey: "payment.paid.customer",
+                customerPhone: order.customer_whatsapp,
+                variables: notificationVariables,
+                dedupeId: data.order_id,
+            });
+            if (customerNotification.status === "failed") console.error("WA customer notification failed:", customerNotification.error);
 
         } else if (webhookStatus === "EXPIRED") {
             // === PAYMENT EXPIRED ===

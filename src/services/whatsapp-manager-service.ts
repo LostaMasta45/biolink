@@ -4,8 +4,10 @@ import { normalizeAutoReplyKeyword } from "@/lib/whatsapp/auto-reply-keyword";
 import {
   autoReplySchema,
   automationSchema,
+  botCommandSchema,
   flowNodeSchema,
   flowSchema,
+  notificationRuleSchema,
   resourceSchema,
   settingsSchema,
   templateSchema,
@@ -23,6 +25,9 @@ const SELECTS: Record<ManagerResource, string> = {
   logs: "*, automation:automation(id,name), template:templates(id,name)",
   webhook_logs: "*",
   settings: "*",
+  notification_rules: "*, template:templates(id,name,type)",
+  notification_jobs: "*, rule:notification_rules(id,name), template:templates(id,name,type)",
+  bot_commands: "*",
 };
 
 const ORDER_COLUMNS: Record<ManagerResource, string> = {
@@ -34,9 +39,12 @@ const ORDER_COLUMNS: Record<ManagerResource, string> = {
   logs: "created_at",
   webhook_logs: "created_at",
   settings: "updated_at",
+  notification_rules: "event_key",
+  notification_jobs: "created_at",
+  bot_commands: "sort_order",
 };
 
-const ASCENDING_RESOURCES = new Set<ManagerResource>(["flow_nodes", "auto_reply"]);
+const ASCENDING_RESOURCES = new Set<ManagerResource>(["flow_nodes", "auto_reply", "notification_rules", "bot_commands"]);
 
 function maskSettings(rows: unknown[]): unknown[] {
   return rows.map((row) => {
@@ -74,7 +82,11 @@ export async function listResource(
   if (from && (resource === "logs" || resource === "webhook_logs")) query = query.gte("created_at", from);
   if (to && (resource === "logs" || resource === "webhook_logs")) query = query.lte("created_at", to);
   if (eventType && (resource === "logs" || resource === "webhook_logs")) query = query.eq("event_type", eventType);
-  if (resource === "logs" || resource === "webhook_logs") query = query.limit(250);
+  if (status && resource === "notification_jobs") query = query.eq("status", status);
+  if (eventType && resource === "notification_jobs") query = query.eq("event_key", eventType);
+  if (from && resource === "notification_jobs") query = query.gte("created_at", from);
+  if (to && resource === "notification_jobs") query = query.lte("created_at", to);
+  if (resource === "logs" || resource === "webhook_logs" || resource === "notification_jobs") query = query.limit(250);
 
   const { data, error } = await query;
   if (error) throw new Error(error.message);
@@ -161,8 +173,13 @@ function parsePayload(resource: ManagerResource, payload: unknown): Record<strin
     }
     case "settings":
       return settingsSchema.parse(payload);
+    case "notification_rules":
+      return notificationRuleSchema.parse(payload);
+    case "bot_commands":
+      return botCommandSchema.parse(payload);
     case "logs":
     case "webhook_logs":
+    case "notification_jobs":
       throw new Error(`${resource} bersifat read-only dari dashboard`);
   }
 }
@@ -216,7 +233,7 @@ export async function updateResource(
   input: unknown,
 ): Promise<unknown> {
   const resource = resourceSchema.parse(resourceInput);
-  if (resource === "logs" || resource === "webhook_logs") {
+  if (resource === "logs" || resource === "webhook_logs" || resource === "notification_jobs") {
     throw new Error(`${resource} bersifat read-only dari dashboard`);
   }
   const parsed = parsePayload(resource, input);
@@ -233,7 +250,7 @@ export async function deleteResource(
   id: string,
 ): Promise<void> {
   const resource = resourceSchema.parse(resourceInput);
-  if (resource === "logs" || resource === "webhook_logs" || resource === "settings") {
+  if (resource === "logs" || resource === "webhook_logs" || resource === "notification_jobs" || resource === "settings") {
     throw new Error(`${resource} tidak dapat dihapus dari dashboard`);
   }
   const { error } = await supabase.from(resource).delete().eq("id", id);
@@ -263,6 +280,10 @@ export async function getOverviewMetrics(supabase: SupabaseClient): Promise<Over
     webhookTodayResult,
     skippedResult,
     handoverResult,
+    notificationRulesResult,
+    notificationQueueResult,
+    notificationFailedResult,
+    botCommandsResult,
   ] = await Promise.all([
     exactCount(supabase, "auto_reply"),
     exactCount(supabase, "templates"),
@@ -277,8 +298,13 @@ export async function getOverviewMetrics(supabase: SupabaseClient): Promise<Over
     supabase.from("webhook_logs").select("id", { count: "exact", head: true }).gte("created_at", today.toISOString()),
     supabase.from("logs").select("id", { count: "exact", head: true }).eq("status", "skipped").gte("created_at", today.toISOString()),
     supabase.from("whatsapp_handover_sessions").select("customer", { count: "exact", head: true }).gt("expires_at", new Date().toISOString()),
+    supabase.from("notification_rules").select("id", { count: "exact", head: true }).eq("is_active", true),
+    supabase.from("notification_jobs").select("id", { count: "exact", head: true }).in("status", ["queued", "retry", "processing"]),
+    supabase.from("notification_jobs").select("id", { count: "exact", head: true }).eq("status", "failed").gte("created_at", today.toISOString()),
+    supabase.from("bot_commands").select("id", { count: "exact", head: true }).eq("is_active", true),
   ]);
 
+  const optionalTables = [notificationRulesResult, notificationQueueResult, notificationFailedResult, botCommandsResult];
   const results = [activeResult, triggerResult, successResult, webhookResult, queuedResult, failedJobsResult, apiMessagesResult, webhookTodayResult, skippedResult, handoverResult];
   const failedQuery = results.find((result) => result.error);
   if (failedQuery?.error) throw new Error(failedQuery.error.message);
@@ -304,5 +330,9 @@ export async function getOverviewMetrics(supabase: SupabaseClient): Promise<Over
     webhookEventsToday: webhookTodayResult.count ?? 0,
     skippedToday: skippedResult.count ?? 0,
     activeHandovers: handoverResult.count ?? 0,
+    activeNotificationRules: optionalTables[0].error ? 0 : notificationRulesResult.count ?? 0,
+    notificationQueue: optionalTables[1].error ? 0 : notificationQueueResult.count ?? 0,
+    notificationFailedToday: optionalTables[2].error ? 0 : notificationFailedResult.count ?? 0,
+    activeBotCommands: optionalTables[3].error ? 0 : botCommandsResult.count ?? 0,
   };
 }

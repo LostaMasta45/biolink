@@ -1,11 +1,66 @@
-import { sendTextMessage, sendButtonMessage } from './kirimdev-client';
+import { getDynamicAccounts, sendTextMessage, sendButtonMessage, sendListMessage } from './kirimdev-client';
 import { createClient } from '@supabase/supabase-js';
+import { sendMappedTemplate, type TemplateData } from '@/services/kirimdev-mapper';
+import { emitNotification, formatRupiahValue } from '@/services/whatsapp-notification-service';
 
 // Setup Supabase admin client for server-side logic (bypasses RLS if service key is used, or works if public)
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
+
+interface BotCommandRow {
+  command: string;
+  aliases: string[];
+  category: string;
+  description: string;
+  usage: string;
+  handler_key: string;
+  is_active: boolean;
+  show_in_menu: boolean;
+  sort_order: number;
+}
+
+function commandTableMissing(error: { code?: string; message?: string } | null): boolean {
+  return Boolean(error && (error.code === '42P01' || error.code === 'PGRST205' || error.message?.includes('bot_commands')));
+}
+
+async function getConfiguredCommands(): Promise<BotCommandRow[] | null> {
+  const { data, error } = await supabase.from('bot_commands').select('command,aliases,category,description,usage,handler_key,is_active,show_in_menu,sort_order').order('sort_order');
+  if (commandTableMissing(error)) return null;
+  if (error) throw new Error(`Konfigurasi command gagal dibaca: ${error.message}`);
+  return (data ?? []) as BotCommandRow[];
+}
+
+async function resolveCommandName(input: string): Promise<{ commandName: string; enabled: boolean } | null> {
+  const configured = await getConfiguredCommands();
+  if (!configured) {
+    const aliases: Record<string, string> = { '!menu': '!help', '!rekapan': '!rekap' };
+    return { commandName: aliases[input] ?? input, enabled: true };
+  }
+  const row = configured.find((item) => item.command === input || item.aliases.includes(input));
+  if (!row) return null;
+  const handlerMap: Record<string, string> = { menu: '!menu', cancel: '!cancel' };
+  return { commandName: handlerMap[row.handler_key] ?? `!${row.handler_key}`, enabled: row.is_active };
+}
+
+async function sendCommandMenu(phoneId: string, senderPhone: string): Promise<void> {
+  const configured = await getConfiguredCommands();
+  const visible = configured
+    ? configured.filter((item) => item.is_active && item.show_in_menu)
+    : Object.entries(COMMANDS).filter(([name, command]) => command.enabled && !['!help', '!stats', '!inv_lowongan', '!inv_umum'].includes(name)).map(([command, item], index) => ({ command, aliases: [], category: 'Command', description: item.description, usage: item.usage, handler_key: command.slice(1), is_active: true, show_in_menu: true, sort_order: index }));
+  const grouped = new Map<string, BotCommandRow[]>();
+  for (const item of visible) grouped.set(item.category, [...(grouped.get(item.category) ?? []), item]);
+  const sections = Array.from(grouped.entries()).slice(0, 10).map(([title, commands]) => ({
+    title: title.slice(0, 24),
+    rows: commands.slice(0, 10).map((item) => ({ id: item.command, title: item.command.slice(0, 24), description: item.description.slice(0, 72) })),
+  }));
+  const result = await sendListMessage(phoneId, senderPhone, 'Pilih command yang ingin dijalankan. Menu ini hanya dapat digunakan oleh Admin Utama.', 'Buka Menu', sections, { type: 'text', text: 'ILJ-Hub Admin Bot' }, 'Admin Utama → Bot', { source: 'admin_bot_menu' });
+  if (!result.success) {
+    const text = visible.map((item) => `*${item.command}* — ${item.description}\nContoh: ${item.usage}`).join('\n\n');
+    await sendTextMessage(phoneId, senderPhone, `🤖 *ILJ-Hub Admin Bot*\n\n${text}`, { source: 'admin_bot_menu_fallback' });
+  }
+}
 
 // ============================================
 // WhatsApp Command System
@@ -24,14 +79,14 @@ export const COMMANDS: Record<string, Command> = {
     usage: '!help',
     enabled: true,
     execute: async (phoneId, senderPhone) => {
-      const activeCmds = Object.entries(COMMANDS)
-        .filter(([_, cmd]) => cmd.enabled)
-        .map(([name, cmd]) => `*${name}*\n${cmd.description}`)
-        .join('\n\n');
-        
-      const reply = `🤖 *ILJ-Hub Admin Bot*\n\nBerikut daftar command yang tersedia:\n\n${activeCmds}`;
-      await sendTextMessage(phoneId, senderPhone, reply);
+      await sendCommandMenu(phoneId, senderPhone);
     }
+  },
+  '!menu': {
+    description: 'Membuka menu command interaktif',
+    usage: '!menu',
+    enabled: true,
+    execute: sendCommandMenu,
   },
   
   '!rekap': {
@@ -148,9 +203,13 @@ export const COMMANDS: Record<string, Command> = {
       const nominal = data.amount || 0;
       const payUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'https://infolokerjombang.net'}/pay/${orderId}`;
 
-      // Pesan ke klien
-      const clientMsg = `Halo Kak ${data.customer_name} 👋\n\nSekadar mengingatkan bahwa tagihan untuk layanan *${data.package_name}* senilai *Rp ${nominal.toLocaleString('id-ID')}* belum dibayarkan.\n\nSilakan selesaikan pembayaran Anda melalui link berikut:\n🔗 ${payUrl}\n\nJika sudah membayar, mohon abaikan pesan ini. Terima kasih! 🙏`;
-      await sendTextMessage(phoneId, wa, clientMsg);
+      const notification = await emitNotification({
+        eventKey: 'invoice.reminder.customer',
+        customerPhone: wa,
+        dedupeId: `${orderId}:${Math.floor(Date.now() / 3600000)}`,
+        variables: { customer_name: data.customer_name, package_name: data.package_name, amount: formatRupiahValue(nominal), order_id: orderId, payment_url: payUrl },
+      });
+      if (notification.status === 'failed') throw new Error(notification.error);
 
       // Konfirmasi ke admin
       await sendTextMessage(phoneId, senderPhone, `🔔 _Pesan pengingat pembayaran telah berhasil dikirim ke ${data.customer_name} (${wa})._`);
@@ -238,9 +297,13 @@ export const COMMANDS: Record<string, Command> = {
       const adminReply = `✅ *Invoice Berhasil Dibuat!*\nID: ${orderId}\nNominal: Rp ${nominal.toLocaleString('id-ID')}\nLink: ${payUrl}\n\n_Sedang mengirim link ke ${wa}..._`;
       await sendTextMessage(phoneId, senderPhone, adminReply);
 
-      // Kirim pesan tagihan ke Klien dari Bot
-      const clientMsg = `Halo! 👋\n\nBerikut adalah link tagihan Anda untuk layanan *${layanan}* senilai *Rp ${nominal.toLocaleString('id-ID')}*.\n\nKlik link berikut untuk melakukan pembayaran (Mendukung QRIS, e-Wallet, dll):\n🔗 ${payUrl}\n\nTerima kasih! 🙏`;
-      await sendTextMessage(phoneId, wa, clientMsg);
+      const notification = await emitNotification({
+        eventKey: 'invoice.created.customer',
+        customerPhone: wa,
+        dedupeId: orderId,
+        variables: { customer_name: 'Kak', package_name: layanan, amount: formatRupiahValue(nominal), order_id: orderId, payment_url: payUrl },
+      });
+      if (notification.status === 'failed') throw new Error(notification.error);
     }
   },
   '!template': {
@@ -251,18 +314,18 @@ export const COMMANDS: Record<string, Command> = {
       const action = args[0]?.toLowerCase();
 
       if (action === 'list') {
-        const { data, error } = await supabase.from('whatsapp_templates').select('code, name');
+        const { data, error } = await supabase.from('templates').select('id,name,type').eq('is_active', true).order('name').limit(20);
         if (error || !data) {
           await sendTextMessage(phoneId, senderPhone, `❌ Gagal memuat template: ${error?.message || 'DB Error'}`);
           return;
         }
-        const list = data.map(d => `- *${d.code}* (${d.name})`).join('\n');
-        await sendTextMessage(phoneId, senderPhone, `📋 *Daftar Template:*\n\n${list}\n\n_Kirim template dengan: !template kirim [KODE] [NOMOR_WA]_`);
+        const list = data.map(d => `- *${String(d.id).slice(0, 8)}* — ${d.name} (${d.type})`).join('\n');
+        await sendTextMessage(phoneId, senderPhone, `📋 *Pesan Tersimpan:*\n\n${list}\n\n_Kirim dengan: !template kirim [8 digit ID] [NOMOR_WA]_`);
         return;
       }
 
       if (action === 'kirim') {
-        const code = args[1]?.toUpperCase();
+        const code = args[1]?.toLowerCase();
         const wa = args[2]?.replace(/[^0-9]/g, '');
 
         if (!code || !wa) {
@@ -270,19 +333,51 @@ export const COMMANDS: Record<string, Command> = {
           return;
         }
 
-        const { data, error } = await supabase.from('whatsapp_templates').select('content').eq('code', code).single();
+        const { data: candidates, error } = await supabase.from('templates').select('*').eq('is_active', true);
+        const data = (candidates ?? []).find((item) => String(item.id).toLowerCase().startsWith(code));
         if (error || !data) {
           await sendTextMessage(phoneId, senderPhone, `❌ Template dengan kode *${code}* tidak ditemukan.`);
           return;
         }
 
-        await sendTextMessage(phoneId, wa, data.content);
+        const accounts = await getDynamicAccounts();
+        if (!accounts[0]?.phoneId) throw new Error('Akun Admin Utama belum dikonfigurasi');
+        const result = await sendMappedTemplate(accounts[0].phoneId, wa, data as TemplateData, { source: 'admin_bot_saved_message', templateId: data.id });
+        if (!result.success) throw new Error(result.error ?? 'Pesan gagal dikirim');
         await sendTextMessage(phoneId, senderPhone, `✅ Template *${code}* berhasil dikirim ke ${wa}.`);
         return;
       }
 
       await sendTextMessage(phoneId, senderPhone, '❌ Aksi tidak valid. Gunakan: *!template list* atau *!template kirim*');
     }
+  },
+  '!notif': {
+    description: 'Melihat status Notification Center',
+    usage: '!notif status',
+    enabled: true,
+    execute: async (phoneId, senderPhone) => {
+      const [{ count: active }, { count: queued }, { count: failed }] = await Promise.all([
+        supabase.from('notification_rules').select('id', { count: 'exact', head: true }).eq('is_active', true),
+        supabase.from('notification_jobs').select('id', { count: 'exact', head: true }).in('status', ['queued', 'retry', 'processing']),
+        supabase.from('notification_jobs').select('id', { count: 'exact', head: true }).eq('status', 'failed').gte('created_at', new Date(Date.now() - 86400000).toISOString()),
+      ]);
+      await sendTextMessage(phoneId, senderPhone, `🔔 *Notification Center*\n\nRule aktif: *${active ?? 0}*\nAntrean: *${queued ?? 0}*\nGagal 24 jam: *${failed ?? 0}*\n\nBuka dashboard untuk mengubah copywriting dan aturan.`);
+    },
+  },
+  '!gagal': {
+    description: 'Melihat pengiriman gagal terbaru',
+    usage: '!gagal',
+    enabled: true,
+    execute: async (phoneId, senderPhone) => {
+      const { data, error } = await supabase.from('notification_jobs').select('event_key,recipient,last_error,created_at').eq('status', 'failed').order('created_at', { ascending: false }).limit(5);
+      if (error) throw new Error(error.message);
+      if (!data?.length) {
+        await sendTextMessage(phoneId, senderPhone, '✅ Tidak ada pengiriman Notification Center yang gagal.');
+        return;
+      }
+      const rows = data.map((item, index) => `${index + 1}. *${item.event_key}* → ${item.recipient}\n${item.last_error || 'Error tidak diketahui'}`).join('\n\n');
+      await sendTextMessage(phoneId, senderPhone, `❌ *Pengiriman Gagal Terbaru*\n\n${rows}`);
+    },
   },
   '!buat_invoice': {
     description: 'Memulai form interaktif pembuatan invoice',
@@ -383,9 +478,13 @@ export async function processCommand(phoneId: string, senderPhone: string, text:
   // 2. Jika bukan sesi aktif, wajib dimulai dengan "!"
   if (!text.startsWith('!')) return false;
 
-  const args = text.split(' ');
-  const commandName = args[0].toLowerCase();
+  const args = text.trim().split(/\s+/);
+  let commandName = args[0].toLowerCase();
   const commandArgs = args.slice(1);
+
+  const configured = await resolveCommandName(commandName);
+  if (!configured) return false;
+  commandName = configured.commandName;
 
   // Khusus untuk reset sesi
   if (commandName === '!cancel') {
@@ -402,7 +501,7 @@ export async function processCommand(phoneId: string, senderPhone: string, text:
     return false;
   }
 
-  if (!command.enabled) {
+  if (!configured.enabled || !command.enabled) {
     await sendTextMessage(phoneId, senderPhone, `⚠️ Command *${commandName}* sedang dinonaktifkan.`);
     return true;
   }
@@ -429,10 +528,12 @@ export async function processCommand(phoneId: string, senderPhone: string, text:
 // STATE MACHINE HANDLER
 // ============================================
 
+// Sesi lama menyimpan data state-machine dengan bentuk dinamis per langkah.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function handleConversationState(phoneId: string, senderPhone: string, text: string, session: any): Promise<boolean> {
   const state = session.state;
   const sessionPhoneId = session.phone_id; // phoneId yang tersimpan di sesi (bisa berbeda dari param phoneId)
-  let data = session.data || {};
+  const data = session.data || {};
   let nextState = 'IDLE';
   let reply = '';
   const inputText = text.trim();

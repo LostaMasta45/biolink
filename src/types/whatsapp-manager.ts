@@ -66,6 +66,44 @@ export interface WhatsAppTemplate {
   updated_at: string;
 }
 
+export type NotificationRecipientType = "customer" | "admin" | "custom";
+export type WhatsAppSenderRole = "admin" | "bot";
+
+export interface NotificationRule {
+  id: string;
+  event_key: string;
+  name: string;
+  description: string | null;
+  recipient_type: NotificationRecipientType;
+  custom_recipient: string | null;
+  sender_role: WhatsAppSenderRole;
+  template_id: string | null;
+  is_active: boolean;
+  delay_seconds: number;
+  max_attempts: number;
+  dedupe_window_seconds: number;
+  variable_defaults: Record<string, string>;
+  created_at: string;
+  updated_at: string;
+  template?: Pick<WhatsAppTemplate, "id" | "name" | "type"> | null;
+}
+
+export interface BotCommandConfig {
+  id: string;
+  command: string;
+  aliases: string[];
+  category: string;
+  description: string;
+  usage: string;
+  handler_key: string;
+  is_active: boolean;
+  show_in_menu: boolean;
+  admin_only: true;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface AutomationRule {
   id: string;
   name: string;
@@ -189,6 +227,10 @@ export interface OverviewMetrics {
   webhookEventsToday: number;
   skippedToday: number;
   activeHandovers: number;
+  activeNotificationRules: number;
+  notificationQueue: number;
+  notificationFailedToday: number;
+  activeBotCommands: number;
 }
 
 export interface ApiResult<T> {

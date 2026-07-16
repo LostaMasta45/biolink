@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { processDueAutoReplyJobs } from "@/services/whatsapp-execution-engine";
 import { writeWebhookLog } from "@/services/whatsapp-audit-service";
+import { processDueNotificationJobs } from "@/services/whatsapp-notification-service";
 
 export const maxDuration = 60;
 
@@ -13,7 +14,8 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const result = await processDueAutoReplyJobs(50);
+    const [autoReply, notifications] = await Promise.all([processDueAutoReplyJobs(50), processDueNotificationJobs(50)]);
+    const result = { autoReply, notifications };
     await writeWebhookLog("outgoing", "auto_reply.worker", "success", result, Date.now() - startedAt);
     return NextResponse.json({ status: "ok", ...result });
   } catch (error) {

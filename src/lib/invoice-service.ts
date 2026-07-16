@@ -1,7 +1,6 @@
 import { createClient } from "@/lib/supabase/client";
-import type { InvoiceData, InvoiceItemData, Client, BankAccount } from "./invoice-types";
+import type { InvoiceData, Client, BankAccount } from "./invoice-types";
 import { formatInvoiceMessage, sendTelegramMessage } from "./telegram-service";
-import { sendNotifToAdmin } from "@/lib/whatsapp/kirimdev-client";
 
 // ============================================
 // INVOICE SERVICES
@@ -93,8 +92,25 @@ export async function saveInvoice(invoice: InvoiceData): Promise<{ data: Invoice
         if (!isUpdate) {
             try {
                 const totalAmount = invoice.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-                const waMessage = `🚨 *INVOICE BARU DIBUAT!* 🚨\n\n*ID:* ${invoice.invoice_number}\n*Klien:* ${invoice.client_name}\n*Total:* Rp ${totalAmount.toLocaleString('id-ID')}\n*Status:* 🟡 Menunggu Pembayaran\n\n👉 _Link Tagihan:_\n${process.env.NEXT_PUBLIC_APP_URL || 'https://infolokerjombang.net'}/admin/invoices/${invoiceResult?.id}`;
-                await sendNotifToAdmin(waMessage);
+                const notificationResponse = await fetch("/api/admin/whatsapp/notify", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        eventKey: "invoice.created.admin",
+                        dedupeId: String(invoiceResult?.id || invoice.invoice_number),
+                        variables: {
+                        invoice_number: invoice.invoice_number,
+                        customer_name: invoice.client_name,
+                        customer_phone: invoice.client_phone || "-",
+                        amount: totalAmount.toLocaleString("id-ID"),
+                        invoice_url: `${process.env.NEXT_PUBLIC_APP_URL || 'https://infolokerjombang.net'}/admin/invoices/${invoiceResult?.id}`,
+                        },
+                    }),
+                });
+                if (!notificationResponse.ok) {
+                    const notification = await notificationResponse.json() as { error?: string };
+                    throw new Error(notification.error || "Notifikasi invoice gagal");
+                }
             } catch (err) {
                 console.error("Failed to send WA notification for invoice", err);
             }
