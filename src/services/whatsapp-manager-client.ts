@@ -1,7 +1,17 @@
 import type { ApiResult } from "@/types/whatsapp-manager";
 
 async function parseResponse<T>(response: Response): Promise<ApiResult<T>> {
-  const payload = await response.json() as Partial<ApiResult<T>> & { error?: string };
+  const raw = await response.text();
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) {
+    throw new Error(`Server mengembalikan halaman ${response.status} (${response.statusText || "tanpa status"}), bukan respons API. Muat ulang dashboard; bila masih terjadi, deploy ulang versi aplikasi terbaru.`);
+  }
+  let payload: Partial<ApiResult<T>> & { error?: string };
+  try {
+    payload = JSON.parse(raw) as Partial<ApiResult<T>> & { error?: string };
+  } catch {
+    throw new Error("Respons API tidak dapat dibaca. Muat ulang dashboard dan coba kembali.");
+  }
   if (!response.ok) throw new Error(payload.error ?? "Permintaan gagal diproses");
   return payload as ApiResult<T>;
 }
@@ -41,8 +51,17 @@ export async function runManagerAction<T>(action: string, extra?: Record<string,
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ action, ...extra }),
   });
-  const payload = await response.json() as T & { error?: string };
+  const raw = await response.text();
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) {
+    throw new Error(`Endpoint aksi WhatsApp tidak tersedia (${response.status} ${response.statusText || ""}). Muat ulang dashboard; bila tetap muncul, deploy ulang versi aplikasi terbaru.`);
+  }
+  let payload: T & { error?: string };
+  try {
+    payload = JSON.parse(raw) as T & { error?: string };
+  } catch {
+    throw new Error("Respons aksi WhatsApp tidak dapat dibaca. Muat ulang dashboard dan coba kembali.");
+  }
   if (!response.ok) throw new Error(payload.error ?? "Aksi gagal dijalankan");
   return payload;
 }
-

@@ -2,6 +2,7 @@ import { getDynamicAccounts, sendTextMessage, sendButtonMessage, sendListMessage
 import { createClient } from '@supabase/supabase-js';
 import { sendMappedTemplate, type TemplateData } from '@/services/kirimdev-mapper';
 import { emitNotification, formatRupiahValue } from '@/services/whatsapp-notification-service';
+import { writeActivityLog } from '@/services/whatsapp-audit-service';
 
 // Setup Supabase admin client for server-side logic (bypasses RLS if service key is used, or works if public)
 const supabase = createClient(
@@ -58,8 +59,26 @@ async function sendCommandMenu(phoneId: string, senderPhone: string): Promise<vo
   const result = await sendListMessage(phoneId, senderPhone, 'Pilih command yang ingin dijalankan. Menu ini hanya dapat digunakan oleh Admin Utama.', 'Buka Menu', sections, { type: 'text', text: 'ILJ-Hub Admin Bot' }, 'Admin Utama → Bot', { source: 'admin_bot_menu' });
   if (!result.success) {
     const text = visible.map((item) => `*${item.command}* — ${item.description}\nContoh: ${item.usage}`).join('\n\n');
-    await sendTextMessage(phoneId, senderPhone, `🤖 *ILJ-Hub Admin Bot*\n\n${text}`, { source: 'admin_bot_menu_fallback' });
+    const fallback = await sendTextMessage(phoneId, senderPhone, `🤖 *ILJ-Hub Admin Bot*\n\n${text}`, { source: 'admin_bot_menu_fallback' });
+    if (!fallback.success) throw new Error(fallback.error ?? 'Menu teks juga gagal dikirim');
   }
+}
+
+async function writeCommandLog(
+  customer: string,
+  eventType: 'admin_bot.command.received' | 'admin_bot.command.completed' | 'admin_bot.command.failed' | 'admin_bot.command.skipped',
+  status: 'success' | 'failed' | 'pending' | 'skipped',
+  command: string,
+  phoneId: string,
+  metadata: Record<string, unknown> = {},
+): Promise<void> {
+  await writeActivityLog({
+    customer,
+    eventType,
+    status,
+    message: `${command} ${eventType.split('.').at(-1) ?? 'processed'}`,
+    metadata: { command, sender_phone_id: phoneId, ...metadata },
+  });
 }
 
 // ============================================
@@ -482,8 +501,13 @@ export async function processCommand(phoneId: string, senderPhone: string, text:
   let commandName = args[0].toLowerCase();
   const commandArgs = args.slice(1);
 
+  await writeCommandLog(senderPhone, 'admin_bot.command.received', 'pending', commandName, phoneId, { args: commandArgs });
+
   const configured = await resolveCommandName(commandName);
-  if (!configured) return false;
+  if (!configured) {
+    await writeCommandLog(senderPhone, 'admin_bot.command.skipped', 'skipped', commandName, phoneId, { reason: 'not_configured' });
+    return false;
+  }
   commandName = configured.commandName;
 
   // Khusus untuk reset sesi
@@ -491,6 +515,7 @@ export async function processCommand(phoneId: string, senderPhone: string, text:
     await supabase.from('bot_sessions').delete().eq('sender_phone', senderPhone);
     console.log(`[BotSession] 🗑️ Session cancelled for ${senderPhone}`);
     await sendTextMessage(phoneId, senderPhone, '✅ Percakapan dibatalkan.');
+    await writeCommandLog(senderPhone, 'admin_bot.command.completed', 'success', commandName, phoneId, { action: 'session_cancelled' });
     return true;
   }
 
@@ -498,11 +523,13 @@ export async function processCommand(phoneId: string, senderPhone: string, text:
   
   if (!command) {
     // Abaikan jika bukan command yang dikenali (bisa jadi balasan biasa ke customer, tapi karena admin, kita cek)
+    await writeCommandLog(senderPhone, 'admin_bot.command.skipped', 'skipped', commandName, phoneId, { reason: 'handler_missing' });
     return false;
   }
 
   if (!configured.enabled || !command.enabled) {
     await sendTextMessage(phoneId, senderPhone, `⚠️ Command *${commandName}* sedang dinonaktifkan.`);
+    await writeCommandLog(senderPhone, 'admin_bot.command.skipped', 'skipped', commandName, phoneId, { reason: 'disabled' });
     return true;
   }
 
@@ -514,12 +541,14 @@ export async function processCommand(phoneId: string, senderPhone: string, text:
 
     await command.execute(phoneId, senderPhone, commandArgs);
     console.log(`[Command] ✅ ${commandName} executed successfully for ${senderPhone}`);
+    await writeCommandLog(senderPhone, 'admin_bot.command.completed', 'success', commandName, phoneId, { args: commandArgs });
     return true;
 
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : 'Unknown error';
     console.error(`[Command] ❌ Error executing ${commandName}:`, errorMsg);
     await sendTextMessage(phoneId, senderPhone, `❌ *Error saat menjalankan ${commandName}:*\n\n\`${errorMsg}\``);
+    await writeCommandLog(senderPhone, 'admin_bot.command.failed', 'failed', commandName, phoneId, { args: commandArgs, error: errorMsg });
     return false;
   }
 }

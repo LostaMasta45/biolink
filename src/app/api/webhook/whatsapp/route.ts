@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createHmac, timingSafeEqual } from "node:crypto";
 import {
   getAccountByPhone,
   getAllAccounts,
@@ -28,6 +29,30 @@ interface ParsedMessageStatus {
   messageId: string;
   status: string;
   error?: unknown;
+}
+
+function verifyKirimSignature(rawBody: string, signatureHeader: string | null): boolean {
+  const secrets = (process.env.KIRIMDEV_WEBHOOK_SECRETS || process.env.KIRIMDEV_WEBHOOK_SECRET || "")
+    .split(",")
+    .map((secret) => secret.trim())
+    .filter(Boolean);
+  if (!secrets.length || !signatureHeader) return false;
+
+  const values = signatureHeader.split(",").map((part) => part.trim());
+  const timestamp = values.find((part) => part.startsWith("t="))?.slice(2);
+  const signatures = values.filter((part) => part.startsWith("v1=")).map((part) => part.slice(3));
+  const timestampSeconds = Number(timestamp);
+  if (!timestamp || !Number.isFinite(timestampSeconds) || Math.abs(Math.floor(Date.now() / 1000) - timestampSeconds) > 300) return false;
+
+  const signedPayload = `${timestamp}.${rawBody}`;
+  return secrets.some((secret) => {
+    const expected = Buffer.from(createHmac("sha256", secret).update(signedPayload).digest("hex"), "hex");
+    return signatures.some((signature) => {
+      if (!/^[a-f0-9]{64}$/i.test(signature)) return false;
+      const received = Buffer.from(signature, "hex");
+      return received.length === expected.length && timingSafeEqual(received, expected);
+    });
+  });
 }
 
 function parseMetaInbound(payload: KirimDevWebhookPayload): ParsedInboundMessage | null {
@@ -62,7 +87,13 @@ function parseLegacyInbound(payload: KirimDevWebhookPayload): ParsedInboundMessa
   if (!data) return null;
   const message = data.message as Record<string, unknown> | undefined;
   const textObject = data.text as Record<string, unknown> | undefined;
-  const text = message?.text ?? textObject?.body ?? data.text;
+  const messageText = message?.text;
+  const nestedText = messageText && typeof messageText === "object" ? (messageText as Record<string, unknown>).body : messageText;
+  const interactive = (message?.interactive ?? data.interactive) as Record<string, unknown> | undefined;
+  const buttonReply = interactive?.button_reply as Record<string, unknown> | undefined;
+  const listReply = interactive?.list_reply as Record<string, unknown> | undefined;
+  const button = (message?.button ?? data.button) as Record<string, unknown> | undefined;
+  const text = nestedText ?? textObject?.body ?? buttonReply?.id ?? listReply?.id ?? button?.payload ?? button?.text ?? data.text;
   if (typeof data.from !== "string" || typeof text !== "string") return null;
   return {
     senderPhone: data.from,
@@ -101,6 +132,10 @@ function inferEventId(payload: KirimDevWebhookPayload): string {
 export async function POST(req: NextRequest) {
   const startedAt = Date.now();
   const rawBody = await req.text();
+  if (!verifyKirimSignature(rawBody, req.headers.get("x-kirim-signature"))) {
+    await writeWebhookLog("incoming", "webhook.invalid_signature", "failed", { reason: "signature_missing_or_invalid" }, Date.now() - startedAt);
+    return NextResponse.json({ error: "Invalid webhook signature" }, { status: 401 });
+  }
   let payload: KirimDevWebhookPayload;
 
   try {

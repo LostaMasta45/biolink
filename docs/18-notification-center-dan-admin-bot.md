@@ -83,6 +83,10 @@ Variabel ditulis dalam Pesan Tersimpan seperti `{{customer_name}}`. Nilai event 
 
 Cron yang sebelumnya memproses Auto Reply sekarang memproses kedua antrean: Auto Reply dan Notification Center.
 
+## Keamanan webhook
+
+Webhook hanya memproses payload dengan `X-Kirim-Signature` HMAC-SHA256 yang valid dan berusia maksimal lima menit. Simpan signing secret subscription di `KIRIMDEV_WEBHOOK_SECRET` (atau daftar secret rotasi dipisahkan koma pada `KIRIMDEV_WEBHOOK_SECRETS`). Payload tanpa signature valid dicatat sebagai `webhook.invalid_signature` dan ditolak sebelum dapat memicu command atau automation.
+
 ## Command Admin Bot
 
 Command yang muncul di menu bawaan:
@@ -101,6 +105,8 @@ Command yang muncul di menu bawaan:
 - `!cancel`: membatalkan sesi, disembunyikan dari menu utama.
 
 `!inv_lowongan` dan `!inv_umum` adalah handler tombol internal dan tidak ditampilkan di `!menu`. `!stats` lama tidak disertakan karena sebelumnya hanya menghasilkan angka nol placeholder.
+
+Setiap command meninggalkan jejak `admin_bot.command.received`, lalu `admin_bot.command.completed`, `admin_bot.command.skipped`, atau `admin_bot.command.failed` pada Activity Logs. Semua kiriman Bot/API juga tercatat sebagai `api.message.send` beserta tipe pesan, HTTP status, ID pesan KirimDev, dan respons provider. Status lanjutan `sent`, `delivered`, `read`, atau `failed` dicatat ketika webhook `message.status` diterima.
 
 ## Tutorial pengujian
 
@@ -121,8 +127,9 @@ Tes rule sengaja tidak mengirim ke customer agar aman.
 2. Kirim `!menu`.
 3. Pastikan Bot membalas dengan interactive list.
 4. Pilih `!rekap` atau kirim `!rekapan`.
-5. Kirim command yang sama dari nomor lain; Bot tidak boleh menjalankannya.
-6. Kirim command Admin Utama ke nomor Admin Utama; webhook harus mencatat `admin_command.wrong_account` dan tidak menjalankan command.
+5. Buka Activity Logs; pastikan ada `admin_bot.command.received`, `api.message.send`, dan `admin_bot.command.completed`.
+6. Kirim command yang sama dari nomor lain; Bot tidak boleh menjalankannya.
+7. Kirim command Admin Utama ke nomor Admin Utama; webhook harus mencatat `admin_command.wrong_account` dan tidak menjalankan command.
 
 ### C. Tes payment
 

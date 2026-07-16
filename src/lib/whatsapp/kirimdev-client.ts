@@ -133,16 +133,21 @@ async function requestKirimDevMessage(
     const responseObject = providerResponse && typeof providerResponse === 'object'
       ? providerResponse as Record<string, unknown>
       : {};
+    const responseData = responseObject.data && typeof responseObject.data === 'object'
+      ? responseObject.data as Record<string, unknown>
+      : {};
     const messages = Array.isArray(responseObject.messages) ? responseObject.messages : [];
     const firstMessage = messages[0] && typeof messages[0] === 'object'
       ? messages[0] as Record<string, unknown>
       : {};
     const messageId = typeof firstMessage.id === 'string'
       ? firstMessage.id
-      : typeof responseObject.message_id === 'string' ? responseObject.message_id : undefined;
+      : typeof responseObject.message_id === 'string' ? responseObject.message_id
+      : typeof responseData.id === 'string' ? responseData.id : undefined;
     const providerStatus = typeof firstMessage.message_status === 'string'
       ? firstMessage.message_status
-      : typeof responseObject.status === 'string' ? responseObject.status : undefined;
+      : typeof responseObject.status === 'string' ? responseObject.status
+      : typeof responseData.status === 'string' ? responseData.status : undefined;
     const error = response.ok ? undefined : raw.slice(0, 1000) || `HTTP ${response.status}`;
 
     await auditApiSend({
