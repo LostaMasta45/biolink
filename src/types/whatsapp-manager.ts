@@ -2,6 +2,7 @@ export type TemplateType =
   | "text"
   | "image"
   | "video"
+  | "audio"
   | "document"
   | "reply_button"
   | "url_button"
@@ -29,6 +30,19 @@ export interface TemplateSection {
   rows: TemplateRow[];
 }
 
+export type InteractiveHeaderType = "none" | "text" | "image" | "video" | "document";
+
+export interface CarouselCard {
+  id: string;
+  header_type: "image" | "video";
+  media_url: string;
+  body?: string;
+  action_type: "cta_url" | "quick_reply";
+  button_id: string;
+  button_label: string;
+  button_url?: string;
+}
+
 export interface WhatsAppTemplate {
   id: string;
   name: string;
@@ -38,8 +52,13 @@ export interface WhatsAppTemplate {
   body: string;
   footer: string | null;
   media_url: string | null;
+  header_type: InteractiveHeaderType;
+  preview_url: boolean;
+  filename: string | null;
+  list_button_text: string;
   buttons: TemplateButton[];
   sections: TemplateSection[];
+  carousel_cards: CarouselCard[];
   is_active: boolean;
   usage_context?: string | null;
   synced_at: string | null;
@@ -149,6 +168,8 @@ export interface WhatsAppSettings {
   business_hours_start: string;
   business_hours_end: string;
   business_days: number[];
+  auto_mark_read: boolean;
+  show_typing_indicator: boolean;
   updated_at: string;
 }
 

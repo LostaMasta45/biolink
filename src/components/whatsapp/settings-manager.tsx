@@ -33,6 +33,8 @@ const defaults: SettingsFormValues = {
   business_hours_start: "08:00",
   business_hours_end: "17:00",
   business_days: [1, 2, 3, 4, 5, 6],
+  auto_mark_read: false,
+  show_typing_indicator: false,
 };
 
 export function SettingsManager() {
@@ -42,6 +44,8 @@ export function SettingsManager() {
   const debugMode = useWatch({ control: form.control, name: "debug_mode" }) ?? false;
   const businessHoursEnabled = useWatch({ control: form.control, name: "business_hours_enabled" }) ?? false;
   const businessDays = useWatch({ control: form.control, name: "business_days" }) ?? [];
+  const autoMarkRead = useWatch({ control: form.control, name: "auto_mark_read" }) ?? false;
+  const showTypingIndicator = useWatch({ control: form.control, name: "show_typing_indicator" }) ?? false;
   const current = settings.data[0];
 
   // Simulator state
@@ -67,6 +71,8 @@ export function SettingsManager() {
       business_hours_start: (current.business_hours_start ?? "08:00").slice(0, 5),
       business_hours_end: (current.business_hours_end ?? "17:00").slice(0, 5),
       business_days: current.business_days ?? [1, 2, 3, 4, 5, 6],
+      auto_mark_read: current.auto_mark_read ?? false,
+      show_typing_indicator: current.show_typing_indicator ?? false,
     });
   }, [current, form]);
   const submit = form.handleSubmit(async (values) => {
@@ -203,6 +209,20 @@ export function SettingsManager() {
               <p className="mt-1 text-xs text-muted-foreground">Aktifkan pencatatan tambahan pada proses backend.</p>
             </div>
             <Switch id="debug-mode" checked={debugMode} onCheckedChange={(checked) => form.setValue("debug_mode", checked)} />
+          </CardContent>
+        </Card>
+
+        <Card className="rounded-xl border-border/60 overflow-hidden">
+          <CardHeader><CardTitle className="text-base">Pesan Masuk: Read Receipt</CardTitle></CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center justify-between gap-4 rounded-xl border p-4">
+              <div><Label htmlFor="auto-mark-read">Otomatis tandai sudah dibaca</Label><p className="mt-1 text-xs text-muted-foreground">Menggunakan wamid pesan masuk. Ini aksi webhook, bukan tipe template.</p></div>
+              <Switch id="auto-mark-read" checked={autoMarkRead} onCheckedChange={(checked) => form.setValue("auto_mark_read", checked)} />
+            </div>
+            <div className="flex items-center justify-between gap-4 rounded-xl border p-4">
+              <div><Label htmlFor="typing-indicator">Tampilkan indikator mengetik</Label><p className="mt-1 text-xs text-muted-foreground">Meta menampilkannya hingga sekitar 25 detik atau sampai balasan dikirim. Aktifkan hanya bila automation hampir selalu membalas.</p></div>
+              <Switch id="typing-indicator" disabled={!autoMarkRead} checked={showTypingIndicator} onCheckedChange={(checked) => form.setValue("show_typing_indicator", checked)} />
+            </div>
           </CardContent>
         </Card>
         <div className="flex justify-end"><Button type="submit" disabled={form.formState.isSubmitting}><Save />{form.formState.isSubmitting ? "Menyimpan..." : "Simpan Settings"}</Button></div>

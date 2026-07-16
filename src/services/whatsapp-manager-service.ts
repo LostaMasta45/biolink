@@ -96,6 +96,8 @@ export async function listResource(
       ,business_hours_start: "08:00"
       ,business_hours_end: "17:00"
       ,business_days: [1, 2, 3, 4, 5, 6]
+      ,auto_mark_read: false
+      ,show_typing_indicator: false
     }];
   }
 
@@ -104,8 +106,31 @@ export async function listResource(
 
 function parsePayload(resource: ManagerResource, payload: unknown): Record<string, unknown> {
   switch (resource) {
-    case "templates":
-      return templateSchema.parse(payload);
+    case "templates": {
+      const parsed = templateSchema.parse(payload);
+      const clean = {
+        ...parsed,
+        header: parsed.header || null,
+        footer: parsed.footer || null,
+        media_url: parsed.media_url || null,
+        filename: parsed.filename || null,
+        usage_context: parsed.usage_context || null,
+      };
+      if (parsed.type === "text") {
+        return { ...clean, header_type: "none", header: null, footer: null, media_url: null, filename: null, buttons: [], sections: [], carousel_cards: [], list_button_text: "Lihat pilihan" };
+      }
+      if (["image", "video", "audio", "document"].includes(parsed.type)) {
+        return { ...clean, header_type: "none", header: null, footer: null, preview_url: false, buttons: [], sections: [], carousel_cards: [], list_button_text: "Lihat pilihan", body: parsed.type === "audio" ? "" : parsed.body };
+      }
+      if (parsed.type === "reply_button" || parsed.type === "url_button") {
+        const mediaHeader = ["image", "video", "document"].includes(parsed.header_type);
+        return { ...clean, header: parsed.header_type === "text" ? parsed.header : null, media_url: mediaHeader ? parsed.media_url : null, preview_url: false, filename: null, sections: [], carousel_cards: [], list_button_text: "Lihat pilihan" };
+      }
+      if (parsed.type === "list") {
+        return { ...clean, header_type: parsed.header_type === "text" ? "text" : "none", header: parsed.header_type === "text" ? parsed.header : null, media_url: null, preview_url: false, filename: null, buttons: [], carousel_cards: [] };
+      }
+      return { ...clean, header_type: "none", header: null, footer: null, media_url: null, preview_url: false, filename: null, buttons: [], sections: [], list_button_text: "Lihat pilihan" };
+    }
     case "automation": {
       const parsed = automationSchema.parse(payload);
       return {

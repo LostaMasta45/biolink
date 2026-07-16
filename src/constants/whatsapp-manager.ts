@@ -24,6 +24,7 @@ export const TEMPLATE_TYPE_LABELS: Record<TemplateType, string> = {
   text: "Teks",
   image: "Gambar",
   video: "Video",
+  audio: "Audio",
   document: "Dokumen",
   reply_button: "Tombol balasan",
   url_button: "Tombol URL",

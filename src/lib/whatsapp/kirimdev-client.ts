@@ -184,8 +184,9 @@ export async function sendTextMessage(
   to: string,
   message: string,
   context: KirimDevSendContext = {},
+  previewUrl = false,
 ): Promise<KirimDevSendResult> {
-  return requestKirimDevMessage(phoneId, to, 'text', { type: 'text', text: { body: message } }, context);
+  return requestKirimDevMessage(phoneId, to, 'text', { type: 'text', text: { body: message, preview_url: previewUrl } }, context);
 }
 
 /**
@@ -223,11 +224,8 @@ export async function sendButtonMessage(
     }
 
     if (header) {
-      if (header.type === 'text' && header.text) {
-        interactivePayload.header = { type: 'text', text: header.text };
-      } else if (['image', 'video', 'document'].includes(header.type) && header.link) {
-        interactivePayload.header = { type: header.type, [header.type]: { link: header.link } };
-      }
+      if (header.type === 'text' && header.text) interactivePayload.header = { type: 'text', text: header.text };
+      else if (header.type !== 'text' && header.link) interactivePayload.header = { type: header.type, [header.type]: { link: header.link } };
     }
 
     return requestKirimDevMessage(phoneId, to, 'reply_button', {
@@ -243,7 +241,7 @@ export async function sendButtonMessage(
  * @param body - Teks utama
  * @param displayText - Teks pada tombol URL
  * @param url - URL tujuan tombol
- * @param header - Opsional objek header (teks/media)
+ * @param header - Opsional header teks/media
  * @param footer - Opsional teks footer
  */
 export async function sendCtaUrlMessage(
@@ -273,11 +271,8 @@ export async function sendCtaUrlMessage(
     }
 
     if (header) {
-      if (header.type === 'text' && header.text) {
-        interactivePayload.header = { type: 'text', text: header.text };
-      } else if (['image', 'video', 'document'].includes(header.type) && header.link) {
-        interactivePayload.header = { type: header.type, [header.type]: { link: header.link } };
-      }
+      if (header.type === 'text' && header.text) interactivePayload.header = { type: 'text', text: header.text };
+      else if (header.type !== 'text' && header.link) interactivePayload.header = { type: header.type, [header.type]: { link: header.link } };
     }
 
     return requestKirimDevMessage(phoneId, to, 'url_button', {
@@ -293,7 +288,7 @@ export async function sendCtaUrlMessage(
  * @param body - Teks utama
  * @param buttonText - Teks pada tombol list
  * @param sections - Struktur section WhatsApp Cloud API
- * @param header - Opsional objek header (teks/media)
+ * @param header - Opsional header teks; Meta tidak menerima media pada list
  * @param footer - Opsional teks footer
  */
 export async function sendListMessage(
@@ -302,7 +297,7 @@ export async function sendListMessage(
   body: string,
   buttonText: string,
   sections: unknown[],
-  header?: { type: 'text' | 'image' | 'video' | 'document'; text?: string; link?: string },
+  header?: { type: 'text'; text: string },
   footer?: string,
   context: KirimDevSendContext = {},
 ): Promise<KirimDevSendResult> {
@@ -319,13 +314,7 @@ export async function sendListMessage(
       interactivePayload.footer = { text: footer };
     }
 
-    if (header) {
-      if (header.type === 'text' && header.text) {
-        interactivePayload.header = { type: 'text', text: header.text };
-      } else if (['image', 'video', 'document'].includes(header.type) && header.link) {
-        interactivePayload.header = { type: header.type, [header.type]: { link: header.link } };
-      }
-    }
+    if (header?.text) interactivePayload.header = { type: 'text', text: header.text };
 
     return requestKirimDevMessage(phoneId, to, 'list', {
       type: 'interactive', interactive: interactivePayload,
@@ -338,10 +327,11 @@ export async function sendListMessage(
 export async function sendMediaMessage(
   phoneId: string,
   to: string,
-  type: 'image' | 'video' | 'document',
+  type: 'image' | 'video' | 'audio' | 'document',
   url: string,
   caption?: string,
   context: KirimDevSendContext = {},
+  filename?: string,
 ): Promise<KirimDevSendResult> {
     const payload: Record<string, unknown> = {
       messaging_product: 'whatsapp',
@@ -351,12 +341,94 @@ export async function sendMediaMessage(
 
     payload[type] = {
       link: url,
-      ...(caption ? { caption } : {}),
+      ...(caption && type !== 'audio' ? { caption } : {}),
+      ...(filename && type === 'document' ? { filename } : {}),
     };
 
     delete payload.messaging_product;
     delete payload.to;
     return requestKirimDevMessage(phoneId, to, type, payload, context);
+}
+
+export interface CarouselCardPayload {
+  headerType: 'image' | 'video';
+  mediaUrl: string;
+  body?: string;
+  actionType: 'cta_url' | 'quick_reply';
+  buttonId: string;
+  buttonLabel: string;
+  buttonUrl?: string;
+}
+
+export async function sendCarouselMessage(
+  phoneId: string,
+  to: string,
+  body: string,
+  cards: CarouselCardPayload[],
+  context: KirimDevSendContext = {},
+): Promise<KirimDevSendResult> {
+  return requestKirimDevMessage(phoneId, to, 'carousel', {
+    type: 'interactive',
+    interactive: {
+      type: 'carousel',
+      body: { text: body },
+      action: {
+        cards: cards.map((card, cardIndex) => ({
+          card_index: cardIndex,
+          type: 'cta_url',
+          header: { type: card.headerType, [card.headerType]: { link: card.mediaUrl } },
+          ...(card.body ? { body: { text: card.body } } : {}),
+          action: card.actionType === 'cta_url'
+            ? { name: 'cta_url', parameters: { display_text: card.buttonLabel, url: card.buttonUrl } }
+            : { buttons: [{ type: 'quick_reply', quick_reply: { id: card.buttonId, title: card.buttonLabel } }] },
+        })),
+      },
+    },
+  }, context);
+}
+
+export async function markMessageAsRead(
+  phoneId: string,
+  messageId: string,
+  customer: string,
+  showTypingIndicator = false,
+): Promise<KirimDevSendResult> {
+  const startedAt = Date.now();
+  const apiKey = await getDynamicApiKey();
+  if (!apiKey) return { success: false, error: 'KIRIMDEV_API_KEY belum dikonfigurasi' };
+  try {
+    const response = await fetch(`https://api.kirimdev.com/v1/${phoneId}/messages`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        status: 'read',
+        message_id: messageId,
+        ...(showTypingIndicator ? { typing_indicator: { type: 'text' } } : {}),
+      }),
+    });
+    const latencyMs = Date.now() - startedAt;
+    const raw = await response.text();
+    const error = response.ok ? undefined : raw.slice(0, 1000) || `HTTP ${response.status}`;
+    await auditApiSend({
+      customer,
+      senderPhoneId: phoneId,
+      messageType: 'read_receipt',
+      success: response.ok,
+      httpStatus: response.status,
+      latencyMs,
+      error,
+      source: 'webhook_auto_mark_read',
+      correlationId: messageId,
+      response: raw.slice(0, 2000),
+    });
+    return { success: response.ok, error, httpStatus: response.status, latencyMs };
+  } catch (caught) {
+    const latencyMs = Date.now() - startedAt;
+    const error = caught instanceof Error ? caught.message : 'Mark as read gagal';
+    await auditApiSend({ customer, senderPhoneId: phoneId, messageType: 'read_receipt', success: false, latencyMs, error, source: 'webhook_auto_mark_read', correlationId: messageId });
+    return { success: false, error, latencyMs };
+  }
 }
 
 /**

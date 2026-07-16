@@ -4,6 +4,7 @@ import {
   getAccountByPhoneId,
   getAllAccounts,
   isAdminNumber,
+  markMessageAsRead,
 } from "@/lib/whatsapp/kirimdev-client";
 import { processCommand } from "@/lib/whatsapp/command-processor";
 import type { KirimDevWebhookPayload } from "@/lib/whatsapp/types";
@@ -11,6 +12,7 @@ import { processCustomerMessage, processDueAutoReplyJobs } from "@/services/what
 import {
   claimWebhookEvent,
   recordProviderDeliveryStatus,
+  whatsappAdminClient,
   writeWebhookLog,
 } from "@/services/whatsapp-audit-service";
 
@@ -19,6 +21,7 @@ interface ParsedInboundMessage {
   text: string;
   phoneId: string;
   displayPhone: string;
+  messageId: string;
 }
 
 interface ParsedMessageStatus {
@@ -51,6 +54,7 @@ function parseMetaInbound(payload: KirimDevWebhookPayload): ParsedInboundMessage
     text,
     phoneId: value?.metadata?.phone_number_id ?? "",
     displayPhone: value?.metadata?.display_phone_number ?? "",
+    messageId: message.id ?? "",
   };
 }
 
@@ -66,6 +70,7 @@ function parseLegacyInbound(payload: KirimDevWebhookPayload): ParsedInboundMessa
     text,
     phoneId: typeof data.phoneId === "string" ? data.phoneId : "",
     displayPhone: typeof data.to === "string" ? data.to : "",
+    messageId: typeof data.id === "string" ? data.id : "",
   };
 }
 
@@ -172,6 +177,24 @@ export async function POST(req: NextRequest) {
   }
 
   const text = inbound.text.trim();
+  if (inbound.messageId.startsWith("wamid.")) {
+    const { data: receiptSettings, error: receiptError } = await whatsappAdminClient
+      .from("settings")
+      .select("auto_mark_read,show_typing_indicator")
+      .eq("id", true)
+      .maybeSingle();
+    if (receiptError) {
+      console.warn("[Webhook] Read-receipt settings belum tersedia:", receiptError.message);
+    } else if (receiptSettings?.auto_mark_read) {
+      const receipt = await markMessageAsRead(
+        phoneId,
+        inbound.messageId,
+        inbound.senderPhone,
+        Boolean(receiptSettings.show_typing_indicator),
+      );
+      if (!receipt.success) console.warn("[Webhook] Mark as read gagal:", receipt.error);
+    }
+  }
   const execution = await processCustomerMessage(phoneId, inbound.senderPhone, text, { eventId });
 
   if (execution.status === "failed") {

@@ -78,6 +78,7 @@ export interface ApiSendAuditInput {
 
 export async function auditApiSend(input: ApiSendAuditInput): Promise<void> {
   const status: ActivityStatus = input.success ? "success" : "failed";
+  const readReceipt = input.messageType === "read_receipt";
   const metadata = {
     source: input.source ?? "direct_api",
     correlation_id: input.correlationId ?? null,
@@ -94,7 +95,7 @@ export async function auditApiSend(input: ApiSendAuditInput): Promise<void> {
   await Promise.all([
     writeActivityLog({
       customer: input.customer,
-      eventType: "api.message.send",
+      eventType: readReceipt ? "api.message.read" : "api.message.send",
       status,
       message: input.success
         ? `KirimDev menerima pengiriman ${input.messageType}`
@@ -104,7 +105,9 @@ export async function auditApiSend(input: ApiSendAuditInput): Promise<void> {
     }),
     writeWebhookLog(
       "outgoing",
-      input.success ? "api.message.accepted" : "api.message.failed",
+      readReceipt
+        ? (input.success ? "api.message.read" : "api.message.read_failed")
+        : (input.success ? "api.message.accepted" : "api.message.failed"),
       input.success ? "success" : "failed",
       { customer: input.customer, error: input.error ?? null, ...metadata },
       input.latencyMs,

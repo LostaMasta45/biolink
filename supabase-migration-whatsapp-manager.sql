@@ -8,13 +8,18 @@ CREATE TABLE IF NOT EXISTS templates (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name TEXT NOT NULL,
     category TEXT NOT NULL,
-    type TEXT NOT NULL CHECK (type IN ('text', 'image', 'video', 'document', 'reply_button', 'url_button', 'list')),
+    type TEXT NOT NULL CHECK (type IN ('text', 'image', 'video', 'audio', 'document', 'reply_button', 'url_button', 'list', 'carousel')),
     header TEXT,
+    header_type TEXT NOT NULL DEFAULT 'none' CHECK (header_type IN ('none', 'text', 'image', 'video', 'document')),
     body TEXT NOT NULL,
     footer TEXT,
     media_url TEXT,
+    preview_url BOOLEAN NOT NULL DEFAULT FALSE,
+    filename TEXT,
+    list_button_text TEXT NOT NULL DEFAULT 'Lihat pilihan',
     buttons JSONB NOT NULL DEFAULT '[]'::JSONB,
     sections JSONB NOT NULL DEFAULT '[]'::JSONB,
+    carousel_cards JSONB NOT NULL DEFAULT '[]'::JSONB,
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
     synced_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -99,6 +104,8 @@ CREATE TABLE IF NOT EXISTS settings (
     retry_count INTEGER NOT NULL DEFAULT 3 CHECK (retry_count BETWEEN 0 AND 10),
     default_delay INTEGER NOT NULL DEFAULT 0 CHECK (default_delay >= 0),
     debug_mode BOOLEAN NOT NULL DEFAULT FALSE,
+    auto_mark_read BOOLEAN NOT NULL DEFAULT FALSE,
+    show_typing_indicator BOOLEAN NOT NULL DEFAULT FALSE,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
