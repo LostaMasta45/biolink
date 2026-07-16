@@ -75,9 +75,17 @@ export const flowNodeSchema = z.object({
 });
 
 export const autoReplySchema = z.object({
-  keyword: z.string().trim().min(1, "Keyword wajib diisi"),
-  match_type: z.enum(["equals", "contains", "starts_with"]).default("contains"),
+  keyword: z.string().trim().min(1, "Keyword wajib diisi").max(100, "Keyword maksimal 100 karakter"),
   template_id: z.string().uuid({ message: "Template wajib dipilih" }),
+  match_type: z.enum(["equals", "contains", "starts_with"]),
+  delay_seconds: z.number().int().min(0).max(30),
+  cooldown_seconds: z.number().int().min(0).max(86400),
+  priority: z.number().int().min(-1000).max(1000),
+  schedule_mode: z.enum(["always", "business_hours", "outside_hours"]),
+  handover_to_human: z.boolean(),
+  handover_duration_minutes: z.number().int().min(1).max(10080),
+  is_test_mode: z.boolean(),
+  test_phone_numbers: z.array(z.string().trim().regex(/^\d{8,16}$/, "Nomor test harus berupa 8-16 digit")).max(20),
   is_active: z.boolean(),
 });
 
@@ -92,6 +100,10 @@ export const settingsSchema = z.object({
   retry_count: z.number().int().min(0).max(10),
   default_delay: z.number().int().min(0).max(86400),
   debug_mode: z.boolean(),
+  business_hours_enabled: z.boolean(),
+  business_hours_start: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+  business_hours_end: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+  business_days: z.array(z.number().int().min(0).max(6)).min(1),
 });
 
 export const resourceSchema = z.enum([

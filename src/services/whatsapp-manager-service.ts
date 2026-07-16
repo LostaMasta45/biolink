@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { DEFAULT_FLOW_NODES } from "@/constants/whatsapp-manager";
+import { normalizeAutoReplyKeyword } from "@/lib/whatsapp/auto-reply-keyword";
 import {
   autoReplySchema,
   automationSchema,
@@ -64,6 +65,7 @@ export async function listResource(
   const customer = filters.get("customer");
   const from = filters.get("from");
   const to = filters.get("to");
+  const eventType = filters.get("event_type");
 
   if (flowId && resource === "flow_nodes") query = query.eq("flow_id", flowId);
   if (status && (resource === "logs" || resource === "webhook_logs")) query = query.eq("status", status);
@@ -71,6 +73,7 @@ export async function listResource(
   if (customer && resource === "logs") query = query.ilike("customer", `%${customer}%`);
   if (from && (resource === "logs" || resource === "webhook_logs")) query = query.gte("created_at", from);
   if (to && (resource === "logs" || resource === "webhook_logs")) query = query.lte("created_at", to);
+  if (eventType && (resource === "logs" || resource === "webhook_logs")) query = query.eq("event_type", eventType);
   if (resource === "logs" || resource === "webhook_logs") query = query.limit(250);
 
   const { data, error } = await query;
@@ -89,6 +92,10 @@ export async function listResource(
       retry_count: 3,
       default_delay: 10,
       debug_mode: true
+      ,business_hours_enabled: false
+      ,business_hours_start: "08:00"
+      ,business_hours_end: "17:00"
+      ,business_days: [1, 2, 3, 4, 5, 6]
     }];
   }
 
@@ -120,8 +127,13 @@ function parsePayload(resource: ManagerResource, payload: unknown): Record<strin
       return flowSchema.parse(payload);
     case "flow_nodes":
       return flowNodeSchema.parse(payload);
-    case "auto_reply":
-      return autoReplySchema.parse(payload);
+    case "auto_reply": {
+      const parsed = autoReplySchema.parse(payload);
+      return {
+        ...parsed,
+        keyword: normalizeAutoReplyKeyword(parsed.keyword),
+      };
+    }
     case "settings":
       return settingsSchema.parse(payload);
     case "logs":
@@ -212,18 +224,39 @@ async function exactCount(supabase: SupabaseClient, table: string): Promise<numb
 export async function getOverviewMetrics(supabase: SupabaseClient): Promise<OverviewMetrics> {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const [totalAutomation, totalTemplates, totalFlows, triggerResult, successResult, webhookResult] = await Promise.all([
-    exactCount(supabase, "automation"),
+  const [
+    totalAutoReply,
+    totalTemplates,
+    totalFlows,
+    activeResult,
+    triggerResult,
+    successResult,
+    webhookResult,
+    queuedResult,
+    failedJobsResult,
+    apiMessagesResult,
+    webhookTodayResult,
+    skippedResult,
+    handoverResult,
+  ] = await Promise.all([
+    exactCount(supabase, "auto_reply"),
     exactCount(supabase, "templates"),
     exactCount(supabase, "flows"),
-    supabase.from("logs").select("id", { count: "exact", head: true }).gte("created_at", today.toISOString()),
-    supabase.from("logs").select("status").gte("created_at", today.toISOString()),
+    supabase.from("auto_reply").select("id", { count: "exact", head: true }).eq("is_active", true),
+    supabase.from("logs").select("id", { count: "exact", head: true }).eq("event_type", "auto_reply.queued").gte("created_at", today.toISOString()),
+    supabase.from("logs").select("status").eq("event_type", "api.message.send").gte("created_at", today.toISOString()),
     supabase.from("webhook_logs").select("status, created_at").order("created_at", { ascending: false }).limit(50),
+    supabase.from("auto_reply_jobs").select("id", { count: "exact", head: true }).in("status", ["queued", "retry", "processing"]),
+    supabase.from("auto_reply_jobs").select("id", { count: "exact", head: true }).eq("status", "failed").gte("created_at", today.toISOString()),
+    supabase.from("logs").select("id", { count: "exact", head: true }).eq("event_type", "api.message.send").gte("created_at", today.toISOString()),
+    supabase.from("webhook_logs").select("id", { count: "exact", head: true }).gte("created_at", today.toISOString()),
+    supabase.from("logs").select("id", { count: "exact", head: true }).eq("status", "skipped").gte("created_at", today.toISOString()),
+    supabase.from("whatsapp_handover_sessions").select("customer", { count: "exact", head: true }).gt("expires_at", new Date().toISOString()),
   ]);
 
-  if (triggerResult.error) throw new Error(triggerResult.error.message);
-  if (successResult.error) throw new Error(successResult.error.message);
-  if (webhookResult.error) throw new Error(webhookResult.error.message);
+  const results = [activeResult, triggerResult, successResult, webhookResult, queuedResult, failedJobsResult, apiMessagesResult, webhookTodayResult, skippedResult, handoverResult];
+  const failedQuery = results.find((result) => result.error);
+  if (failedQuery?.error) throw new Error(failedQuery.error.message);
 
   const statuses = (successResult.data ?? []) as Array<{ status: string }>;
   const successCount = statuses.filter((item) => item.status === "success").length;
@@ -233,11 +266,18 @@ export async function getOverviewMetrics(supabase: SupabaseClient): Promise<Over
   return {
     apiStatus: "unchecked",
     webhookStatus: webhooks.length === 0 ? "inactive" : recentFailures >= 3 ? "degraded" : "healthy",
-    totalAutomation,
+    totalAutoReply,
     totalTemplates,
     totalFlows,
     triggersToday: triggerResult.count ?? 0,
     successRate: statuses.length ? Math.round((successCount / statuses.length) * 100) : 0,
     lastWebhookAt: webhooks[0]?.created_at ?? null,
+    activeAutoReply: activeResult.count ?? 0,
+    queuedJobs: queuedResult.count ?? 0,
+    failedJobsToday: failedJobsResult.count ?? 0,
+    apiMessagesToday: apiMessagesResult.count ?? 0,
+    webhookEventsToday: webhookTodayResult.count ?? 0,
+    skippedToday: skippedResult.count ?? 0,
+    activeHandovers: handoverResult.count ?? 0,
   };
 }

@@ -11,6 +11,7 @@ const styles: Record<string, string> = {
   degraded: "border-amber-500/30 bg-amber-500/10 text-amber-500",
   retry: "border-amber-500/30 bg-amber-500/10 text-amber-500",
   pending: "border-blue-500/30 bg-blue-500/10 text-blue-500",
+  skipped: "border-violet-500/30 bg-violet-500/10 text-violet-500",
   inactive: "border-border bg-muted text-muted-foreground",
   unchecked: "border-border bg-muted text-muted-foreground",
 };
@@ -18,4 +19,3 @@ const styles: Record<string, string> = {
 export function StatusBadge({ status, label }: { status: string; label?: string }) {
   return <Badge variant="outline" className={cn("capitalize", styles[status] ?? styles.inactive)}>{label ?? status}</Badge>;
 }
-

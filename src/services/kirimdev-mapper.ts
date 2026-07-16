@@ -1,4 +1,13 @@
-import { sendTextMessage, sendButtonMessage, sendListMessage, sendMediaMessage, sendTemplateMessage, sendCtaUrlMessage } from '@/lib/whatsapp/kirimdev-client';
+import {
+  sendTextMessage,
+  sendButtonMessage,
+  sendListMessage,
+  sendMediaMessage,
+  sendTemplateMessage,
+  sendCtaUrlMessage,
+  type KirimDevSendContext,
+  type KirimDevSendResult,
+} from '@/lib/whatsapp/kirimdev-client';
 
 export interface TemplateData {
   id: string;
@@ -8,8 +17,8 @@ export interface TemplateData {
   body: string;
   footer?: string | null;
   media_url?: string | null;
-  buttons?: any[];
-  sections?: any[];
+  buttons?: Array<{ id?: string; payload?: string; title?: string; label?: string; url?: string }>;
+  sections?: unknown[];
 }
 
 /**
@@ -18,12 +27,17 @@ export interface TemplateData {
  * @param to Nomor tujuan (format 628xxx)
  * @param template Data template dari database
  */
-export async function sendMappedTemplate(phoneId: string, to: string, template: TemplateData): Promise<{ success: boolean; error?: string }> {
+export async function sendMappedTemplate(
+  phoneId: string,
+  to: string,
+  template: TemplateData,
+  context: KirimDevSendContext = {},
+): Promise<KirimDevSendResult> {
   try {
     switch (template.type) {
       case 'text': {
         const textBody = [template.header, template.body, template.footer].filter(Boolean).join('\n\n');
-        return await sendTextMessage(phoneId, to, textBody);
+        return await sendTextMessage(phoneId, to, textBody, context);
       }
       case 'image':
       case 'video':
@@ -31,14 +45,14 @@ export async function sendMappedTemplate(phoneId: string, to: string, template: 
         if (!template.media_url) {
           return { success: false, error: 'Media URL is missing for media template' };
         }
-        return await sendMediaMessage(phoneId, to, template.type, template.media_url, template.body);
+        return await sendMediaMessage(phoneId, to, template.type, template.media_url, template.body, context);
 
       case 'reply_button': {
         if (!template.buttons || template.buttons.length === 0) {
           return { success: false, error: 'Buttons are missing for reply_button template' };
         }
         
-        let headerObj: any = undefined;
+        let headerObj: { type: 'text' | 'image' | 'video' | 'document'; text?: string; link?: string } | undefined;
         if (template.media_url) {
           const ext = template.media_url.split('.').pop()?.toLowerCase() || '';
           const mediaType = ['mp4', 'avi', 'mov'].includes(ext) ? 'video' : ['pdf', 'doc', 'docx'].includes(ext) ? 'document' : 'image';
@@ -47,9 +61,9 @@ export async function sendMappedTemplate(phoneId: string, to: string, template: 
           headerObj = { type: 'text', text: template.header };
         }
         
-        const formattedButtons = template.buttons.map(btn => ({
-          id: btn.payload || btn.title || btn.label,
-          title: btn.title || btn.label
+        const formattedButtons = template.buttons.map((btn, index) => ({
+          id: btn.id || btn.payload || btn.title || btn.label || `button_${index + 1}`,
+          title: btn.title || btn.label || `Pilihan ${index + 1}`,
         })).slice(0, 3);
         
         return await sendButtonMessage(
@@ -58,7 +72,8 @@ export async function sendMappedTemplate(phoneId: string, to: string, template: 
           template.body, 
           formattedButtons,
           headerObj,
-          template.footer || undefined
+          template.footer || undefined,
+          context,
         );
       }
       case 'url_button':
@@ -66,7 +81,7 @@ export async function sendMappedTemplate(phoneId: string, to: string, template: 
           return { success: false, error: 'Buttons are missing for url_button template' };
         }
 
-        let headerUrlObj: any = undefined;
+        let headerUrlObj: { type: 'text' | 'image' | 'video' | 'document'; text?: string; link?: string } | undefined;
         if (template.media_url) {
           const ext = template.media_url.split('.').pop()?.toLowerCase() || '';
           const mediaType = ['mp4', 'avi', 'mov'].includes(ext) ? 'video' : ['pdf', 'doc', 'docx'].includes(ext) ? 'document' : 'image';
@@ -83,7 +98,8 @@ export async function sendMappedTemplate(phoneId: string, to: string, template: 
           btnUrl.title || btnUrl.label || 'Link',
           btnUrl.url || 'https://google.com',
           headerUrlObj,
-          template.footer || undefined
+          template.footer || undefined,
+          context,
         );
 
       case 'list': {
@@ -91,7 +107,7 @@ export async function sendMappedTemplate(phoneId: string, to: string, template: 
           return { success: false, error: 'Sections are missing for list template' };
         }
 
-        let headerObj: any = undefined;
+        let headerObj: { type: 'text' | 'image' | 'video' | 'document'; text?: string; link?: string } | undefined;
         if (template.media_url) {
           const ext = template.media_url.split('.').pop()?.toLowerCase() || '';
           const mediaType = ['mp4', 'avi', 'mov'].includes(ext) ? 'video' : ['pdf', 'doc', 'docx'].includes(ext) ? 'document' : 'image';
@@ -107,16 +123,17 @@ export async function sendMappedTemplate(phoneId: string, to: string, template: 
           'Pilihan', // Default button text
           template.sections,
           headerObj,
-          template.footer || undefined
+          template.footer || undefined,
+          context,
         );
       }
 
       default:
         // Coba kirim sebagai pre-approved Meta Template jika tipenya unknown
-        return await sendTemplateMessage(phoneId, to, template.name, 'id', []);
+        return await sendTemplateMessage(phoneId, to, template.name, 'id', [], context);
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[KirimDevMapper] Error sending mapped template:', error);
-    return { success: false, error: error.message };
+    return { success: false, error: error instanceof Error ? error.message : 'Template gagal dikirim' };
   }
 }

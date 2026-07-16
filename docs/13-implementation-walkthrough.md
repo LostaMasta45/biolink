@@ -132,7 +132,7 @@ Settings menyimpan API key, webhook URL, timezone, retry, delay default, dan deb
 | Method | Endpoint | Keterangan |
 | --- | --- | --- |
 | GET | `/api/admin/whatsapp` | Overview, akun server-side, dan webhook URL |
-| POST | `/api/admin/whatsapp` | `test_connection`, `test_automation`, atau `sync_templates` |
+| POST | `/api/admin/whatsapp` | `test_connection`, `test_auto_reply`, atau `sync_templates` |
 | GET | `/api/admin/whatsapp/[resource]` | List dan filter resource |
 | POST | `/api/admin/whatsapp/[resource]` | Membuat konfigurasi |
 | PATCH | `/api/admin/whatsapp/[resource]/[id]` | Memperbarui konfigurasi |
@@ -163,4 +163,3 @@ Lint global repo masih melaporkan masalah existing pada generated asset Android 
 - **Sync Template** memperbarui penanda `synced_at` untuk template aktif. Sinkronisasi payload eksternal penuh memerlukan spesifikasi endpoint template Kirim.dev yang belum diberikan di PRD.
 - Credential existing pada `.env.local`, sidebar, header, dan konfigurasi Next.js/Tailwind tidak diubah.
 - Webhook producer/backend perlu menulis ke `logs` dan `webhook_logs` agar monitoring menampilkan event nyata.
-

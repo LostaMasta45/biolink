@@ -14,7 +14,7 @@ import { Switch } from "@/components/ui/switch";
 import { PageHeading } from "@/components/whatsapp/page-heading";
 import { ResourceError, ResourceLoading } from "@/components/whatsapp/resource-state";
 import { useManagerResource } from "@/hooks/use-manager-resource";
-import { updateManagerResource } from "@/services/whatsapp-manager-client";
+import { runManagerAction, updateManagerResource } from "@/services/whatsapp-manager-client";
 import type { WhatsAppSettings } from "@/types/whatsapp-manager";
 import { settingsSchema, type SettingsFormValues } from "@/validation/whatsapp-manager";
 
@@ -28,7 +28,11 @@ const defaults: SettingsFormValues = {
   timezone: "Asia/Jakarta", 
   retry_count: 3, 
   default_delay: 0, 
-  debug_mode: false 
+  debug_mode: false,
+  business_hours_enabled: false,
+  business_hours_start: "08:00",
+  business_hours_end: "17:00",
+  business_days: [1, 2, 3, 4, 5, 6],
 };
 
 export function SettingsManager() {
@@ -36,13 +40,15 @@ export function SettingsManager() {
   const form = useForm<SettingsFormValues>({ resolver: zodResolver(settingsSchema), defaultValues: defaults });
   const timezone = useWatch({ control: form.control, name: "timezone" }) ?? "Asia/Jakarta";
   const debugMode = useWatch({ control: form.control, name: "debug_mode" }) ?? false;
+  const businessHoursEnabled = useWatch({ control: form.control, name: "business_hours_enabled" }) ?? false;
+  const businessDays = useWatch({ control: form.control, name: "business_days" }) ?? [];
   const current = settings.data[0];
 
   // Simulator state
   const [simSender, setSimSender] = useState("6281234567890");
   const [simMessage, setSimMessage] = useState("");
-  const [simTarget, setSimTarget] = useState("bot"); // 'bot' | 'admin'
   const [simLoading, setSimLoading] = useState(false);
+  const [simResult, setSimResult] = useState<string | null>(null);
 
   useEffect(() => {
     if (!current) return;
@@ -56,7 +62,11 @@ export function SettingsManager() {
       timezone: current.timezone, 
       retry_count: current.retry_count, 
       default_delay: current.default_delay, 
-      debug_mode: current.debug_mode 
+      debug_mode: current.debug_mode,
+      business_hours_enabled: current.business_hours_enabled ?? false,
+      business_hours_start: (current.business_hours_start ?? "08:00").slice(0, 5),
+      business_hours_end: (current.business_hours_end ?? "17:00").slice(0, 5),
+      business_days: current.business_days ?? [1, 2, 3, 4, 5, 6],
     });
   }, [current, form]);
   const submit = form.handleSubmit(async (values) => {
@@ -68,29 +78,17 @@ export function SettingsManager() {
     if (!simMessage.trim()) return toast.error("Pesan tidak boleh kosong");
     setSimLoading(true);
     try {
-      let targetPhoneId = simTarget === "bot" ? current?.bot_phone_id : current?.admin_phone_id;
-      let targetPhoneNum = simTarget === "bot" ? current?.bot_phone_number : current?.admin_phone_number;
-      
-      const payload = {
-        event: "message.received",
-        data: {
-          phoneId: targetPhoneId || "SIMULATION_ID",
-          to: targetPhoneNum || "628000000000",
-          from: simSender,
-          message: { text: simMessage }
-        }
-      };
-
-      const res = await fetch('/api/webhook/whatsapp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+      const result = await runManagerAction<{ status: string; keyword?: string; templateName?: string; delaySeconds?: number; reason?: string }>("simulate_auto_reply", {
+        sender: simSender,
+        message: simMessage,
       });
-      if (!res.ok) throw new Error("Gagal mensimulasikan pesan");
-      toast.success("Webhook simulasi berhasil dikirim!");
-      setSimMessage("");
-    } catch (err: any) {
-      toast.error(err.message);
+      const summary = result.status === "simulated"
+        ? `Cocok: ${result.keyword} → ${result.templateName} (delay ${result.delaySeconds}s)`
+        : result.status === "skipped" ? `Dilewati: ${result.reason}` : "Tidak ada keyword yang cocok";
+      setSimResult(summary);
+      toast.success("Simulasi selesai tanpa mengirim WhatsApp");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Simulasi gagal");
     } finally {
       setSimLoading(false);
     }
@@ -117,6 +115,23 @@ export function SettingsManager() {
               <Input id="webhook-url" type="url" {...form.register("webhook_url")} />
               {form.formState.errors.webhook_url && <p className="text-xs text-destructive">{form.formState.errors.webhook_url.message}</p>}
             </div>
+          </CardContent>
+        </Card>
+
+        <Card className="rounded-xl border-border/60 overflow-hidden">
+          <CardHeader><CardTitle className="text-base">Jam Operasional Customer Service</CardTitle></CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center justify-between rounded-xl border p-3">
+              <div><Label htmlFor="business-hours-enabled">Aktifkan jam kerja</Label><p className="mt-1 text-xs text-muted-foreground">Dipakai oleh rule dengan jadwal Jam Kerja atau Di Luar Jam Kerja.</p></div>
+              <Switch id="business-hours-enabled" checked={businessHoursEnabled} onCheckedChange={(checked) => form.setValue("business_hours_enabled", checked)} />
+            </div>
+            {businessHoursEnabled && <>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2"><Label htmlFor="business-start">Mulai</Label><Input id="business-start" type="time" {...form.register("business_hours_start")} /></div>
+                <div className="space-y-2"><Label htmlFor="business-end">Selesai</Label><Input id="business-end" type="time" {...form.register("business_hours_end")} /></div>
+              </div>
+              <div className="space-y-2"><Label>Hari aktif</Label><div className="flex flex-wrap gap-2">{[[1,"Sen"],[2,"Sel"],[3,"Rab"],[4,"Kam"],[5,"Jum"],[6,"Sab"],[0,"Min"]].map(([value,label]) => { const day = Number(value); const selected = businessDays.includes(day); return <Button key={day} type="button" size="sm" variant={selected ? "default" : "outline"} onClick={() => form.setValue("business_days", selected ? businessDays.filter((item) => item !== day) : [...businessDays, day].sort())}>{label}</Button>; })}</div></div>
+            </>}
           </CardContent>
         </Card>
 
@@ -194,35 +209,26 @@ export function SettingsManager() {
       </form>
 
       <div className="border-t pt-8 mt-8">
-        <PageHeading title="Alat Simulasi (Testing Bot)" description="Tes Auto-Reply atau Flow tanpa menggunakan WhatsApp asli. Sistem akan mensimulasikan webhook dari Kirim.dev." icon={Play} />
+        <PageHeading title="Simulator Auto Reply" description="Dry-run pencocokan rule tanpa memanggil API KirimDev dan tanpa mengirim WhatsApp." icon={Play} />
         <Card className="rounded-xl border-border/60 overflow-hidden">
           <CardHeader>
             <CardTitle className="text-base">Kirim Pesan Simulasi</CardTitle>
           </CardHeader>
           <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label>Tujuan (Penerima)</Label>
-              <Select value={simTarget} onValueChange={setSimTarget}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="bot">Akun Bot (Untuk test Auto-reply)</SelectItem>
-                  <SelectItem value="admin">Akun Admin (Untuk test Command)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Nomor Pengirim (Customer Palsu)</Label>
+              <Label>Nomor Pengirim Simulasi</Label>
               <Input value={simSender} onChange={e => setSimSender(e.target.value)} placeholder="628..." />
             </div>
-            <div className="space-y-2 md:col-span-2">
+            <div className="space-y-2">
               <Label>Isi Pesan (Keyword / Perintah)</Label>
               <div className="flex gap-2">
                 <Input value={simMessage} onChange={e => setSimMessage(e.target.value)} placeholder="Contoh: halo, atau tesbot" onKeyDown={e => e.key === 'Enter' && runSimulation()} />
                 <Button onClick={runSimulation} disabled={simLoading} type="button">
-                  {simLoading ? "Mengirim..." : "Kirim Tes"}
+                  {simLoading ? "Memeriksa..." : "Jalankan Dry-run"}
                 </Button>
               </div>
             </div>
+            {simResult && <p className="rounded-lg bg-muted p-3 text-sm md:col-span-2">{simResult}</p>}
           </CardContent>
         </Card>
       </div>

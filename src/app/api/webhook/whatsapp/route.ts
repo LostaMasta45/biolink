@@ -1,190 +1,250 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { isAdminNumber, getAccountByPhoneId, getAllAccounts, getAccountByPhone } from '@/lib/whatsapp/kirimdev-client';
-import { processCommand } from '@/lib/whatsapp/command-processor';
-import type { KirimDevWebhookPayload } from '@/lib/whatsapp/types';
-import { processCustomerMessage, logWebhookEvent } from '@/services/whatsapp-execution-engine';
+import { NextRequest, NextResponse } from "next/server";
+import {
+  getAccountByPhone,
+  getAccountByPhoneId,
+  getAllAccounts,
+  isAdminNumber,
+} from "@/lib/whatsapp/kirimdev-client";
+import { processCommand } from "@/lib/whatsapp/command-processor";
+import type { KirimDevWebhookPayload } from "@/lib/whatsapp/types";
+import { processCustomerMessage, processDueAutoReplyJobs } from "@/services/whatsapp-execution-engine";
+import {
+  claimWebhookEvent,
+  recordProviderDeliveryStatus,
+  writeWebhookLog,
+} from "@/services/whatsapp-audit-service";
 
-// ============================================
-// WhatsApp Webhook Receiver
-// Endpoint: POST /api/webhook/whatsapp
-//
-// URL ini didaftarkan di Dashboard KirimDev:
-//   Settings → Webhook → URL endpoint
-//   https://your-domain.com/api/webhook/whatsapp
-//
-// Events yang di-subscribe:
-//   ✅ message.received
-//   ✅ message.sent
-// ============================================
-
-export async function POST(req: NextRequest) {
-  try {
-    const rawBody = await req.text();
-    
-    let payload: KirimDevWebhookPayload;
-    try {
-      payload = JSON.parse(rawBody);
-    } catch (parseErr) {
-      console.error('[Webhook] ❌ JSON parse error:', parseErr);
-      return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
-    }
-
-    // Log raw payload structure for debugging (truncated)
-    const payloadKeys = Object.keys(payload);
-    console.log('[Webhook] 📦 Payload keys:', payloadKeys.join(', '), '| Has entry:', !!payload.entry, '| Has data:', !!(payload as any).data);
-
-    // Log the incoming webhook to the database
-    const eventType = payload.event || (payload.entry ? 'cloud_api_event' : 'unknown');
-    await logWebhookEvent('incoming', eventType, 'success', payload);
-
-    // ─── Ekstrak data dari payload ───
-    let eventName = payload.event;
-    let senderPhone = payload.data?.from;
-    let text = payload.data?.message?.text || 
-               (payload.data as any)?.text?.body || 
-               (payload.data as any)?.text ||
-               (payload.data as any)?.message?.conversation ||
-               (payload.data as any)?.message?.extendedTextMessage?.text;
-    if (typeof text === 'object' && text !== null && 'body' in text) {
-      text = text.body;
-    }
-    let phoneId = payload.data?.phoneId || '';
-    let toPhone = payload.data?.to || '';
-
-    // Coba parse format WhatsApp Cloud API (yang diteruskan oleh KirimDev)
-    if (payload.entry && payload.entry.length > 0) {
-      const changes = payload.entry[0].changes;
-      if (changes && changes.length > 0) {
-        const value = changes[0].value;
-        if (value && value.messages && value.messages.length > 0) {
-          const msg = value.messages[0];
-          senderPhone = msg.from;
-          if (msg.type === 'text' && msg.text) {
-            text = msg.text.body;
-          } else if (msg.type === 'interactive' && msg.interactive) {
-            if (msg.interactive.type === 'button_reply') {
-              text = msg.interactive.button_reply.id;
-            } else if (msg.interactive.type === 'list_reply') {
-              text = msg.interactive.list_reply.id;
-            }
-          }
-          phoneId = value.metadata?.phone_number_id || phoneId;
-          toPhone = value.metadata?.display_phone_number || toPhone;
-          eventName = 'message.received';
-          console.log('[Webhook] 📋 Cloud API parsed | msgType:', msg.type, '| from:', senderPhone, '| phoneId:', phoneId);
-        } else if (value && value.statuses) {
-          console.log('[Webhook] ⏭️ Status event (not a message), ignoring');
-        } else {
-          console.log('[Webhook] ⚠️ Entry present but no messages[] or statuses[]');
-        }
-      }
-    }
-
-    // Fallback: Jika phoneId kosong, gunakan akun pertama yang terdaftar
-    if (!phoneId) {
-      const accounts = await getAllAccounts();
-      if (accounts.length > 0) {
-        phoneId = accounts[0].phoneId;
-        console.log('[Webhook] 🔄 phoneId fallback to account[0]:', phoneId);
-      }
-    }
-
-    console.log('[Webhook] 📨 Event:', eventName, '| From:', senderPhone, '| Text:', text ? `"${String(text).substring(0, 50)}"` : '(empty)', '| PhoneID:', phoneId);
-
-    if (!senderPhone || !text) {
-      console.log('[Webhook] ⏭️ No sender or text, skipping. senderPhone:', senderPhone, '| text:', text);
-      return NextResponse.json({ status: 'ok', action: 'ignored_or_no_text' });
-    }
-
-    text = String(text).trim();
-
-    // ═══════════════════════════════════════════
-    //  EXECUTION ENGINE (GLOBAL AUTOMATION)
-    // ═══════════════════════════════════════════
-    // Jalankan ke semua pengirim (baik admin maupun customer) agar admin bisa mengetes Automation
-    await processCustomerMessage(phoneId, senderPhone, text);
-
-    const isAdmin = await isAdminNumber(senderPhone);
-    console.log('[Webhook] 🔐 isAdmin:', isAdmin, '| senderPhone:', senderPhone);
-
-    // CASE 1: ADMIN COMMAND & CONVERSATION STATE
-    if (isAdmin) {
-      console.log('[Webhook] 🤖 Admin message:', `"${text.substring(0, 80)}"`);
-
-      let accountLabel = 'Unknown';
-      if (phoneId) {
-        const account = await getAccountByPhoneId(phoneId);
-        accountLabel = account?.label || 'Unknown';
-      }
-
-      if (!phoneId && toPhone) {
-        const account = await getAccountByPhone(toPhone);
-        if (account) {
-          phoneId = account.phoneId;
-          accountLabel = account.label;
-        }
-      }
-
-      if (!phoneId) {
-        console.error('[Webhook] ❌ Tidak bisa menentukan phoneId untuk membalas');
-        return NextResponse.json({ status: 'error', message: 'No phoneId available' }, { status: 500 });
-      }
-
-      console.log('[Webhook] 🚀 Calling processCommand | phoneId:', phoneId, '| via:', accountLabel);
-
-      try {
-        const result = await processCommand(phoneId, senderPhone, text);
-        console.log('[Webhook] ✅ processCommand result:', result);
-      } catch (err) {
-        console.error('[Webhook] ❌ Command processing failed:', err);
-      }
-
-      return NextResponse.json({
-        status: 'ok',
-        type: 'self-trigger',
-        command: text.split(/\s+/)[0],
-        via: accountLabel,
-      });
-    }
-
-    // CASE 2: PESAN DARI CUSTOMER
-    console.log('[Webhook] 👤 Customer message from:', senderPhone, '| Text:', text.substring(0, 50));
-
-    return NextResponse.json({
-      status: 'ok',
-      type: 'customer',
-      action: 'processed_by_execution_engine',
-    });
-
-  } catch (error) {
-    console.error('[Webhook] ❌ Error:', error);
-    await logWebhookEvent('incoming', 'error', 'failed', { error: (error as Error).message });
-    return NextResponse.json(
-      { error: 'Internal Server Error', message: (error as Error).message },
-      { status: 500 }
-    );
-  }
+interface ParsedInboundMessage {
+  senderPhone: string;
+  text: string;
+  phoneId: string;
+  displayPhone: string;
 }
 
-// ============================================
-// GET - Verifikasi webhook (health check)
-// KirimDev mungkin mengirim GET untuk verifikasi
-// ============================================
+interface ParsedMessageStatus {
+  customer: string;
+  messageId: string;
+  status: string;
+  error?: unknown;
+}
+
+function parseMetaInbound(payload: KirimDevWebhookPayload): ParsedInboundMessage | null {
+  const value = payload.entry?.[0]?.changes?.[0]?.value;
+  const message = value?.messages?.[0];
+  if (!message) return null;
+
+  let text = "";
+  if (message.type === "text") {
+    text = message.text?.body ?? "";
+  } else if (message.type === "interactive") {
+    text = message.interactive?.button_reply?.id
+      ?? message.interactive?.list_reply?.id
+      ?? "";
+  } else if (message.type === "button") {
+    const button = message as typeof message & { button?: { payload?: string; text?: string } };
+    text = button.button?.payload ?? button.button?.text ?? "";
+  }
+
+  if (!message.from || !text) return null;
+  return {
+    senderPhone: message.from,
+    text,
+    phoneId: value?.metadata?.phone_number_id ?? "",
+    displayPhone: value?.metadata?.display_phone_number ?? "",
+  };
+}
+
+function parseLegacyInbound(payload: KirimDevWebhookPayload): ParsedInboundMessage | null {
+  const data = payload.data as Record<string, unknown> | undefined;
+  if (!data) return null;
+  const message = data.message as Record<string, unknown> | undefined;
+  const textObject = data.text as Record<string, unknown> | undefined;
+  const text = message?.text ?? textObject?.body ?? data.text;
+  if (typeof data.from !== "string" || typeof text !== "string") return null;
+  return {
+    senderPhone: data.from,
+    text,
+    phoneId: typeof data.phoneId === "string" ? data.phoneId : "",
+    displayPhone: typeof data.to === "string" ? data.to : "",
+  };
+}
+
+function parseMessageStatus(payload: KirimDevWebhookPayload): ParsedMessageStatus | null {
+  const value = payload.entry?.[0]?.changes?.[0]?.value;
+  const status = value?.statuses?.[0] as Record<string, unknown> | undefined;
+  if (!status || typeof status.id !== "string" || typeof status.status !== "string") {
+    const legacy = payload.data;
+    if (legacy?.id && legacy.status) {
+      return { customer: legacy.to || "unknown", messageId: legacy.id, status: legacy.status };
+    }
+    return null;
+  }
+  return {
+    customer: typeof status.recipient_id === "string" ? status.recipient_id : "unknown",
+    messageId: status.id,
+    status: status.status,
+    error: status.errors ?? null,
+  };
+}
+
+function inferEventId(payload: KirimDevWebhookPayload): string {
+  const value = payload.entry?.[0]?.changes?.[0]?.value;
+  const receivedId = value?.messages?.[0]?.id;
+  const statusId = (value?.statuses?.[0] as { id?: string } | undefined)?.id;
+  return receivedId ?? statusId ?? payload.data?.id ?? "";
+}
+
+export async function POST(req: NextRequest) {
+  const startedAt = Date.now();
+  const rawBody = await req.text();
+  let payload: KirimDevWebhookPayload;
+
+  try {
+    payload = JSON.parse(rawBody) as KirimDevWebhookPayload;
+  } catch {
+    await writeWebhookLog("incoming", "invalid_json", "failed", { raw_preview: rawBody.slice(0, 500) }, Date.now() - startedAt);
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  }
+
+  const payloadType = (payload as KirimDevWebhookPayload & { type?: string }).type;
+  const eventType = req.headers.get("x-kirim-event")
+    || payload.event
+    || payloadType
+    || (payload.entry ? "meta.webhook" : "unknown");
+  const eventId = req.headers.get("x-kirim-event-id") || inferEventId(payload);
+  const dedupeEventId = eventId ? `${eventType}:${eventId}` : "";
+
+  await writeWebhookLog("incoming", eventType, "success", payload, Date.now() - startedAt);
+
+  try {
+    const claimed = await claimWebhookEvent(dedupeEventId, eventType);
+    if (!claimed) {
+      await writeWebhookLog("incoming", `${eventType}.duplicate`, "retry", { event_id: eventId }, Date.now() - startedAt, 1);
+      return NextResponse.json({ status: "ok", action: "duplicate_ignored", event: eventType });
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Deduplikasi webhook gagal";
+    await writeWebhookLog("incoming", `${eventType}.dedupe_failed`, "failed", { event_id: eventId, error: message }, Date.now() - startedAt);
+    return NextResponse.json({ status: "error", error: message }, { status: 500 });
+  }
+
+  // Setiap webhook ikut membantu menguras job yang sudah jatuh tempo. Worker cron
+  // tetap menjadi jalur utama untuk delay ketika tidak ada event baru.
+  void processDueAutoReplyJobs(5).catch((error) => console.error("[Webhook] Queue worker gagal:", error));
+
+  if (eventType === "message.status") {
+    const status = parseMessageStatus(payload);
+    if (status) {
+      await recordProviderDeliveryStatus({
+        customer: status.customer,
+        providerMessageId: status.messageId,
+        providerStatus: status.status,
+        error: status.error,
+        eventId,
+      });
+      await writeWebhookLog("outgoing", `message.${status.status}`, status.status === "failed" ? "failed" : "success", {
+        event_id: eventId,
+        provider_message_id: status.messageId,
+        customer: status.customer,
+        error: status.error ?? null,
+      }, Date.now() - startedAt);
+    }
+    return NextResponse.json({ status: "ok", action: status ? "delivery_status_recorded" : "status_ignored" });
+  }
+
+  // message.sent dan message.status bukan pesan customer. Mengabaikannya mencegah
+  // balasan kita sendiri masuk lagi ke engine dan membuat loop.
+  if (eventType !== "message.received" && eventType !== "meta.webhook") {
+    return NextResponse.json({ status: "ok", action: "ignored_event", event: eventType });
+  }
+
+  const inbound = parseMetaInbound(payload) ?? parseLegacyInbound(payload);
+  if (!inbound) {
+    return NextResponse.json({ status: "ok", action: "ignored_non_text", event: eventType });
+  }
+
+  let phoneId = inbound.phoneId;
+  if (!phoneId && inbound.displayPhone) {
+    phoneId = (await getAccountByPhone(inbound.displayPhone))?.phoneId ?? "";
+  }
+  if (!phoneId) {
+    phoneId = (await getAllAccounts())[0]?.phoneId ?? "";
+  }
+
+  const text = inbound.text.trim();
+  const execution = await processCustomerMessage(phoneId, inbound.senderPhone, text, { eventId });
+
+  if (execution.status === "failed") {
+    await writeWebhookLog("outgoing", "auto_reply.failed", "failed", {
+      event_id: eventId,
+      error: execution.error,
+    });
+    // KirimDev akan retry webhook non-2xx, sehingga gangguan DB/API sementara tidak
+    // menghilangkan pesan customer tanpa jejak.
+    return NextResponse.json(
+      { status: "error", action: "auto_reply_failed", error: execution.error },
+      { status: 500 },
+    );
+  }
+
+  if (execution.status === "sent") {
+    await writeWebhookLog("outgoing", "auto_reply.sent", "success", {
+      event_id: eventId,
+      rule_id: execution.ruleId,
+      template_id: execution.templateId,
+    });
+    return NextResponse.json({ status: "ok", action: "auto_reply_sent" });
+  }
+
+  if (execution.status === "queued") {
+    await writeWebhookLog("outgoing", "auto_reply.queued", "success", {
+      event_id: eventId,
+      job_id: execution.jobId,
+      rule_id: execution.ruleId,
+      scheduled_at: execution.scheduledAt,
+    }, Date.now() - startedAt);
+    return NextResponse.json({ status: "ok", action: "auto_reply_queued", scheduled_at: execution.scheduledAt });
+  }
+
+  if (execution.status === "skipped") {
+    await writeWebhookLog("outgoing", `auto_reply.skipped_${execution.reason}`, "success", {
+      event_id: eventId,
+      reason: execution.reason,
+    }, Date.now() - startedAt);
+    return NextResponse.json({ status: "ok", action: "auto_reply_skipped", reason: execution.reason });
+  }
+
+  // Pesan admin yang bukan keyword tetap diteruskan ke command processor lama.
+  if (await isAdminNumber(inbound.senderPhone)) {
+    const account = phoneId ? await getAccountByPhoneId(phoneId) : undefined;
+    try {
+      await processCommand(phoneId, inbound.senderPhone, text);
+    } catch (error) {
+      console.error("[Webhook] Command processing failed:", error);
+    }
+    return NextResponse.json({
+      status: "ok",
+      type: "admin_command",
+      command: text.split(/\s+/)[0],
+      via: account?.label ?? "Unknown",
+    });
+  }
+
+  return NextResponse.json({ status: "ok", type: "customer", action: "no_keyword_match" });
+}
 
 export async function GET(req: NextRequest) {
-  const challenge = req.nextUrl.searchParams.get('challenge');
-  if (challenge) {
-    return new NextResponse(challenge, { status: 200 });
-  }
+  const challenge = req.nextUrl.searchParams.get("challenge");
+  if (challenge) return new NextResponse(challenge, { status: 200 });
 
   const accounts = await getAllAccounts();
   return NextResponse.json({
-    status: 'active',
-    service: 'ILJ-Hub WhatsApp Webhook',
+    status: "active",
+    service: "ILJ-Hub WhatsApp Webhook",
     timestamp: new Date().toISOString(),
-    accounts: accounts.map(a => ({
-      label: a.label,
-      phoneId: a.phoneId ? '***' + a.phoneId.slice(-4) : 'N/A',
+    accounts: accounts.map((account) => ({
+      label: account.label,
+      phoneId: account.phoneId ? `***${account.phoneId.slice(-4)}` : "N/A",
     })),
   });
 }

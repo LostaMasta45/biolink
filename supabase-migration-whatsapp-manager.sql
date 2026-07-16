@@ -132,6 +132,23 @@ BEGIN
     END LOOP;
 END $$;
 
+-- Jalankan juga `supabase-migration-whatsapp-automation-v2.sql` setelah migration
+-- ini untuk fitur automation produksi: match mode, queue/delay, cooldown,
+-- deduplication, priority, jam kerja/handover, test mode, dan audit API lengkap.
+
+-- Webhook tidak mempunyai sesi admin. Batasi akses anon hanya untuk membaca rule
+-- dan template aktif yang diperlukan oleh execution engine. INSERT/UPDATE/DELETE
+-- tetap dilindungi policy admin di atas.
+DROP POLICY IF EXISTS "Webhook reads active auto replies" ON auto_reply;
+CREATE POLICY "Webhook reads active auto replies"
+ON auto_reply FOR SELECT TO anon
+USING (is_active = TRUE);
+
+DROP POLICY IF EXISTS "Webhook reads active templates" ON templates;
+CREATE POLICY "Webhook reads active templates"
+ON templates FOR SELECT TO anon
+USING (is_active = TRUE);
+
 INSERT INTO settings (id) VALUES (TRUE) ON CONFLICT (id) DO NOTHING;
 
 DO $$

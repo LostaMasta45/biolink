@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import type { WhatsAppAccount } from './types';
+import { auditApiSend } from '@/services/whatsapp-audit-service';
 
 // ============================================
 // KirimDev API Client
@@ -11,7 +12,7 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
-let cachedSettings: any = null;
+let cachedSettings: Record<string, unknown> | null = null;
 let lastFetchTime = 0;
 
 async function fetchSettingsFromDB() {
@@ -87,6 +88,86 @@ function normalizePhone(phone: string): string {
   return cleaned;
 }
 
+export interface KirimDevSendContext {
+  source?: string;
+  correlationId?: string;
+  ruleId?: string;
+  templateId?: string;
+}
+
+export interface KirimDevSendResult {
+  success: boolean;
+  error?: string;
+  messageId?: string;
+  providerStatus?: string;
+  httpStatus?: number;
+  latencyMs?: number;
+}
+
+async function requestKirimDevMessage(
+  phoneId: string,
+  to: string,
+  messageType: string,
+  payload: Record<string, unknown>,
+  context: KirimDevSendContext = {},
+): Promise<KirimDevSendResult> {
+  const startedAt = Date.now();
+  const apiKey = await getDynamicApiKey();
+  const customer = normalizePhone(to);
+  if (!apiKey) {
+    const error = 'KIRIMDEV_API_KEY belum dikonfigurasi';
+    await auditApiSend({ customer, senderPhoneId: phoneId, messageType, success: false, latencyMs: 0, error, ...context });
+    return { success: false, error, latencyMs: 0 };
+  }
+
+  try {
+    const response = await fetch(`https://api.kirimdev.com/v1/${phoneId}/messages`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messaging_product: 'whatsapp', to: customer, ...payload }),
+    });
+    const latencyMs = Date.now() - startedAt;
+    const raw = await response.text();
+    let providerResponse: unknown = raw.slice(0, 2000);
+    try { providerResponse = raw ? JSON.parse(raw) : {}; } catch { /* response non-JSON */ }
+    const responseObject = providerResponse && typeof providerResponse === 'object'
+      ? providerResponse as Record<string, unknown>
+      : {};
+    const messages = Array.isArray(responseObject.messages) ? responseObject.messages : [];
+    const firstMessage = messages[0] && typeof messages[0] === 'object'
+      ? messages[0] as Record<string, unknown>
+      : {};
+    const messageId = typeof firstMessage.id === 'string'
+      ? firstMessage.id
+      : typeof responseObject.message_id === 'string' ? responseObject.message_id : undefined;
+    const providerStatus = typeof firstMessage.message_status === 'string'
+      ? firstMessage.message_status
+      : typeof responseObject.status === 'string' ? responseObject.status : undefined;
+    const error = response.ok ? undefined : raw.slice(0, 1000) || `HTTP ${response.status}`;
+
+    await auditApiSend({
+      customer,
+      senderPhoneId: phoneId,
+      messageType,
+      success: response.ok,
+      httpStatus: response.status,
+      latencyMs,
+      providerMessageId: messageId,
+      providerStatus,
+      error,
+      response: providerResponse,
+      ...context,
+    });
+
+    return { success: response.ok, error, messageId, providerStatus, httpStatus: response.status, latencyMs };
+  } catch (caught) {
+    const latencyMs = Date.now() - startedAt;
+    const error = caught instanceof Error ? caught.message : 'Koneksi KirimDev gagal';
+    await auditApiSend({ customer, senderPhoneId: phoneId, messageType, success: false, latencyMs, error, ...context });
+    return { success: false, error, latencyMs };
+  }
+}
+
 // ============================================
 // Core API Functions
 // ============================================
@@ -101,40 +182,10 @@ function normalizePhone(phone: string): string {
 export async function sendTextMessage(
   phoneId: string,
   to: string,
-  message: string
-): Promise<{ success: boolean; error?: string }> {
-  const apiKey = await getDynamicApiKey();
-  if (!apiKey) {
-    return { success: false, error: 'KIRIMDEV_API_KEY belum dikonfigurasi' };
-  }
-
-  try {
-    const res = await fetch(`https://api.kirimdev.com/v1/${phoneId}/messages`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        messaging_product: 'whatsapp',
-        to: normalizePhone(to),
-        type: 'text',
-        text: { body: message },
-      }),
-    });
-
-    if (!res.ok) {
-      const errorText = await res.text();
-      console.error(`[KirimDev] Gagal kirim via ${phoneId}:`, errorText);
-      return { success: false, error: errorText };
-    }
-
-    const data = await res.json();
-    return { success: true };
-  } catch (err: any) {
-    console.error(`[KirimDev] Exception pada sendTextMessage:`, err);
-    return { success: false, error: err.message };
-  }
+  message: string,
+  context: KirimDevSendContext = {},
+): Promise<KirimDevSendResult> {
+  return requestKirimDevMessage(phoneId, to, 'text', { type: 'text', text: { body: message } }, context);
 }
 
 /**
@@ -153,15 +204,10 @@ export async function sendButtonMessage(
   body: string,
   buttons: { id: string; title: string }[],
   header?: { type: 'text' | 'image' | 'video' | 'document'; text?: string; link?: string },
-  footer?: string
-): Promise<{ success: boolean; error?: string }> {
-  const apiKey = await getDynamicApiKey();
-  if (!apiKey) {
-    return { success: false, error: 'KIRIMDEV_API_KEY belum dikonfigurasi' };
-  }
-
-  try {
-    const interactivePayload: any = {
+  footer?: string,
+  context: KirimDevSendContext = {},
+): Promise<KirimDevSendResult> {
+    const interactivePayload: Record<string, unknown> = {
       type: 'reply_buttons',
       body: { text: body },
       action: {
@@ -184,31 +230,9 @@ export async function sendButtonMessage(
       }
     }
 
-    const res = await fetch(`https://api.kirimdev.com/v1/${phoneId}/messages`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        messaging_product: 'whatsapp',
-        to: normalizePhone(to),
-        type: 'interactive',
-        interactive: interactivePayload
-      }),
-    });
-
-    if (!res.ok) {
-      const errorText = await res.text();
-      console.error(`[KirimDev] Gagal kirim button via ${phoneId}:`, errorText);
-      return { success: false, error: errorText };
-    }
-
-    return { success: true };
-  } catch (err: any) {
-    console.error(`[KirimDev] Exception pada sendButtonMessage:`, err);
-    return { success: false, error: err.message };
-  }
+    return requestKirimDevMessage(phoneId, to, 'reply_button', {
+      type: 'interactive', interactive: interactivePayload,
+    }, context);
 }
 
 /**
@@ -229,15 +253,10 @@ export async function sendCtaUrlMessage(
   displayText: string,
   url: string,
   header?: { type: 'text' | 'image' | 'video' | 'document'; text?: string; link?: string },
-  footer?: string
-): Promise<{ success: boolean; error?: string }> {
-  const apiKey = await getDynamicApiKey();
-  if (!apiKey) {
-    return { success: false, error: 'KIRIMDEV_API_KEY belum dikonfigurasi' };
-  }
-
-  try {
-    const interactivePayload: any = {
+  footer?: string,
+  context: KirimDevSendContext = {},
+): Promise<KirimDevSendResult> {
+    const interactivePayload: Record<string, unknown> = {
       type: 'cta_url',
       body: { text: body },
       action: {
@@ -261,31 +280,9 @@ export async function sendCtaUrlMessage(
       }
     }
 
-    const res = await fetch(`https://api.kirimdev.com/v1/${phoneId}/messages`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        messaging_product: 'whatsapp',
-        to: normalizePhone(to),
-        type: 'interactive',
-        interactive: interactivePayload
-      }),
-    });
-
-    if (!res.ok) {
-      const errorText = await res.text();
-      console.error(`[KirimDev] Gagal kirim CTA URL via ${phoneId}:`, errorText);
-      return { success: false, error: errorText };
-    }
-
-    return { success: true };
-  } catch (err: any) {
-    console.error(`[KirimDev] Exception pada sendCtaUrlMessage:`, err);
-    return { success: false, error: err.message };
-  }
+    return requestKirimDevMessage(phoneId, to, 'url_button', {
+      type: 'interactive', interactive: interactivePayload,
+    }, context);
 }
 
 /**
@@ -304,17 +301,12 @@ export async function sendListMessage(
   to: string,
   body: string,
   buttonText: string,
-  sections: any[],
+  sections: unknown[],
   header?: { type: 'text' | 'image' | 'video' | 'document'; text?: string; link?: string },
-  footer?: string
-): Promise<{ success: boolean; error?: string }> {
-  const apiKey = await getDynamicApiKey();
-  if (!apiKey) {
-    return { success: false, error: 'KIRIMDEV_API_KEY belum dikonfigurasi' };
-  }
-
-  try {
-    const interactivePayload: any = {
+  footer?: string,
+  context: KirimDevSendContext = {},
+): Promise<KirimDevSendResult> {
+    const interactivePayload: Record<string, unknown> = {
       type: 'list',
       body: { text: body },
       action: {
@@ -335,31 +327,9 @@ export async function sendListMessage(
       }
     }
 
-    const res = await fetch(`https://api.kirimdev.com/v1/${phoneId}/messages`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        messaging_product: 'whatsapp',
-        to: normalizePhone(to),
-        type: 'interactive',
-        interactive: interactivePayload
-      }),
-    });
-
-    if (!res.ok) {
-      const errorText = await res.text();
-      console.error(`[KirimDev] Gagal kirim list via ${phoneId}:`, errorText);
-      return { success: false, error: errorText };
-    }
-
-    return { success: true };
-  } catch (err: any) {
-    console.error(`[KirimDev] Exception pada sendListMessage:`, err);
-    return { success: false, error: err.message };
-  }
+    return requestKirimDevMessage(phoneId, to, 'list', {
+      type: 'interactive', interactive: interactivePayload,
+    }, context);
 }
 
 /**
@@ -370,15 +340,10 @@ export async function sendMediaMessage(
   to: string,
   type: 'image' | 'video' | 'document',
   url: string,
-  caption?: string
-): Promise<{ success: boolean; error?: string }> {
-  const apiKey = await getDynamicApiKey();
-  if (!apiKey) {
-    return { success: false, error: 'KIRIMDEV_API_KEY belum dikonfigurasi' };
-  }
-
-  try {
-    const payload: any = {
+  caption?: string,
+  context: KirimDevSendContext = {},
+): Promise<KirimDevSendResult> {
+    const payload: Record<string, unknown> = {
       messaging_product: 'whatsapp',
       to: normalizePhone(to),
       type: type,
@@ -386,32 +351,12 @@ export async function sendMediaMessage(
 
     payload[type] = {
       link: url,
+      ...(caption ? { caption } : {}),
     };
-    
-    if (caption) {
-      payload[type].caption = caption;
-    }
 
-    const res = await fetch(`https://api.kirimdev.com/v1/${phoneId}/messages`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(payload),
-    });
-
-    if (!res.ok) {
-      const errorText = await res.text();
-      console.error(`[KirimDev] Gagal kirim media via ${phoneId}:`, errorText);
-      return { success: false, error: errorText };
-    }
-
-    return { success: true };
-  } catch (err: any) {
-    console.error(`[KirimDev] Exception pada sendMediaMessage:`, err);
-    return { success: false, error: err.message };
-  }
+    delete payload.messaging_product;
+    delete payload.to;
+    return requestKirimDevMessage(phoneId, to, type, payload, context);
 }
 
 /**
@@ -422,41 +367,13 @@ export async function sendTemplateMessage(
   to: string,
   templateName: string,
   languageCode: string,
-  components: any[]
-): Promise<{ success: boolean; error?: string }> {
-  const apiKey = await getDynamicApiKey();
-  if (!apiKey) {
-    return { success: false, error: 'KIRIMDEV_API_KEY belum dikonfigurasi' };
-  }
-
-  try {
-    const res = await fetch(`https://api.kirimdev.com/v1/${phoneId}/messages`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        messaging_product: 'whatsapp',
-        to: normalizePhone(to),
-        type: 'template',
-        template: {
-          name: templateName,
-          language: { code: languageCode },
-          components,
-        },
-      }),
-    });
-
-    if (!res.ok) {
-      const errorText = await res.text();
-      return { success: false, error: errorText };
-    }
-
-    return { success: true };
-  } catch (error) {
-    return { success: false, error: (error as Error).message };
-  }
+  components: unknown[],
+  context: KirimDevSendContext = {},
+): Promise<KirimDevSendResult> {
+  return requestKirimDevMessage(phoneId, to, 'template', {
+    type: 'template',
+    template: { name: templateName, language: { code: languageCode }, components },
+  }, context);
 }
 
 // ============================================
@@ -469,7 +386,7 @@ export async function sendTemplateMessage(
 export async function sendTestToAdmin(
   phoneId: string,
   message: string
-): Promise<{ success: boolean; error?: string }> {
+): Promise<KirimDevSendResult> {
   const accounts = await getDynamicAccounts();
   if (accounts.length < 2) {
     return { success: false, error: `Butuh 2 akun WA (Akun Pengirim & Akun Admin) untuk menghindari error batasan Meta API` };
@@ -479,7 +396,9 @@ export async function sendTestToAdmin(
   const botAccount = accounts[1]; // Admin 2 (Pengirim)
 
   // Selalu gunakan botAccount sebagai pengirim agar tidak kena error #100
-  return sendTextMessage(botAccount.phoneId, adminAccount.phoneNumber, message);
+  return sendTextMessage(botAccount.phoneId, adminAccount.phoneNumber, message, {
+    source: 'overview_test_bot_to_admin',
+  });
 }
 
 /**
@@ -487,7 +406,7 @@ export async function sendTestToAdmin(
  */
 export async function sendNotifToAdmin(
   message: string
-): Promise<{ success: boolean; error?: string }> {
+): Promise<KirimDevSendResult> {
   const accounts = await getDynamicAccounts();
   if (accounts.length < 2) {
     return { success: false, error: 'Dibutuhkan minimal 2 akun untuk mengirim notifikasi' };
@@ -496,7 +415,9 @@ export async function sendNotifToAdmin(
   const adminAccount = accounts[0]; // Penerima
   const botAccount = accounts[1]; // Pengirim
 
-  return sendTextMessage(botAccount.phoneId, adminAccount.phoneNumber, message);
+  return sendTextMessage(botAccount.phoneId, adminAccount.phoneNumber, message, {
+    source: 'system_notification_bot_to_admin',
+  });
 }
 
 /**
@@ -632,7 +553,10 @@ export async function testConnection(phoneId: string): Promise<{
         const accountsList = accountsData.data || accountsData.accounts || accountsData;
         if (Array.isArray(accountsList)) {
           const found = accountsList.some(
-            (a: any) => String(a.id) === String(phoneId) || String(a.phone_number_id) === String(phoneId)
+            (value: unknown) => {
+              const accountRow = value && typeof value === 'object' ? value as Record<string, unknown> : {};
+              return String(accountRow.id) === String(phoneId) || String(accountRow.phone_number_id) === String(phoneId);
+            }
           );
           details.accountsCheck.found = found;
           if (!found) {
@@ -660,4 +584,3 @@ export async function testConnection(phoneId: string): Promise<{
     details,
   };
 }
-

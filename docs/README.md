@@ -57,3 +57,7 @@ Karena semuanya sudah tersedia di Kirim.dev.
 ## Dokumentasi Implementasi
 
 Walkthrough setup, route, penggunaan setiap modul, endpoint internal, dan hasil verifikasi tersedia di [13-implementation-walkthrough.md](./13-implementation-walkthrough.md).
+
+Catatan insiden, tutorial pengujian, SOP customer service, troubleshooting, dan roadmap automation tersedia di [15-panduan-operasional-auto-reply-customer-service.md](./15-panduan-operasional-auto-reply-customer-service.md).
+
+Implementasi prioritas 1–6, durable queue, audit log API/webhook, upgrade Overview, migration, dan prosedur tes dua nomor tersedia di [16-implementation-automation-v2-dan-audit-log.md](./16-implementation-automation-v2-dan-audit-log.md).

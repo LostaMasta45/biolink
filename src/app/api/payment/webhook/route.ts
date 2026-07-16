@@ -3,7 +3,14 @@ import { createClient } from "@supabase/supabase-js";
 import type { KlikQRISWebhookPayload } from "@/lib/payment-types";
 import { getTodayWIB, getTomorrowWIB, generateInvoiceNumber } from "@/lib/utils";
 import { sendNotifToAdmin } from "@/lib/whatsapp/kirimdev-client";
-import { sendTelegramMessage } from "@/lib/telegram-service";
+import { auditApiSend } from "@/services/whatsapp-audit-service";
+
+interface PaymentNotificationOrder {
+    amount: number;
+    customer_name?: string;
+    package_name?: string;
+    order_id: string;
+}
 
 function getSupabase() {
     return createClient(
@@ -36,7 +43,7 @@ async function sendTelegramNotification(text: string) {
 }
 
 // Send WhatsApp notification using Kirimdev API
-async function sendWhatsappNotification(phoneNumber: string, order: any) {
+async function sendWhatsappNotification(phoneNumber: string, order: PaymentNotificationOrder) {
     const apiKey = process.env.KIRIMDEV_API_KEY;
     const phoneId = process.env.KIRIMDEV_PHONE_ID;
 
@@ -83,8 +90,21 @@ async function sendWhatsappNotification(phoneNumber: string, order: any) {
             }),
         });
 
+        const responseText = await res.text();
+        await auditApiSend({
+            customer: formattedPhone,
+            senderPhoneId: phoneId,
+            messageType: "template",
+            success: res.ok,
+            httpStatus: res.status,
+            latencyMs: 0,
+            error: res.ok ? undefined : responseText,
+            source: "payment_success_customer_legacy",
+            correlationId: String(order.order_id ?? ""),
+            response: responseText.slice(0, 2000),
+        });
         if (!res.ok) {
-            console.error("WhatsApp notification failed:", await res.text());
+            console.error("WhatsApp notification failed:", responseText);
         } else {
             console.log("WhatsApp notification sent successfully to", formattedPhone);
         }

@@ -8,7 +8,7 @@ export type TemplateType =
   | "list"
   | "carousel";
 
-export type ActivityStatus = "success" | "failed" | "pending";
+export type ActivityStatus = "success" | "failed" | "pending" | "skipped";
 export type WebhookStatus = "success" | "failed" | "retry";
 export type WebhookDirection = "incoming" | "outgoing";
 
@@ -93,6 +93,15 @@ export interface AutoReplyRule {
   template_id: string;
   flow_id: string | null;
   is_active: boolean;
+  match_type: "equals" | "contains" | "starts_with";
+  delay_seconds: number;
+  cooldown_seconds: number;
+  priority: number;
+  schedule_mode: "always" | "business_hours" | "outside_hours";
+  handover_to_human: boolean;
+  handover_duration_minutes: number;
+  is_test_mode: boolean;
+  test_phone_numbers: string[];
   created_at: string;
   updated_at: string;
   template?: Pick<WhatsAppTemplate, "id" | "name"> | null;
@@ -136,22 +145,32 @@ export interface WhatsAppSettings {
   retry_count: number;
   default_delay: number;
   debug_mode: boolean;
+  business_hours_enabled: boolean;
+  business_hours_start: string;
+  business_hours_end: string;
+  business_days: number[];
   updated_at: string;
 }
 
 export interface OverviewMetrics {
   apiStatus: "connected" | "disconnected" | "unchecked";
   webhookStatus: "healthy" | "degraded" | "inactive";
-  totalAutomation: number;
+  totalAutoReply: number;
   totalTemplates: number;
   totalFlows: number;
   triggersToday: number;
   successRate: number;
   lastWebhookAt: string | null;
+  activeAutoReply: number;
+  queuedJobs: number;
+  failedJobsToday: number;
+  apiMessagesToday: number;
+  webhookEventsToday: number;
+  skippedToday: number;
+  activeHandovers: number;
 }
 
 export interface ApiResult<T> {
   data: T;
   message?: string;
 }
-

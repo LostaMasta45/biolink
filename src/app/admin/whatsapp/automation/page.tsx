@@ -1,4 +1,5 @@
-import { AutomationManager } from "@/components/whatsapp/automation-manager";
+import { redirect } from "next/navigation";
 
-export default function AutomationPage() { return <AutomationManager />; }
-
+export default function AutomationPage() {
+  redirect("/admin/whatsapp/auto-reply");
+}

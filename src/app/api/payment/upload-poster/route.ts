@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { auditApiSend } from "@/services/whatsapp-audit-service";
 
 function getSupabase() {
     return createClient(
@@ -101,8 +102,20 @@ async function sendWhatsappConfirmation(phoneNumber: string, customerName: strin
             }),
         });
 
+        const responseText = await res.text();
+        await auditApiSend({
+            customer: formattedPhone,
+            senderPhoneId: phoneId,
+            messageType: "text",
+            success: res.ok,
+            httpStatus: res.status,
+            latencyMs: 0,
+            error: res.ok ? undefined : responseText,
+            source: "poster_upload_confirmation_legacy",
+            response: responseText.slice(0, 2000),
+        });
         if (!res.ok) {
-            console.error("WhatsApp confirmation failed:", await res.text());
+            console.error("WhatsApp confirmation failed:", responseText);
         } else {
             console.log("WhatsApp poster confirmation sent to", formattedPhone);
         }

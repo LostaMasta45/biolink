@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { getAllAccounts, testConnection } from "@/lib/whatsapp/kirimdev-client";
+import { getAllAccounts, sendTestToAdmin, testConnection } from "@/lib/whatsapp/kirimdev-client";
+import { processCustomerMessage, processDueAutoReplyJobs } from "@/services/whatsapp-execution-engine";
 import { getOverviewMetrics } from "@/services/whatsapp-manager-service";
 
 async function getAuthenticatedClient() {
@@ -35,22 +36,46 @@ export async function POST(request: NextRequest) {
   const supabase = await getAuthenticatedClient();
   if (!supabase) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   try {
-    const body = await request.json() as { action?: string; phoneId?: string };
+    const body = await request.json() as { action?: string; phoneId?: string; sender?: string; message?: string };
     switch (body.action) {
       case "test_connection": {
         if (!body.phoneId) return NextResponse.json({ error: "phoneId diperlukan" }, { status: 400 });
         return NextResponse.json(await testConnection(body.phoneId));
       }
-      case "test_automation": {
-        const { count, error } = await supabase
-          .from("automation")
-          .select("id", { count: "exact", head: true })
+      case "test_auto_reply": {
+        const { data, error } = await supabase
+          .from("auto_reply")
+          .select("id, template:templates!inner(id, is_active)")
           .eq("is_active", true);
         if (error) throw new Error(error.message);
+        const validRules = (data ?? []).filter((rule) => {
+          const template = Array.isArray(rule.template) ? rule.template[0] : rule.template;
+          return template?.is_active !== false;
+        });
         return NextResponse.json({
           success: true,
-          message: `${count ?? 0} automation aktif lolos pemeriksaan konfigurasi. Tidak ada pesan yang dikirim.`,
+          message: `${validRules.length} auto reply aktif memiliki template yang siap dikirim.`,
         });
+      }
+      case "simulate_auto_reply": {
+        if (!body.message?.trim()) return NextResponse.json({ error: "Pesan simulasi wajib diisi" }, { status: 400 });
+        const accounts = await getAllAccounts();
+        const result = await processCustomerMessage(
+          accounts[1]?.phoneId ?? accounts[0]?.phoneId ?? "SIMULATION",
+          body.sender || "6280000000000",
+          body.message,
+          { dryRun: true },
+        );
+        return NextResponse.json(result);
+      }
+      case "process_auto_reply_queue":
+        return NextResponse.json({ success: true, ...(await processDueAutoReplyJobs(50)), message: "Antrean jatuh tempo sudah diproses." });
+      case "send_test_to_admin": {
+        const accounts = await getAllAccounts();
+        if (accounts.length < 2) return NextResponse.json({ error: "Admin Utama dan Bot harus dikonfigurasi" }, { status: 400 });
+        const result = await sendTestToAdmin(accounts[1].phoneId, "✅ Tes ILJ Hub berhasil. Pesan ini dikirim dari Bot ke Admin Utama dan tercatat di Activity Log.");
+        if (!result.success) return NextResponse.json({ error: result.error ?? "Pesan tes gagal" }, { status: 502 });
+        return NextResponse.json({ success: true, message: "Pesan tes Bot → Admin Utama diterima KirimDev.", messageId: result.messageId ?? null });
       }
       case "sync_templates": {
         const { data, error } = await supabase

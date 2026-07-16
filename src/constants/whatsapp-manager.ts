@@ -1,6 +1,5 @@
 import {
   Activity,
-  Bot,
   Braces,
   FileText,
   GitBranch,
@@ -15,8 +14,7 @@ export const WHATSAPP_NAV_ITEMS = [
   { href: "/admin/whatsapp", label: "Overview", icon: LayoutDashboard },
   { href: "/admin/whatsapp/flow-builder", label: "Flow Builder", icon: GitBranch },
   { href: "/admin/whatsapp/templates", label: "Templates", icon: FileText },
-  { href: "/admin/whatsapp/automation", label: "Automation", icon: Bot },
-  { href: "/admin/whatsapp/auto-reply", label: "Balas Cepat", icon: MessageCircleReply },
+  { href: "/admin/whatsapp/auto-reply", label: "Auto Reply", icon: MessageCircleReply },
   { href: "/admin/whatsapp/logs", label: "Logs", icon: Activity },
   { href: "/admin/whatsapp/webhook", label: "Webhook", icon: Webhook },
   { href: "/admin/whatsapp/settings", label: "Settings", icon: Settings },
@@ -73,4 +71,3 @@ export const WEBHOOK_EVENTS = [
 ] as const;
 
 export const EMPTY_ICON = Braces;
-
