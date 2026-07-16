@@ -159,19 +159,7 @@ export function AutomationManager() {
               </div>
             )}
 
-            {["Tambah label", "Hapus label", "Assign", "Ubah prioritas", "Ubah status", "Kirim notifikasi"].includes(actionType) && (
-              <div className="space-y-2">
-                <Label>{actionType}</Label>
-                <Input placeholder="Nilai..." {...form.register("action_config_value")} />
-              </div>
-            )}
 
-            {actionType === "Tunggu" && (
-              <div className="space-y-2">
-                <Label>Waktu Tunggu (Menit)</Label>
-                <Input type="number" placeholder="60" {...form.register("action_config_value")} />
-              </div>
-            )}
             <div className="flex items-center justify-between rounded-xl border p-3"><Label htmlFor="automation-active">Aktif</Label><Switch id="automation-active" checked={active} onCheckedChange={(checked) => form.setValue("is_active", checked)} /></div>
             <DialogFooter><Button type="button" variant="outline" onClick={() => setOpen(false)}>Batal</Button><Button type="submit" disabled={form.formState.isSubmitting}>{form.formState.isSubmitting ? "Menyimpan..." : "Simpan"}</Button></DialogFooter>
           </form>

@@ -75,10 +75,9 @@ export const flowNodeSchema = z.object({
 });
 
 export const autoReplySchema = z.object({
-  phone_id: z.string().nullable().optional(),
-  keyword: z.string().trim().optional(),
+  keyword: z.string().trim().min(1, "Keyword wajib diisi"),
+  match_type: z.enum(["equals", "contains", "starts_with"]).default("contains"),
   template_id: z.string().uuid({ message: "Template wajib dipilih" }),
-  flow_id: z.string().uuid().nullable().optional(),
   is_active: z.boolean(),
 });
 

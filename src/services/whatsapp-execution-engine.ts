@@ -7,6 +7,13 @@ const supabase = createClient(
 );
 
 /**
+ * Dapatkan Phone ID Admin Utama — nomor yang digunakan untuk MENGIRIM balasan
+ */
+function getAdminPhoneId(): string {
+  return process.env.KIRIMDEV_PHONE_ID || process.env.KIRIMDEV_PHONE_ID_1 || '';
+}
+
+/**
  * Log aktivitas eksekusi ke tabel `logs`
  */
 async function logActivity(
@@ -59,113 +66,182 @@ export async function logWebhookEvent(
 
 /**
  * Fungsi utama untuk memproses pesan masuk dari Customer
+ * 
+ * Alur:
+ * 1. Cek keyword di tabel `auto_reply` — ini fitur AUTO REPLY sederhana
+ * 2. Jika tidak match, cek di tabel `automation` — ini fitur AUTOMATION lanjutan
+ * 3. Selalu gunakan Admin Utama (KIRIMDEV_PHONE_ID) sebagai pengirim
  */
-export async function processCustomerMessage(phoneId: string, senderPhone: string, text: string) {
+export async function processCustomerMessage(webhookPhoneId: string, senderPhone: string, text: string) {
+  const adminPhoneId = getAdminPhoneId();
+  const senderPhoneId = adminPhoneId || webhookPhoneId; // Prioritas: Admin Utama, fallback ke webhook phoneId
+
+  console.log(`[ExecutionEngine] ═══════════════════════════════════════`);
   console.log(`[ExecutionEngine] Processing message from ${senderPhone}: "${text}"`);
+  console.log(`[ExecutionEngine] Webhook PhoneID: ${webhookPhoneId} | Sender PhoneID (Admin): ${senderPhoneId}`);
   
   try {
-    const { data: session } = await supabase
-      .from('sessions')
-      .select('state')
-      .eq('phone', senderPhone)
-      .single();
-
-    if (session && session.state && session.state !== 'FLOW_ENGINE') {
-      console.log(`[ExecutionEngine] Customer is in legacy state (${session.state}). Ignoring.`);
-      // return; // COMMENT OUT RETURN SEMENTARA UNTUK TESTING
-    }
-
     const lowerText = text.toLowerCase().trim();
 
-    console.log(`[ExecutionEngine] Querying automations for phoneId: ${phoneId}`);
+    // ════════════════════════════════════════════════
+    //  STEP 1: CEK AUTO REPLY (tabel `auto_reply`)
+    // ════════════════════════════════════════════════
+    console.log(`[ExecutionEngine] [Step 1] Checking auto_reply table for keyword match...`);
     
-    // GLOBAL AUTOMATION EVALUATION
-    // Cari semua rule Automation yang aktif dan cocok dengan nomor pengirim (atau semua nomor)
+    const { data: autoReplies, error: arError } = await supabase
+      .from('auto_reply')
+      .select('*, template:templates(*)')
+      .eq('is_active', true)
+      .order('keyword', { ascending: true });
+
+    if (arError) {
+      console.error(`[ExecutionEngine] DB Error fetching auto_reply:`, arError);
+    }
+
+    console.log(`[ExecutionEngine] Found ${autoReplies?.length || 0} active auto-reply rules`);
+
+    if (autoReplies && autoReplies.length > 0) {
+      for (const rule of autoReplies) {
+        const keyword = (rule.keyword || '').toLowerCase().trim();
+        const matchType = rule.match_type || 'contains'; // default: contains
+        let matched = false;
+
+        if (!keyword) continue; // Skip empty keywords
+
+        switch (matchType) {
+          case 'equals':
+            matched = (lowerText === keyword);
+            break;
+          case 'contains':
+            matched = lowerText.includes(keyword);
+            break;
+          case 'starts_with':
+            matched = lowerText.startsWith(keyword);
+            break;
+          default:
+            matched = lowerText.includes(keyword);
+        }
+
+        console.log(`[ExecutionEngine] Auto-reply check: keyword="${keyword}" (${matchType}) vs text="${lowerText}" → ${matched ? '✅ MATCH' : '❌ no match'}`);
+
+        if (matched && rule.template) {
+          console.log(`[ExecutionEngine] ✅ AUTO-REPLY MATCH! Sending template "${rule.template.name}" from Admin Utama (${senderPhoneId}) to ${senderPhone}`);
+          
+          const res = await sendMappedTemplate(senderPhoneId, senderPhone, rule.template as TemplateData);
+          console.log(`[ExecutionEngine] sendMappedTemplate result:`, JSON.stringify(res));
+
+          await logActivity(
+            senderPhone,
+            'auto_reply_triggered',
+            res.success ? 'success' : 'failed',
+            res.error || `Auto-reply: "${rule.keyword}" → template "${rule.template.name}"`,
+            null,
+            rule.template_id,
+            { keyword: rule.keyword, match_type: matchType, text_received: text, sender_phone_id: senderPhoneId }
+          );
+
+          if (res.success) {
+            console.log(`[ExecutionEngine] ✅ Auto-reply sent successfully!`);
+            return; // Auto-reply berhasil, stop
+          } else {
+            console.error(`[ExecutionEngine] ❌ Auto-reply failed to send:`, res.error);
+            // Lanjut ke rule berikutnya atau automation
+          }
+        }
+      }
+    }
+
+    // ════════════════════════════════════════════════
+    //  STEP 2: CEK AUTOMATION (tabel `automation`)
+    // ════════════════════════════════════════════════
+    console.log(`[ExecutionEngine] [Step 2] Checking automation table...`);
+
     let query = supabase
       .from('automation')
       .select('*, template:templates(*)')
       .eq('is_active', true)
       .eq('trigger_type', 'Saat pesan masuk');
 
-    if (phoneId) {
-      query = query.or(`phone_id.is.null,phone_id.eq.${phoneId}`);
+    // Query: automation tanpa phone_id ATAU yang cocok dengan webhookPhoneId
+    if (webhookPhoneId) {
+      query = query.or(`phone_id.is.null,phone_id.eq.${webhookPhoneId}`);
     } else {
       query = query.is('phone_id', null);
     }
 
-    const { data: automations, error: autoErr } = await query.order('phone_id', { ascending: false }); // Prioritize specific phone_id match over null
+    const { data: automations, error: autoErr } = await query.order('phone_id', { ascending: false });
 
     if (autoErr) {
       console.error(`[ExecutionEngine] DB Error fetching automations:`, autoErr);
     }
 
-    console.log(`[ExecutionEngine] Found ${automations?.length || 0} active automation rules matching phoneId ${phoneId} (or null)`);
+    console.log(`[ExecutionEngine] Found ${automations?.length || 0} active automation rules`);
 
     if (!automations || automations.length === 0) {
-      console.log(`[ExecutionEngine] No matching automation rule found for 'Saat pesan masuk'.`);
+      console.log(`[ExecutionEngine] No automation rules matched. Done.`);
       return;
     }
 
-    let executed = false;
     for (const automation of automations) {
       let conditionMatched = false;
       const config = automation.condition_config;
-      console.log(`[ExecutionEngine] Evaluating rule: ${automation.name} | config:`, config);
+      console.log(`[ExecutionEngine] Evaluating automation: "${automation.name}" | config:`, JSON.stringify(config));
       
       // Evaluasi Keyword Condition
       if (config && config.field === 'keyword') {
-        const expectedVal = String(config.value).toLowerCase().trim();
-        switch (config.operator) {
-          case 'equals':
-            conditionMatched = (lowerText === expectedVal);
-            break;
-          case 'contains':
-            conditionMatched = lowerText.includes(expectedVal);
-            break;
-          case 'not_equals':
-            conditionMatched = (lowerText !== expectedVal);
-            break;
-          default:
-            conditionMatched = true;
+        const expectedVal = String(config.value || '').toLowerCase().trim();
+        if (!expectedVal) {
+          conditionMatched = true; // Empty value = match all
+        } else {
+          switch (config.operator) {
+            case 'equals':
+              conditionMatched = (lowerText === expectedVal);
+              break;
+            case 'contains':
+              conditionMatched = lowerText.includes(expectedVal);
+              break;
+            case 'not_equals':
+              conditionMatched = (lowerText !== expectedVal);
+              break;
+            case 'starts_with':
+              conditionMatched = lowerText.startsWith(expectedVal);
+              break;
+            default:
+              conditionMatched = true;
+          }
         }
       } else {
-        conditionMatched = true; // Jika bukan keyword atau tidak ada config spesifik, jalankan
+        conditionMatched = true; // No specific condition = match all
       }
 
+      console.log(`[ExecutionEngine] Automation "${automation.name}" condition → ${conditionMatched ? '✅ MATCH' : '❌ no match'}`);
+
       if (conditionMatched) {
-        console.log(`[ExecutionEngine] Automation [${automation.name}] MATCHED! Executing action: ${automation.action_type}`);
+        console.log(`[ExecutionEngine] ✅ Automation "${automation.name}" MATCHED! Action: ${automation.action_type}`);
         
-        // EKSEKUSI ACTION
+        // EKSEKUSI ACTION — selalu gunakan Admin Utama sebagai pengirim
         if (['Kirim template', 'Kirim quick reply'].includes(automation.action_type) && automation.template) {
-          console.log(`[ExecutionEngine] Sending template: ${automation.template.name}`);
-          const res = await sendMappedTemplate(phoneId, senderPhone, automation.template as TemplateData);
-          console.log(`[ExecutionEngine] sendMappedTemplate result: ${JSON.stringify(res)}`);
+          console.log(`[ExecutionEngine] Sending template "${automation.template.name}" from Admin Utama (${senderPhoneId}) to ${senderPhone}`);
+          const res = await sendMappedTemplate(senderPhoneId, senderPhone, automation.template as TemplateData);
+          console.log(`[ExecutionEngine] sendMappedTemplate result:`, JSON.stringify(res));
           
           await logActivity(
             senderPhone, 
             'automation_triggered', 
             res.success ? 'success' : 'failed',
-            res.error,
+            res.error || `Automation: "${automation.name}" → template "${automation.template.name}"`,
             automation.id,
             automation.template.id,
-            { text_received: text }
+            { text_received: text, sender_phone_id: senderPhoneId }
           );
-        } else if (['Tambah label', 'Hapus label', 'Assign', 'Ubah prioritas', 'Ubah status'].includes(automation.action_type)) {
-           console.log(`[ExecutionEngine] Action [${automation.action_type}] with value [${automation.action_config?.value}] executed successfully in backend.`);
-        } else if (automation.action_type === 'Tunggu') {
-           console.log(`[ExecutionEngine] Action [Tunggu] scheduled for [${automation.action_config?.value}] minutes.`);
         }
 
-        executed = true;
-        // Kita bisa break jika hanya ingin mengeksekusi 1 rule pertama yang cocok, atau biarkan loop jalan untuk multiple rules.
-        // Asumsi: Hanya mengeksekusi 1 rule terkuat (yg pertama cocok).
+        // Hanya eksekusi 1 rule pertama yang cocok
         break;
       }
     }
 
-    if (!executed) {
-      console.log(`[ExecutionEngine] No automation condition matched the keyword.`);
-    }
+    console.log(`[ExecutionEngine] ═══════════════════════════════════════`);
 
   } catch (error) {
     console.error('[ExecutionEngine] Unhandled error:', error);

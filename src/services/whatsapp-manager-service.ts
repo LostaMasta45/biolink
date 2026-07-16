@@ -18,7 +18,7 @@ const SELECTS: Record<ManagerResource, string> = {
   automation: "*, template:templates(id,name)",
   flows: "*",
   flow_nodes: "*, template:templates(id,name), automation:automation(id,name)",
-  auto_reply: "*, template:templates(id,name), flow:flows(id,name)",
+  auto_reply: "*, template:templates(id,name)",
   logs: "*, automation:automation(id,name), template:templates(id,name)",
   webhook_logs: "*",
   settings: "*",

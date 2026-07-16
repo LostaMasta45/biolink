@@ -54,25 +54,12 @@ export const DEFAULT_FLOW_NODES = [
 ] as const;
 
 export const AUTOMATION_TRIGGERS = [
-  "Saat pesan masuk",
-  "Saat chat baru dimulai",
-  "Saat chat diselesaikan",
-  "Saat chat di-assign",
-  "Saat label ditambahkan",
-  "Saat 24-jam window hampir habis",
-  "Saat chat tidak aktif",
+  "Saat pesan masuk"
 ] as const;
 
 export const AUTOMATION_ACTIONS = [
-  "Tambah label",
-  "Hapus label",
-  "Assign",
-  "Ubah prioritas",
-  "Ubah status",
   "Kirim template",
-  "Kirim notifikasi",
-  "Kirim quick reply",
-  "Tunggu",
+  "Kirim quick reply"
 ] as const;
 
 export const WEBHOOK_EVENTS = [
