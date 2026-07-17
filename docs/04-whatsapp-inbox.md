@@ -42,7 +42,7 @@ Shortcut hanya aktif/nonaktif untuk tampilan composer. Menonaktifkan `/chat` tid
 
 ## Backfill otomatis
 
-- Production menjalankan worker `GET /api/cron/whatsapp-inbox-sync` setiap menit. Route hanya dapat dipanggil menggunakan `CRON_SECRET` dari scheduler Vercel.
+- Karena project memakai Vercel Hobby (cron native hanya harian), GitHub Actions menjalankan worker `GET /api/cron/whatsapp-inbox-sync` setiap 5 menit. Ini adalah interval minimum GitHub Actions. Route memverifikasi token OIDC singkat dari repository ini; tidak ada secret scheduler yang disimpan di repository.
 - Satu tick mengambil batch kecil dan menyimpan cursor. Prioritasnya: daftar percakapan, kontak, lalu riwayat pesan. Dengan pola ini 10.000 chat dan 6.000 kontak dapat diselesaikan tanpa request raksasa atau timeout.
 - Saat initial backfill selesai, webhook KirimDev tetap menjadi jalur utama untuk pesan baru dan perubahan status; worker tidak mengunduh ulang seluruh riwayat setiap menit.
 - Cek `webhook_logs` dengan event `inbox.backfill.worker` untuk jumlah data per tick, error provider, dan status penyelesaian.

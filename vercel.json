@@ -3,10 +3,6 @@
     {
       "path": "/api/cron/whatsapp-auto-reply",
       "schedule": "0 0 * * *"
-    },
-    {
-      "path": "/api/cron/whatsapp-inbox-sync",
-      "schedule": "* * * * *"
     }
   ]
 }

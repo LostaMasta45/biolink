@@ -1,0 +1,35 @@
+name: WhatsApp Inbox Backfill
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: whatsapp-inbox-backfill
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Request a short-lived GitHub OIDC token
+        id: oidc
+        shell: bash
+        run: |
+          audience="ilj-hub:whatsapp-inbox-sync"
+          token=$(curl --fail --silent --show-error \
+            -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${audience}" | jq -r '.value')
+          test -n "$token" && test "$token" != "null"
+          echo "token=$token" >> "$GITHUB_OUTPUT"
+      - name: Advance one resumable Inbox batch
+        shell: bash
+        run: |
+          curl --fail --silent --show-error --retry 2 --retry-delay 5 \
+            -H "Authorization: Bearer ${{ steps.oidc.outputs.token }}" \
+            "https://infolokerjombang.net/api/cron/whatsapp-inbox-sync"
