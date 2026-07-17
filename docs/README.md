@@ -65,3 +65,7 @@ Implementasi prioritas 1–6, durable queue, audit log API/webhook, upgrade Over
 Matriks field pesan KirimDev/Meta, UX form per tipe, carousel, media header, read receipt, dan migration v3 tersedia di [17-template-message-kirimdev-meta.md](./17-template-message-kirimdev-meta.md).
 
 Notification Center, copywriting event payment/invoice/poster, antrean notifikasi, routing Admin Utama/Bot, command menu, keamanan command, migration, dan tutorial tes tersedia di [18-notification-center-dan-admin-bot.md](./18-notification-center-dan-admin-bot.md).
+
+PRD WhatsApp Inbox KirimDev yang disesuaikan dengan arsitektur ILJ-Hub tersedia di [19-prd-whatsapp-inbox-kirimdev.md](./19-prd-whatsapp-inbox-kirimdev.md).
+
+Catatan handoff lengkap pekerjaan WhatsApp pada 16 Juli 2026 tersedia di [2026-07-16-whatsapp-session-handoff.md](./2026-07-16-whatsapp-session-handoff.md).

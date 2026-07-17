@@ -1,4 +1,4 @@
-# PRD — WhatsApp Inbox KirimDev untuk ILJ-Hub
+gb# PRD — WhatsApp Inbox KirimDev untuk ILJ-Hub
 
 ## 1. Keputusan produk
 
@@ -208,6 +208,20 @@ Urutan inbound customer:
 - Jangan polling satu detik. Refetch terkontrol saat reconnect/filter berubah.
 - Pagination conversation dan messages memakai cursor/keyset, bukan offset untuk riwayat besar.
 - Sync tidak dijalankan saat setiap page load; gunakan tombol sync, cron incremental, atau job terjadwal.
+
+### Strategi untuk 10.000 percakapan historis
+
+10.000 conversation dapat disinkronkan, tetapi hanya apabila riwayat tersebut memang tersedia pada account KirimDev. API tidak dapat menarik histori yang hanya tersimpan lokal pada aplikasi WhatsApp telepon dan tidak pernah masuk/tersinkron ke KirimDev.
+
+Proses wajib bersifat resumable:
+
+1. **Inventory dahulu:** ambil conversation dengan cursor dan simpan header/contact/last message saja ke `wa_inbox_conversations`.
+2. **Live tail langsung aktif:** webhook tetap memproses pesan baru saat backfill berjalan; jangan menunggu 10.000 chat selesai.
+3. **Riwayat on-demand:** saat CS membuka satu conversation, tarik/simpan halaman pesan terbaru terlebih dahulu. Riwayat lama dimuat dengan cursor ketika discroll.
+4. **Full history opsional:** jalankan worker background per conversation dengan batch kecil, checkpoint di `wa_inbox_sync_state`, retry/backoff untuk rate limit, dan unique provider ID untuk aman saat job diulang.
+5. **Tidak ada offset/polling:** gunakan cursor provider dan keyset index lokal; UI hanya membaca Supabase.
+
+Jangan menjalankan full history seluruh 10.000 chat dalam satu request atau saat page load. Jumlah pesan biasanya jauh lebih besar daripada jumlah chat; kebutuhan storage dan durasi sync ditentukan oleh total message, media, serta retensi yang benar-benar tersedia di KirimDev.
 
 ## 12. Fase implementasi
 
