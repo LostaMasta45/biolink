@@ -75,6 +75,32 @@ async function getDynamicApiKey(): Promise<string> {
   return dbSettings?.api_key || process.env.KIRIMDEV_API_KEY || '';
 }
 
+export async function listKirimDevResourcePage(phoneId: string, resource: "messages" | "contacts", cursor?: string | null, limit = 50) {
+  const apiKey = await getDynamicApiKey();
+  if (!apiKey) throw new Error("KIRIMDEV_API_KEY belum dikonfigurasi");
+  const params = new URLSearchParams({ limit: String(Math.min(100, Math.max(1, limit))) });
+  if (cursor) params.set("cursor", cursor);
+  const response = await fetch(`https://api.kirimdev.com/v1/${phoneId}/${resource}?${params.toString()}`, {
+    headers: { Authorization: `Bearer ${apiKey}` },
+    cache: "no-store",
+  });
+  const raw = await response.text();
+  let payload: unknown = {};
+  try { payload = raw ? JSON.parse(raw) : {}; } catch { /* handled below */ }
+  if (!response.ok) {
+    const message = payload && typeof payload === "object" && "error" in payload
+      ? JSON.stringify((payload as Record<string, unknown>).error)
+      : raw.slice(0, 500) || `HTTP ${response.status}`;
+    throw new Error(`KirimDev ${resource} gagal: ${message}`);
+  }
+  const object = payload && typeof payload === "object" ? payload as Record<string, unknown> : {};
+  return {
+    data: Array.isArray(object.data) ? object.data : [],
+    hasMore: object.has_more === true,
+    nextCursor: typeof object.next_cursor === "string" ? object.next_cursor : null,
+  };
+}
+
 /**
  * Normalisasi nomor telepon ke format 62xxx (tanpa + dan 0)
  */

@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import type { WhatsAppAccount } from "@/lib/whatsapp/types";
 
 const inboxDb = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -39,6 +40,9 @@ export interface InboxQuickReply {
   template: { id: string; name: string; body: string; is_active: boolean } | null;
 }
 
+export interface InboxAccount extends InboxAccountRow { phone_number: string | null; }
+export interface InboxContact extends InboxContactRow { last_synced_at: string | null; updated_at: string; }
+
 function normalizePhone(value: string) {
   const digits = value.replace(/\D/g, "");
   if (!digits) return "";
@@ -78,6 +82,28 @@ async function ensureAccount(input: { phoneId: string; phoneNumber?: string | nu
   }).select("id,phone_number_id,is_customer_inbox,label,role").single();
   if (error) throw new Error(`Akun Inbox tidak dapat dibuat: ${error.message}`);
   return data as unknown as InboxAccountRow;
+}
+
+export async function syncInboxAccounts(accounts: WhatsAppAccount[]) {
+  const rows = accounts.map((account, index) => ({
+    phone_number_id: account.phoneId,
+    phone_number: account.phoneNumber || null,
+    label: account.label,
+    role: index === 0 ? "admin" : "bot",
+    is_customer_inbox: true,
+  }));
+  if (!rows.length) return [] as InboxAccount[];
+  const { data, error } = await inboxDb.from("wa_inbox_accounts").upsert(rows, { onConflict: "phone_number_id" })
+    .select("id,phone_number_id,phone_number,label,role,is_customer_inbox").order("created_at", { ascending: true });
+  if (error) throw new Error(`Akun Inbox tidak dapat disinkronkan: ${error.message}`);
+  return (data ?? []) as unknown as InboxAccount[];
+}
+
+export async function listInboxAccounts() {
+  const { data, error } = await inboxDb.from("wa_inbox_accounts")
+    .select("id,phone_number_id,phone_number,label,role,is_customer_inbox").eq("is_customer_inbox", true).order("created_at", { ascending: true });
+  if (error) throw new Error(`Akun Inbox tidak dapat dimuat: ${error.message}`);
+  return (data ?? []) as unknown as InboxAccount[];
 }
 
 async function ensureContact(accountId: string, phone: string, profileName?: string | null): Promise<InboxContactRow> {
@@ -164,11 +190,12 @@ export async function persistInboxInbound(input: {
   return message as { id: string; conversation_id: string };
 }
 
-export async function listInboxConversations(input: { status?: string | null; filter?: string | null; search?: string | null; cursor?: string | null; limit?: number }) {
+export async function listInboxConversations(input: { accountId?: string | null; status?: string | null; filter?: string | null; search?: string | null; cursor?: string | null; limit?: number }) {
   const limit = Math.min(100, Math.max(1, input.limit ?? 50));
   let query = inboxDb.from("wa_inbox_conversations").select("id,wa_account_id,contact_id,status,priority,unread_count,needs_reply,last_message_at,last_inbound_at,last_outbound_at,service_window_expires_at,last_message_preview,contact:wa_inbox_contacts(id,phone_number,name,profile_name)")
     .order("last_message_at", { ascending: false, nullsFirst: false }).limit(limit + 1);
   if (input.status && ["open", "pending", "resolved"].includes(input.status)) query = query.eq("status", input.status);
+  if (input.accountId) query = query.eq("wa_account_id", input.accountId);
   if (input.filter === "unread") query = query.gt("unread_count", 0);
   if (input.filter === "needs_reply") query = query.eq("needs_reply", true);
   if (input.cursor) query = query.lt("last_message_at", input.cursor);
@@ -182,6 +209,62 @@ export async function listInboxConversations(input: { status?: string | null; fi
   const hasMore = rows.length > limit;
   const visible = rows.slice(0, limit);
   return { data: visible, nextCursor: hasMore ? visible.at(-1)?.last_message_at ?? null : null };
+}
+
+export async function listInboxContacts(input: { accountId?: string | null; search?: string | null; cursor?: string | null; limit?: number }) {
+  const limit = Math.min(100, Math.max(1, input.limit ?? 50));
+  let query = inboxDb.from("wa_inbox_contacts")
+    .select("id,wa_account_id,phone_number,recipient_key,name,profile_name,last_synced_at,updated_at")
+    .order("updated_at", { ascending: false }).limit(limit + 1);
+  if (input.accountId) query = query.eq("wa_account_id", input.accountId);
+  if (input.cursor) query = query.lt("updated_at", input.cursor);
+  const { data, error } = await query;
+  if (error) throw new Error(`Kontak Inbox tidak dapat dimuat: ${error.message}`);
+  let rows = (data ?? []) as unknown as InboxContact[];
+  if (input.search?.trim()) {
+    const needle = input.search.trim().toLowerCase();
+    rows = rows.filter((row) => [row.phone_number, row.name, row.profile_name].some((value) => value?.toLowerCase().includes(needle)));
+  }
+  const hasMore = rows.length > limit;
+  const visible = rows.slice(0, limit);
+  return { data: visible, nextCursor: hasMore ? visible.at(-1)?.updated_at ?? null : null };
+}
+
+export async function upsertInboxProviderContact(input: { phoneId: string; phoneNumber?: string | null; providerContactId?: string | null; phone: string; bsuid?: string | null; name?: string | null; profileName?: string | null; metadata?: Record<string, unknown> }) {
+  const account = await ensureAccount({ phoneId: input.phoneId, phoneNumber: input.phoneNumber, customerInbox: true });
+  const phone = normalizePhone(input.phone);
+  const recipientKey = input.bsuid || phone;
+  const { data, error } = await inboxDb.from("wa_inbox_contacts").upsert({
+    wa_account_id: account.id,
+    recipient_key: recipientKey,
+    phone_number: phone,
+    provider_contact_id: input.providerContactId ?? null,
+    bsuid: input.bsuid ?? null,
+    name: input.name ?? null,
+    profile_name: input.profileName ?? null,
+    metadata: input.metadata ?? {},
+    last_synced_at: new Date().toISOString(),
+  }, { onConflict: "wa_account_id,recipient_key" }).select("id,wa_account_id,phone_number,recipient_key,name,profile_name,last_synced_at,updated_at").single();
+  if (error) throw new Error(`Kontak provider tidak dapat disimpan: ${error.message}`);
+  return data as unknown as InboxContact;
+}
+
+export async function getInboxSyncState(accountId: string, resource: "messages" | "contacts") {
+  const { data, error } = await inboxDb.from("wa_inbox_sync_state").select("cursor,last_success_at,last_error")
+    .eq("wa_account_id", accountId).eq("resource", resource).maybeSingle();
+  if (error) throw new Error(`Checkpoint sync tidak dapat dibaca: ${error.message}`);
+  return data as { cursor: string | null; last_success_at: string | null; last_error: string | null } | null;
+}
+
+export async function saveInboxSyncState(accountId: string, resource: "messages" | "contacts", patch: { cursor?: string | null; lastSuccessAt?: string | null; lastError?: string | null }) {
+  const { error } = await inboxDb.from("wa_inbox_sync_state").upsert({
+    wa_account_id: accountId,
+    resource,
+    cursor: patch.cursor ?? null,
+    last_success_at: patch.lastSuccessAt ?? null,
+    last_error: patch.lastError ?? null,
+  }, { onConflict: "wa_account_id,resource" });
+  if (error) throw new Error(`Checkpoint sync tidak dapat disimpan: ${error.message}`);
 }
 
 export async function getInboxConversation(id: string) {

@@ -5,12 +5,12 @@
 1. Jalankan `supabase-migration-whatsapp-inbox.sql` pada Supabase SQL Editor setelah migration WhatsApp sebelumnya.
 2. Deploy aplikasi.
 3. Pastikan subscription KirimDev tetap mencakup `message.received`, `message.sent`, dan `message.status`.
-4. Buka **WhatsApp → Inbox**. Pesan customer baru yang masuk ke nomor Admin Utama akan membuat contact, conversation, dan message lokal sebelum Auto Reply/Flow diproses.
+4. Buka **WhatsApp → Inbox**. Pilih akun **Admin Utama** atau **Bot**. Pesan customer baru yang masuk ke Admin Utama akan membuat contact, conversation, dan message lokal sebelum Auto Reply/Flow diproses; percakapan Admin → Bot masuk ke Inbox Bot terpisah.
 
 ## Batasan nomor
 
-- Inbox hanya menyimpan percakapan customer ke **Admin Utama**.
-- Nomor Bot dan command internal Admin → Bot tidak masuk Inbox customer.
+- Admin Utama dan Bot dipilih sebagai scope terpisah di Inbox, sehingga histori tidak tercampur.
+- Customer yang menulis ke Bot tidak diperlakukan sebagai chat customer. Percakapan internal Admin → Bot dapat dilihat di scope Bot.
 - Inbox adalah read model Supabase. API key, service role, dan webhook secret tidak pernah dikirim ke browser.
 
 ## Mengirim pesan
@@ -31,6 +31,13 @@ Balas Cepat bukan Auto Reply dan bukan trigger Flow.
 4. Isi Pesan Tersimpan dimasukkan ke draft. Admin boleh mengeditnya sebelum klik **Kirim**.
 
 Shortcut hanya aktif/nonaktif untuk tampilan composer. Menonaktifkan `/chat` tidak mengubah Keyword Automation, Flow Map, template, atau webhook.
+
+## Sync chat dan kontak bertahap
+
+- Tombol **Sync chat** mengambil satu halaman (maksimal 50 pesan) dari `GET /v1/{phone_number_id}/messages`, menyimpan cursor provider, lalu memberi tahu bila masih ada batch berikutnya.
+- Menu **Kontak** memiliki selector akun yang sama dan tombol **Sync kontak** untuk satu halaman `GET /v1/{phone_number_id}/contacts`.
+- Jalankan lagi tombol sync hingga pesan menyatakan semua batch selesai. Cursor KirimDev dipakai apa adanya dan checkpoint disimpan pada `wa_inbox_sync_state`, sehingga proses dapat dihentikan lalu dilanjutkan tanpa mengulang halaman sebelumnya.
+- Jangan menjalankan refresh penuh seluruh histori dalam satu request. KirimDev memakai cursor opaque untuk semua list endpoint; aplikasi tidak memodifikasi cursor tersebut.
 
 ## Status dan pemulihan
 

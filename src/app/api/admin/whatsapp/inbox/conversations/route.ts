@@ -13,6 +13,7 @@ export async function GET(request: NextRequest) {
   try {
     const query = request.nextUrl.searchParams;
     return NextResponse.json(await listInboxConversations({
+      accountId: query.get("account_id"),
       status: query.get("status"),
       filter: query.get("filter"),
       search: query.get("search"),

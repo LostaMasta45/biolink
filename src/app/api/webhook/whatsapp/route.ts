@@ -11,7 +11,7 @@ import type { KirimDevWebhookPayload } from "@/lib/whatsapp/types";
 import { processCustomerMessage, processDueAutoReplyJobs } from "@/services/whatsapp-execution-engine";
 import { processDueNotificationJobs } from "@/services/whatsapp-notification-service";
 import { processFlowTriggers, recordCustomerActivity } from "@/services/whatsapp-flow-engine";
-import { persistInboxInbound, persistInboxOutbound, recordInboxProviderStatus } from "@/services/whatsapp-inbox-store";
+import { persistInboxInbound, persistInboxOutbound, recordInboxProviderStatus, syncInboxAccounts } from "@/services/whatsapp-inbox-store";
 import {
   claimWebhookEvent,
   recordProviderDeliveryStatus,
@@ -275,6 +275,7 @@ export async function POST(req: NextRequest) {
     const sent = parseNativeSentMessage(payload);
     if (sent) {
       const accounts = await getAllAccounts();
+      await syncInboxAccounts(accounts);
       const botPhoneId = accounts[1]?.phoneId;
       if (sent.phoneId !== botPhoneId) {
         await persistInboxOutbound({
@@ -335,12 +336,13 @@ export async function POST(req: NextRequest) {
   }
 
   const accounts = await getAllAccounts();
+  await syncInboxAccounts(accounts);
   const botAccount = accounts[1];
   const senderIsAdmin = await isAdminNumber(inbound.senderPhone);
 
-  // Nomor Bot dan command internal tidak pernah dimasukkan ke Inbox customer,
-  // tetapi command Admin -> Bot tetap meneruskan alur lama di bawah.
-  if (!botAccount?.phoneId || phoneId !== botAccount.phoneId) {
+  // Bot tetap memiliki Inbox sendiri untuk percakapan Admin -> Bot, tetapi pesan
+  // customer yang masuk ke Bot tidak diperlakukan sebagai chat customer.
+  if (!botAccount?.phoneId || phoneId !== botAccount.phoneId || senderIsAdmin) {
     await persistInboxInbound({
       phoneId,
       phoneNumber: inbound.displayPhone || null,
