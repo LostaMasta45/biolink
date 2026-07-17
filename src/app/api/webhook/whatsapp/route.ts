@@ -38,21 +38,29 @@ function verifyKirimSignature(rawBody: string, signatureHeader: string | null): 
     .filter(Boolean);
   if (!secrets.length || !signatureHeader) return false;
 
-  const values = signatureHeader.split(",").map((part) => part.trim());
+  const values = signatureHeader.split(",").map((part) => part.trim()).filter(Boolean);
   const timestamp = values.find((part) => part.startsWith("t="))?.slice(2);
-  const signatures = values.filter((part) => part.startsWith("v1=")).map((part) => part.slice(3));
-  const timestampSeconds = Number(timestamp);
-  if (!timestamp || !Number.isFinite(timestampSeconds) || Math.abs(Math.floor(Date.now() / 1000) - timestampSeconds) > 300) return false;
+  const signatures = values
+    .map((part) => part.startsWith("v1=") ? part.slice(3) : part)
+    .filter((signature) => /^[a-f0-9]{64}$/i.test(signature));
+  if (!signatures.length) return false;
 
-  const signedPayload = `${timestamp}.${rawBody}`;
-  return secrets.some((secret) => {
+  const matches = (signedPayload: string) => secrets.some((secret) => {
     const expected = Buffer.from(createHmac("sha256", secret).update(signedPayload).digest("hex"), "hex");
     return signatures.some((signature) => {
-      if (!/^[a-f0-9]{64}$/i.test(signature)) return false;
       const received = Buffer.from(signature, "hex");
       return received.length === expected.length && timingSafeEqual(received, expected);
     });
   });
+
+  // KirimDev saat ini menandatangani raw body langsung. Tetap terima format
+  // timestamp lama selama masih segar agar rotasi deployment tidak memutus webhook.
+  if (matches(rawBody)) return true;
+  const timestampSeconds = Number(timestamp);
+  return Boolean(timestamp)
+    && Number.isFinite(timestampSeconds)
+    && Math.abs(Math.floor(Date.now() / 1000) - timestampSeconds) <= 300
+    && matches(`${timestamp}.${rawBody}`);
 }
 
 function parseMetaInbound(payload: KirimDevWebhookPayload): ParsedInboundMessage | null {
