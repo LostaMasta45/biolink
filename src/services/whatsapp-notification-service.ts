@@ -159,8 +159,8 @@ async function sendDirect(
   await writeActivityLog({
     customer: recipient,
     eventType: `notification.${result.success ? "sent" : "failed"}`,
-    status: result.success ? "success" : "failed",
-    message: result.success ? `${eventKey} berhasil dikirim` : result.error ?? `${eventKey} gagal dikirim`,
+    status: result.success ? "pending" : "failed",
+    message: result.success ? `${eventKey} diterima KirimDev; menunggu status delivery` : result.error ?? `${eventKey} gagal dikirim`,
     templateId: template.id.startsWith("fallback-") ? undefined : template.id,
     metadata: { event_key: eventKey, correlation_id: correlationId, provider_message_id: result.messageId ?? null, rule_id: ruleId ?? null },
   });
@@ -227,6 +227,14 @@ export async function emitNotification(input: EmitNotificationInput): Promise<Em
       templateId: rule?.template_id ?? undefined,
       metadata: { job_id: job.id, event_key: input.eventKey, scheduled_at: scheduledAt, sender_role: senderRole },
     });
+    // Delay pendek perlu dieksekusi pada request yang sama. Cron proyek saat ini
+    // bersifat fallback; tanpa ini rule bawaan dengan delay 2 detik bisa menunggu
+    // terlalu lama saat tidak ada webhook lain yang masuk.
+    if (delaySeconds > 0 && delaySeconds <= 5) {
+      await new Promise((resolve) => setTimeout(resolve, delaySeconds * 1000));
+      const result = await processNotificationJob(job.id);
+      return result.status === "sent" ? { ...result, jobId: job.id } : result;
+    }
     if (delaySeconds > 0) return { status: "queued", jobId: job.id, scheduledAt };
     const result = await processNotificationJob(job.id);
     return result.status === "sent" ? { ...result, jobId: job.id } : result;

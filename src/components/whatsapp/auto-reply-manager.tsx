@@ -18,12 +18,13 @@ import { EmptyState, ResourceError, ResourceLoading } from "@/components/whatsap
 import { StatusBadge } from "@/components/whatsapp/status-badge";
 import { useManagerResource } from "@/hooks/use-manager-resource";
 import { createManagerResource, deleteManagerResource, updateManagerResource } from "@/services/whatsapp-manager-client";
-import type { AutoReplyRule, WhatsAppTemplate } from "@/types/whatsapp-manager";
+import type { AutoReplyRule, CustomerFlow, WhatsAppTemplate } from "@/types/whatsapp-manager";
 import { autoReplySchema, type AutoReplyFormValues } from "@/validation/whatsapp-manager";
 
 const defaults: AutoReplyFormValues = {
   keyword: "",
   template_id: "",
+  flow_id: null,
   match_type: "equals",
   delay_seconds: 1,
   cooldown_seconds: 60,
@@ -42,11 +43,13 @@ const SCHEDULE_LABELS = { always: "Setiap saat", business_hours: "Jam kerja", ou
 export function AutoReplyManager() {
   const rules = useManagerResource<AutoReplyRule>("auto_reply");
   const templates = useManagerResource<WhatsAppTemplate>("templates");
+  const flows = useManagerResource<CustomerFlow>("flows");
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<AutoReplyRule | null>(null);
   const [testPhoneInput, setTestPhoneInput] = useState("");
   const form = useForm<AutoReplyFormValues>({ resolver: zodResolver(autoReplySchema), defaultValues: defaults });
   const templateId = useWatch({ control: form.control, name: "template_id" }) ?? "";
+  const flowId = useWatch({ control: form.control, name: "flow_id" });
   const matchType = useWatch({ control: form.control, name: "match_type" }) ?? "equals";
   const scheduleMode = useWatch({ control: form.control, name: "schedule_mode" }) ?? "always";
   const active = useWatch({ control: form.control, name: "is_active" }) ?? true;
@@ -58,6 +61,7 @@ export function AutoReplyManager() {
     const values = rule ? {
       keyword: rule?.keyword ?? "",
       template_id: rule?.template_id ?? "",
+      flow_id: rule?.flow_id ?? null,
       match_type: rule?.match_type ?? "equals",
       delay_seconds: rule?.delay_seconds ?? 1,
       cooldown_seconds: rule?.cooldown_seconds ?? 60,
@@ -97,8 +101,8 @@ export function AutoReplyManager() {
     }
   };
 
-  if (rules.loading || templates.loading) return <ResourceLoading />;
-  if (rules.error || templates.error) return <ResourceError message={rules.error ?? templates.error ?? "Gagal memuat data"} />;
+  if (rules.loading || templates.loading || flows.loading) return <ResourceLoading />;
+  if (rules.error || templates.error || flows.error) return <ResourceError message={rules.error ?? templates.error ?? flows.error ?? "Gagal memuat data"} />;
 
   return (
     <div className="space-y-6">
@@ -125,6 +129,7 @@ export function AutoReplyManager() {
                     {rule.handover_to_human && <StatusBadge status="degraded" label="Handover" />}
                   </div>
                   <p className="truncate text-sm text-muted-foreground">→ {rule.template?.name ?? "Template tidak tersedia"}</p>
+                  {rule.flow_id && <p className="mt-1 text-xs text-primary">Memulai Flow Map saat keyword cocok</p>}
                   <div className="mt-2 flex flex-wrap gap-3 text-xs text-muted-foreground">
                     <span className="inline-flex items-center gap-1"><Clock3 className="h-3 w-3" />Delay {rule.delay_seconds}s · Cooldown {rule.cooldown_seconds}s</span>
                     <span className="inline-flex items-center gap-1"><ShieldCheck className="h-3 w-3" />{SCHEDULE_LABELS[rule.schedule_mode]}</span>
@@ -164,12 +169,21 @@ export function AutoReplyManager() {
             </div>
 
             <div className="space-y-2">
-              <Label>Kirim Template</Label>
+              <Label>Template fallback</Label>
               <Select value={templateId} onValueChange={(value) => form.setValue("template_id", value, { shouldValidate: true })}>
                 <SelectTrigger><SelectValue placeholder="Pilih template" /></SelectTrigger>
                 <SelectContent>{templates.data.filter((template) => template.is_active).map((template) => <SelectItem key={template.id} value={template.id}>{template.name}</SelectItem>)}</SelectContent>
               </Select>
               {form.formState.errors.template_id && <p className="text-xs text-destructive">{form.formState.errors.template_id.message}</p>}
+            </div>
+
+            <div className="space-y-2 rounded-xl border border-primary/15 p-4">
+              <Label>Mulai Flow Map (opsional)</Label>
+              <Select value={flowId ?? "none"} onValueChange={(value) => form.setValue("flow_id", value === "none" ? null : value)}>
+                <SelectTrigger><SelectValue placeholder="Tanpa Flow Map" /></SelectTrigger>
+                <SelectContent><SelectItem value="none">Tanpa Flow Map — kirim template fallback</SelectItem>{flows.data.filter((flow) => flow.is_active).map((flow) => <SelectItem key={flow.id} value={flow.id}>{flow.name}</SelectItem>)}</SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">Jika dipilih, keyword ini memulai node pertama Flow Map. Template fallback dipakai hanya bila Flow Map dilepas kembali.</p>
             </div>
 
             <div className="grid gap-4 sm:grid-cols-3">

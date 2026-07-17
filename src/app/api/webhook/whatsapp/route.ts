@@ -9,6 +9,8 @@ import {
 import { processCommand } from "@/lib/whatsapp/command-processor";
 import type { KirimDevWebhookPayload } from "@/lib/whatsapp/types";
 import { processCustomerMessage, processDueAutoReplyJobs } from "@/services/whatsapp-execution-engine";
+import { processDueNotificationJobs } from "@/services/whatsapp-notification-service";
+import { processFlowTriggers, recordCustomerActivity } from "@/services/whatsapp-flow-engine";
 import {
   claimWebhookEvent,
   recordProviderDeliveryStatus,
@@ -29,6 +31,13 @@ interface ParsedMessageStatus {
   messageId: string;
   status: string;
   error?: unknown;
+}
+
+interface ParsedNativeFlowEvent {
+  triggerType: "chat_started" | "conversation_closed" | "conversation_assigned" | "label_added";
+  customer: string;
+  phoneId: string;
+  labels: string[];
 }
 
 function verifyKirimSignature(rawBody: string, signatureHeader: string | null): boolean {
@@ -137,6 +146,38 @@ function inferEventId(payload: KirimDevWebhookPayload): string {
   return receivedId ?? statusId ?? payload.data?.id ?? "";
 }
 
+function recordFromUnknown(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" ? value as Record<string, unknown> : {};
+}
+
+function parseNativeFlowEvent(eventType: string, payload: KirimDevWebhookPayload): ParsedNativeFlowEvent | null {
+  const mapping: Record<string, ParsedNativeFlowEvent["triggerType"]> = {
+    "contact.created": "chat_started",
+    "conversation.closed": "conversation_closed",
+    "conversation.assigned": "conversation_assigned",
+    "contact.updated": "label_added",
+  };
+  const triggerType = mapping[eventType];
+  if (!triggerType) return null;
+  const data = recordFromUnknown(payload.data);
+  const contact = recordFromUnknown(data.contact);
+  const conversation = recordFromUnknown(data.conversation);
+  const conversationContact = recordFromUnknown(conversation.contact);
+  const customer = [
+    contact.phone_number, contact.phone, contact.wa_id,
+    conversationContact.phone_number, conversationContact.phone,
+    data.phone_number, data.customer_phone, data.from,
+  ].find((value): value is string => typeof value === "string" && value.length > 0) ?? "";
+  const phoneId = [data.session, data.phone_number_id, data.phoneId, conversation.phone_number_id].find((value): value is string => typeof value === "string" && value.length > 0) ?? "";
+  const rawLabels = [contact.labels, data.labels, conversation.labels].find(Array.isArray) as unknown[] | undefined;
+  const labels = (rawLabels ?? []).map((label) => {
+    if (typeof label === "string") return label;
+    const row = recordFromUnknown(label);
+    return typeof row.name === "string" ? row.name : typeof row.label === "string" ? row.label : "";
+  }).filter(Boolean);
+  return customer ? { triggerType, customer, phoneId, labels } : null;
+}
+
 export async function POST(req: NextRequest) {
   const startedAt = Date.now();
   const rawBody = await req.text();
@@ -177,7 +218,8 @@ export async function POST(req: NextRequest) {
 
   // Setiap webhook ikut membantu menguras job yang sudah jatuh tempo. Worker cron
   // tetap menjadi jalur utama untuk delay ketika tidak ada event baru.
-  void processDueAutoReplyJobs(5).catch((error) => console.error("[Webhook] Queue worker gagal:", error));
+  void Promise.all([processDueAutoReplyJobs(5), processDueNotificationJobs(5)])
+    .catch((error) => console.error("[Webhook] Queue worker gagal:", error));
 
   if (eventType === "message.status") {
     const status = parseMessageStatus(payload);
@@ -197,6 +239,28 @@ export async function POST(req: NextRequest) {
       }, Date.now() - startedAt);
     }
     return NextResponse.json({ status: "ok", action: status ? "delivery_status_recorded" : "status_ignored" });
+  }
+
+  const nativeFlowEvent = parseNativeFlowEvent(eventType, payload);
+  if (nativeFlowEvent) {
+    const accounts = await getAllAccounts();
+    const senderPhoneId = nativeFlowEvent.phoneId || accounts[0]?.phoneId || "";
+    if (!senderPhoneId) return NextResponse.json({ status: "error", action: "flow_trigger_failed", error: "Phone ID Admin Utama belum dikonfigurasi" }, { status: 500 });
+    const result = await processFlowTriggers({
+      type: nativeFlowEvent.triggerType,
+      customerPhone: nativeFlowEvent.customer,
+      senderPhoneId,
+      eventId,
+      labels: nativeFlowEvent.labels,
+    });
+    await writeWebhookLog("outgoing", `flow.trigger.${nativeFlowEvent.triggerType}`, result.handled && result.status === "failed" ? "failed" : "success", {
+      event_id: eventId,
+      customer: nativeFlowEvent.customer,
+      labels: nativeFlowEvent.labels,
+      flow_run_id: result.handled && result.status !== "failed" ? result.runId : null,
+      error: result.handled && result.status === "failed" ? result.error : null,
+    }, Date.now() - startedAt);
+    return NextResponse.json({ status: "ok", action: result.handled ? "flow_trigger_processed" : "flow_trigger_ignored" });
   }
 
   // message.sent dan message.status bukan pesan customer. Mengabaikannya mencegah
@@ -219,6 +283,7 @@ export async function POST(req: NextRequest) {
   }
 
   const text = inbound.text.trim();
+  await recordCustomerActivity({ customerPhone: inbound.senderPhone, senderPhoneId: phoneId, eventId, text });
   if (inbound.messageId.startsWith("wamid.")) {
     const { data: receiptSettings, error: receiptError } = await whatsappAdminClient
       .from("settings")
@@ -275,6 +340,16 @@ export async function POST(req: NextRequest) {
       { status: "error", action: "auto_reply_failed", error: execution.error },
       { status: 500 },
     );
+  }
+
+  if (execution.status === "flow_waiting" || execution.status === "flow_completed") {
+    await writeWebhookLog("outgoing", `flow.${execution.status}`, "success", {
+      event_id: eventId,
+      flow_id: execution.flowId,
+      flow_run_id: execution.runId,
+      node_id: execution.nodeId ?? null,
+    }, Date.now() - startedAt);
+    return NextResponse.json({ status: "ok", action: execution.status, flow_run_id: execution.runId });
   }
 
   if (execution.status === "sent") {

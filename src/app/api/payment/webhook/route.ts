@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import type { KlikQRISWebhookPayload } from "@/lib/payment-types";
 import { getTodayWIB, getTomorrowWIB, generateInvoiceNumber } from "@/lib/utils";
 import { emitNotification, formatRupiahValue } from "@/services/whatsapp-notification-service";
+import { writeActivityLog } from "@/services/whatsapp-audit-service";
 
 function getSupabase() {
     return createClient(
@@ -35,14 +36,19 @@ async function sendTelegramNotification(text: string) {
 }
 
 export async function POST(request: Request) {
+    let auditCustomer = "payment:webhook";
+    let auditOrderId: string | null = null;
     try {
         const body: KlikQRISWebhookPayload = await request.json();
         console.log("📥 Webhook received:", JSON.stringify(body, null, 2));
 
         const { data } = body;
         if (!data || !data.order_id) {
+            await writeActivityLog({ customer: auditCustomer, eventType: "payment.webhook.invalid", status: "failed", message: "Webhook pembayaran tidak memiliki order_id" });
             return NextResponse.json({ message: "Invalid payload" }, { status: 400 });
         }
+        auditOrderId = data.order_id;
+        auditCustomer = `payment:${data.order_id}`;
 
         const supabase = getSupabase();
 
@@ -55,6 +61,7 @@ export async function POST(request: Request) {
 
         if (findError || !order) {
             console.error("Order not found:", data.order_id);
+            await writeActivityLog({ customer: auditCustomer, eventType: "payment.webhook.order_not_found", status: "failed", message: "Order pembayaran tidak ditemukan", metadata: { order_id: data.order_id } });
             // Return 200 so KlikQRIS doesn't retry
             return NextResponse.json({ message: "Order not found" }, { status: 200 });
         }
@@ -62,12 +69,14 @@ export async function POST(request: Request) {
         // Validate signature (double security)
         if (order.signature && data.signature && order.signature !== data.signature) {
             console.error("Signature mismatch for:", data.order_id);
+            await writeActivityLog({ customer: auditCustomer, eventType: "payment.webhook.invalid_signature", status: "failed", message: "Signature webhook pembayaran tidak cocok", metadata: { order_id: data.order_id } });
             return NextResponse.json({ message: "Invalid signature" }, { status: 403 });
         }
 
         // Idempotency check — if already PAID, skip
         if (order.status === "PAID") {
             console.log("Order already PAID, skipping:", data.order_id);
+            await writeActivityLog({ customer: auditCustomer, eventType: "payment.webhook.duplicate", status: "skipped", message: "Webhook pembayaran duplikat diabaikan", metadata: { order_id: data.order_id } });
             return NextResponse.json({ message: "Already processed" }, { status: 200 });
         }
 
@@ -82,10 +91,18 @@ export async function POST(request: Request) {
                 updated_at: new Date().toISOString(),
             };
 
-            await supabase
+            const { error: paymentUpdateError } = await supabase
                 .from("payment_orders")
                 .update(updateData)
                 .eq("order_id", data.order_id);
+            if (paymentUpdateError) throw new Error(`Status pembayaran gagal diperbarui: ${paymentUpdateError.message}`);
+            await writeActivityLog({
+                customer: order.customer_whatsapp || auditCustomer,
+                eventType: "payment.paid",
+                status: "success",
+                message: `Pembayaran ${data.order_id} berhasil dikonfirmasi`,
+                metadata: { order_id: data.order_id, amount: data.amount_paid || order.total_amount || order.amount, provider_status: webhookStatus },
+            });
                 
             const paidAmount = data.amount_paid || order.total_amount || order.amount;
             const notificationVariables = {
@@ -209,9 +226,12 @@ export async function POST(request: Request) {
                     });
                 } else if (invoiceError) {
                     console.error("Invoice creation failed:", invoiceError);
+                    await writeActivityLog({ customer: order.customer_whatsapp || auditCustomer, eventType: "invoice.sync_failed", status: "failed", message: `Invoice otomatis gagal dibuat: ${invoiceError.message}`, metadata: { order_id: data.order_id } });
                 }
             } catch (err) {
                 console.error("Invoice sync failed:", err);
+                const message = err instanceof Error ? err.message : "Invoice otomatis gagal dibuat";
+                await writeActivityLog({ customer: order.customer_whatsapp || auditCustomer, eventType: "invoice.sync_failed", status: "failed", message, metadata: { order_id: data.order_id } });
             }
 
             // Send Telegram notification
@@ -251,19 +271,23 @@ ${order.addon_names?.length > 0 ? `➕ <b>Add-on:</b> ${order.addon_names.join("
 
         } else if (webhookStatus === "EXPIRED") {
             // === PAYMENT EXPIRED ===
-            await supabase
+            const { error: expireUpdateError } = await supabase
                 .from("payment_orders")
                 .update({
                     status: "EXPIRED",
                     updated_at: new Date().toISOString(),
                 })
                 .eq("order_id", data.order_id);
+            if (expireUpdateError) throw new Error(`Status pembayaran expired gagal diperbarui: ${expireUpdateError.message}`);
+            await writeActivityLog({ customer: order.customer_whatsapp || auditCustomer, eventType: "payment.expired", status: "success", message: `Pembayaran ${data.order_id} expired`, metadata: { order_id: data.order_id, provider_status: webhookStatus } });
         }
 
         // MUST return 200 OK for KlikQRIS to stop retrying
         return NextResponse.json({ message: "OK" }, { status: 200 });
     } catch (error) {
         console.error("Webhook Error:", error);
+        const message = error instanceof Error ? error.message : "Webhook pembayaran gagal diproses";
+        await writeActivityLog({ customer: auditCustomer, eventType: "payment.webhook.failed", status: "failed", message, metadata: { order_id: auditOrderId } });
         // Still return 200 to prevent retries
         return NextResponse.json({ message: "Error handled" }, { status: 200 });
     }

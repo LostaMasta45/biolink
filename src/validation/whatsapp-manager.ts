@@ -120,11 +120,25 @@ export const flowNodeSchema = z.object({
   template_id: z.string().uuid().nullable().optional(),
   automation_id: z.string().uuid().nullable().optional(),
   next_node_id: z.string().uuid().nullable().optional(),
+  execution_mode: z.enum(["send_and_wait", "send_and_continue", "wait_for_reply", "complete"]),
+  delay_seconds: z.number().int().min(0).max(86400),
+  position_x: z.number().finite(),
+  position_y: z.number().finite(),
+});
+
+export const flowTriggerSchema = z.object({
+  flow_id: z.string().uuid(),
+  trigger_type: z.enum(["message_received", "chat_started", "conversation_closed", "conversation_assigned", "label_added", "window_expiring", "chat_inactive"]),
+  name: z.string().trim().min(2).max(100),
+  config: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])),
+  priority: z.number().int().min(-1000).max(1000),
+  is_active: z.boolean(),
 });
 
 export const autoReplySchema = z.object({
   keyword: z.string().trim().min(1, "Keyword wajib diisi").max(100, "Keyword maksimal 100 karakter"),
   template_id: z.string().uuid({ message: "Template wajib dipilih" }),
+  flow_id: z.string().uuid().nullable().optional(),
   match_type: z.enum(["equals", "contains", "starts_with"]),
   delay_seconds: z.number().int().min(0).max(30),
   cooldown_seconds: z.number().int().min(0).max(86400),
@@ -203,6 +217,9 @@ export const resourceSchema = z.enum([
   "automation",
   "flows",
   "flow_nodes",
+  "flow_triggers",
+  "flow_runs",
+  "flow_run_steps",
   "auto_reply",
   "logs",
   "webhook_logs",
@@ -215,6 +232,7 @@ export const resourceSchema = z.enum([
 export type TemplateFormValues = z.input<typeof templateSchema>;
 export type AutomationFormValues = z.input<typeof automationSchema>;
 export type FlowFormValues = z.input<typeof flowSchema>;
+export type FlowTriggerFormValues = z.input<typeof flowTriggerSchema>;
 export type AutoReplyFormValues = z.input<typeof autoReplySchema>;
 export type SettingsFormValues = z.input<typeof settingsSchema>;
 export type NotificationRuleFormValues = z.input<typeof notificationRuleSchema>;

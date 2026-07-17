@@ -5,6 +5,7 @@ import {
   writeActivityLog,
   writeWebhookLog,
 } from "./whatsapp-audit-service";
+import { continueActiveFlow, processFlowTriggers, startFlow } from "./whatsapp-flow-engine";
 
 type MatchType = "equals" | "contains" | "starts_with";
 type ScheduleMode = "always" | "business_hours" | "outside_hours";
@@ -14,6 +15,7 @@ interface AutoReplyRow {
   id: string;
   keyword: string;
   template_id: string;
+  flow_id: string | null;
   match_type: MatchType;
   delay_seconds: number;
   cooldown_seconds: number;
@@ -53,6 +55,8 @@ export type CustomerMessageResult =
   | { status: "sent"; ruleId: string; templateId: string; jobId: string }
   | { status: "queued"; ruleId: string; templateId: string; jobId: string; scheduledAt: string }
   | { status: "simulated"; ruleId: string; templateId: string; keyword: string; templateName: string; delaySeconds: number }
+  | { status: "flow_waiting"; flowId: string; runId: string; nodeId?: string }
+  | { status: "flow_completed"; flowId: string; runId: string; nodeId?: string }
   | { status: "skipped"; reason: SkipReason }
   | { status: "no_match" }
   | { status: "failed"; error: string };
@@ -195,8 +199,8 @@ async function processAutoReplyJob(jobId: string): Promise<{ sent: boolean; erro
     await writeActivityLog({
       customer: job.customer,
       eventType: "auto_reply.sent",
-      status: "success",
-      message: `Template auto reply "${job.template.name}" berhasil dikirim`,
+      status: "pending",
+      message: `Template auto reply "${job.template.name}" diterima KirimDev; menunggu status delivery`,
       templateId: job.template_id,
       metadata: { job_id: job.id, rule_id: job.rule_id, provider_message_id: result.messageId ?? null, attempt },
     });
@@ -262,17 +266,31 @@ export async function processCustomerMessage(
       return { status: "skipped", reason: "handover" };
     }
 
+    if (!options.dryRun) {
+      const continued = await continueActiveFlow({ customerPhone: customer, text, eventId: options.eventId });
+      if (continued.handled) {
+        if (continued.status === "failed") return { status: "failed", error: continued.error };
+        return continued.status === "completed"
+          ? { status: "flow_completed", flowId: continued.flowId, runId: continued.runId, nodeId: continued.nodeId }
+          : { status: "flow_waiting", flowId: continued.flowId, runId: continued.runId, nodeId: continued.nodeId };
+      }
+      const triggered = await processFlowTriggers({ type: "message_received", customerPhone: customer, senderPhoneId, eventId: options.eventId, text });
+      if (triggered.handled) {
+        if (triggered.status === "failed") return { status: "failed", error: triggered.error };
+        return triggered.status === "completed"
+          ? { status: "flow_completed", flowId: triggered.flowId, runId: triggered.runId, nodeId: triggered.nodeId }
+          : { status: "flow_waiting", flowId: triggered.flowId, runId: triggered.runId, nodeId: triggered.nodeId };
+      }
+    }
+
     const { data, error } = await supabase
       .from("auto_reply")
-      .select("id,keyword,template_id,match_type,delay_seconds,cooldown_seconds,priority,schedule_mode,handover_to_human,handover_duration_minutes,is_test_mode,test_phone_numbers,created_at,template:templates(*)")
+      .select("id,keyword,template_id,flow_id,match_type,delay_seconds,cooldown_seconds,priority,schedule_mode,handover_to_human,handover_duration_minutes,is_test_mode,test_phone_numbers,created_at,template:templates(*)")
       .eq("is_active", true);
     if (error) throw new Error(`Rule auto reply tidak dapat dibaca: ${error.message}`);
 
     const rule = selectBestRule((data ?? []) as unknown as AutoReplyRow[], normalizedText);
     if (!rule) return { status: "no_match" };
-    if (!rule.template || rule.template.is_active === false) {
-      throw new Error(`Template untuk keyword "${rule.keyword}" tidak tersedia atau nonaktif`);
-    }
 
     if (rule.is_test_mode && !rule.test_phone_numbers.map(normalizePhone).includes(customer)) {
       await logSkipped(customer, "test_mode", { rule_id: rule.id, keyword: rule.keyword });
@@ -285,6 +303,19 @@ export async function processCustomerMessage(
 
     const delaySeconds = Math.max(0, rule.delay_seconds ?? settings.default_delay);
     if (options.dryRun) {
+      if (rule.flow_id) {
+        return {
+          status: "simulated",
+          ruleId: rule.id,
+          templateId: rule.template_id,
+          keyword: rule.keyword,
+          templateName: "Flow Map",
+          delaySeconds: 0,
+        };
+      }
+      if (!rule.template || rule.template.is_active === false) {
+        throw new Error(`Template untuk keyword "${rule.keyword}" tidak tersedia atau nonaktif`);
+      }
       return {
         status: "simulated",
         ruleId: rule.id,
@@ -293,6 +324,26 @@ export async function processCustomerMessage(
         templateName: rule.template.name,
         delaySeconds,
       };
+    }
+
+    if (rule.flow_id) {
+      const started = await startFlow({
+        flowId: rule.flow_id,
+        customerPhone: customer,
+        senderPhoneId,
+        triggerRuleId: rule.id,
+        eventId: options.eventId,
+        text,
+      });
+      if (!started.handled) return { status: "failed", error: "Flow tidak dapat dimulai" };
+      if (started.status === "failed") return { status: "failed", error: started.error };
+      return started.status === "completed"
+        ? { status: "flow_completed", flowId: started.flowId, runId: started.runId, nodeId: started.nodeId }
+        : { status: "flow_waiting", flowId: started.flowId, runId: started.runId, nodeId: started.nodeId };
+    }
+
+    if (!rule.template || rule.template.is_active === false) {
+      throw new Error(`Template untuk keyword "${rule.keyword}" tidak tersedia atau nonaktif`);
     }
 
     if (rule.cooldown_seconds > 0) {

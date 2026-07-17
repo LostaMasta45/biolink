@@ -7,6 +7,7 @@ import {
   botCommandSchema,
   flowNodeSchema,
   flowSchema,
+  flowTriggerSchema,
   notificationRuleSchema,
   resourceSchema,
   settingsSchema,
@@ -21,6 +22,9 @@ const SELECTS: Record<ManagerResource, string> = {
   automation: "*, template:templates(id,name)",
   flows: "*",
   flow_nodes: "*, template:templates(id,name), automation:automation(id,name)",
+  flow_triggers: "*",
+  flow_runs: "*, flow:flows(id,name), current_node:flow_nodes(id,name)",
+  flow_run_steps: "*, node:flow_nodes(id,name)",
   auto_reply: "*, template:templates(id,name)",
   logs: "*, automation:automation(id,name), template:templates(id,name)",
   webhook_logs: "*",
@@ -35,6 +39,9 @@ const ORDER_COLUMNS: Record<ManagerResource, string> = {
   automation: "updated_at",
   flows: "updated_at",
   flow_nodes: "position",
+  flow_triggers: "priority",
+  flow_runs: "updated_at",
+  flow_run_steps: "sequence",
   auto_reply: "keyword",
   logs: "created_at",
   webhook_logs: "created_at",
@@ -44,7 +51,7 @@ const ORDER_COLUMNS: Record<ManagerResource, string> = {
   bot_commands: "sort_order",
 };
 
-const ASCENDING_RESOURCES = new Set<ManagerResource>(["flow_nodes", "auto_reply", "notification_rules", "bot_commands"]);
+const ASCENDING_RESOURCES = new Set<ManagerResource>(["flow_nodes", "flow_run_steps", "flow_triggers", "auto_reply", "notification_rules", "bot_commands"]);
 
 function maskSettings(rows: unknown[]): unknown[] {
   return rows.map((row) => {
@@ -62,7 +69,9 @@ export async function listResource(
 ): Promise<unknown[]> {
   const resource = resourceSchema.parse(resourceInput);
   const flowId = filters.get("flow_id");
-  if (flowId === "none" && resource === "flow_nodes") return [];
+  const runId = filters.get("run_id");
+  if (flowId === "none" && (resource === "flow_nodes" || resource === "flow_triggers" || resource === "flow_runs")) return [];
+  if (runId === "none" && resource === "flow_run_steps") return [];
 
   let query = supabase
     .from(resource)
@@ -76,6 +85,9 @@ export async function listResource(
   const eventType = filters.get("event_type");
 
   if (flowId && resource === "flow_nodes") query = query.eq("flow_id", flowId);
+  if (flowId && resource === "flow_triggers") query = query.eq("flow_id", flowId);
+  if (flowId && resource === "flow_runs") query = query.eq("flow_id", flowId);
+  if (runId && resource === "flow_run_steps") query = query.eq("run_id", runId);
   if (status && (resource === "logs" || resource === "webhook_logs")) query = query.eq("status", status);
   if (automationId && resource === "logs") query = query.eq("automation_id", automationId);
   if (customer && resource === "logs") query = query.ilike("customer", `%${customer}%`);
@@ -86,7 +98,7 @@ export async function listResource(
   if (eventType && resource === "notification_jobs") query = query.eq("event_key", eventType);
   if (from && resource === "notification_jobs") query = query.gte("created_at", from);
   if (to && resource === "notification_jobs") query = query.lte("created_at", to);
-  if (resource === "logs" || resource === "webhook_logs" || resource === "notification_jobs") query = query.limit(250);
+  if (resource === "logs" || resource === "webhook_logs" || resource === "notification_jobs" || resource === "flow_runs" || resource === "flow_run_steps") query = query.limit(250);
 
   const { data, error } = await query;
   if (error) throw new Error(error.message);
@@ -164,6 +176,8 @@ function parsePayload(resource: ManagerResource, payload: unknown): Record<strin
       return flowSchema.parse(payload);
     case "flow_nodes":
       return flowNodeSchema.parse(payload);
+    case "flow_triggers":
+      return flowTriggerSchema.parse(payload);
     case "auto_reply": {
       const parsed = autoReplySchema.parse(payload);
       return {
@@ -177,6 +191,8 @@ function parsePayload(resource: ManagerResource, payload: unknown): Record<strin
       return notificationRuleSchema.parse(payload);
     case "bot_commands":
       return botCommandSchema.parse(payload);
+    case "flow_runs":
+    case "flow_run_steps":
     case "logs":
     case "webhook_logs":
     case "notification_jobs":
@@ -210,6 +226,10 @@ export async function createResource(
       name,
       description: `Tahap ${name} pada customer journey`,
       position,
+      execution_mode: position === DEFAULT_FLOW_NODES.length - 1 ? "complete" : "send_and_wait",
+      delay_seconds: 0,
+      position_x: 320,
+      position_y: position * 170,
     }));
     const { data: createdNodes, error: nodesError } = await supabase
       .from("flow_nodes")
@@ -233,7 +253,7 @@ export async function updateResource(
   input: unknown,
 ): Promise<unknown> {
   const resource = resourceSchema.parse(resourceInput);
-  if (resource === "logs" || resource === "webhook_logs" || resource === "notification_jobs") {
+  if (resource === "logs" || resource === "webhook_logs" || resource === "notification_jobs" || resource === "flow_runs" || resource === "flow_run_steps") {
     throw new Error(`${resource} bersifat read-only dari dashboard`);
   }
   const parsed = parsePayload(resource, input);
@@ -250,7 +270,7 @@ export async function deleteResource(
   id: string,
 ): Promise<void> {
   const resource = resourceSchema.parse(resourceInput);
-  if (resource === "logs" || resource === "webhook_logs" || resource === "notification_jobs" || resource === "settings") {
+  if (resource === "logs" || resource === "webhook_logs" || resource === "notification_jobs" || resource === "flow_runs" || resource === "flow_run_steps" || resource === "settings") {
     throw new Error(`${resource} tidak dapat dihapus dari dashboard`);
   }
   const { error } = await supabase.from(resource).delete().eq("id", id);

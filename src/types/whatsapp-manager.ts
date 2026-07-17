@@ -137,10 +137,28 @@ export interface FlowNode {
   template_id: string | null;
   automation_id: string | null;
   next_node_id: string | null;
+  execution_mode: "send_and_wait" | "send_and_continue" | "wait_for_reply" | "complete";
+  delay_seconds: number;
+  position_x: number;
+  position_y: number;
   created_at: string;
   updated_at: string;
   template?: Pick<WhatsAppTemplate, "id" | "name"> | null;
   automation?: Pick<AutomationRule, "id" | "name"> | null;
+}
+
+export type FlowTriggerType = "message_received" | "chat_started" | "conversation_closed" | "conversation_assigned" | "label_added" | "window_expiring" | "chat_inactive";
+
+export interface FlowTrigger {
+  id: string;
+  flow_id: string;
+  trigger_type: FlowTriggerType;
+  name: string;
+  config: Record<string, string | number | boolean>;
+  priority: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface AutoReplyRule {
@@ -163,6 +181,40 @@ export interface AutoReplyRule {
   updated_at: string;
   template?: Pick<WhatsAppTemplate, "id" | "name"> | null;
   flow?: Pick<CustomerFlow, "id" | "name"> | null;
+}
+
+export interface FlowRun {
+  id: string;
+  flow_id: string;
+  customer: string;
+  sender_phone_id: string;
+  trigger_rule_id: string | null;
+  trigger_id: string | null;
+  entry_event_id: string | null;
+  current_node_id: string | null;
+  status: "active" | "waiting" | "completed" | "failed" | "cancelled";
+  context: Record<string, unknown>;
+  last_error: string | null;
+  started_at: string;
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+  flow?: Pick<CustomerFlow, "id" | "name"> | null;
+  current_node?: Pick<FlowNode, "id" | "name"> | null;
+}
+
+export interface FlowRunStep {
+  id: string;
+  run_id: string;
+  node_id: string | null;
+  sequence: number;
+  status: "running" | "waiting" | "pending_delivery" | "delivered" | "read" | "completed" | "failed" | "skipped";
+  input_text: string | null;
+  provider_message_id: string | null;
+  error: string | null;
+  created_at: string;
+  completed_at: string | null;
+  node?: Pick<FlowNode, "id" | "name"> | null;
 }
 
 export interface ActivityLog {

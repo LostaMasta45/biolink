@@ -77,8 +77,11 @@ export interface ApiSendAuditInput {
 }
 
 export async function auditApiSend(input: ApiSendAuditInput): Promise<void> {
-  const status: ActivityStatus = input.success ? "success" : "failed";
   const readReceipt = input.messageType === "read_receipt";
+  // HTTP 2xx dari KirimDev hanya berarti pesan diterima provider. Untuk pesan
+  // outbound, keberhasilan akhir baru dicatat saat webhook message.status
+  // berstatus delivered/read diterima.
+  const status: ActivityStatus = input.success ? (readReceipt ? "success" : "pending") : "failed";
   const metadata = {
     source: input.source ?? "direct_api",
     correlation_id: input.correlationId ?? null,
@@ -98,7 +101,9 @@ export async function auditApiSend(input: ApiSendAuditInput): Promise<void> {
       eventType: readReceipt ? "api.message.read" : "api.message.send",
       status,
       message: input.success
-        ? `KirimDev menerima pengiriman ${input.messageType}`
+        ? (readReceipt
+          ? "KirimDev menerima penandaan pesan sudah dibaca"
+          : `KirimDev menerima pengiriman ${input.messageType}; menunggu status delivery`)
         : `KirimDev menolak pengiriman ${input.messageType}: ${input.error ?? "unknown error"}`,
       templateId: input.templateId ?? null,
       metadata,
@@ -122,27 +127,90 @@ export async function recordProviderDeliveryStatus(input: {
   error?: unknown;
   eventId?: string | null;
 }): Promise<void> {
-  const failed = input.providerStatus === "failed";
-  const pending = ["accepted", "sent", "pending"].includes(input.providerStatus);
+  const providerStatus = input.providerStatus.trim().toLowerCase();
+  const failed = ["failed", "undelivered", "error"].includes(providerStatus);
+  const delivered = ["delivered", "read", "played"].includes(providerStatus);
+  const status: ActivityStatus = failed ? "failed" : delivered ? "success" : "pending";
   await writeActivityLog({
     customer: input.customer,
     eventType: "api.message.status",
-    status: failed ? "failed" : pending ? "pending" : "success",
-    message: `Status pesan KirimDev: ${input.providerStatus}`,
+    status,
+    message: `Status pesan KirimDev: ${providerStatus}`,
     metadata: {
       provider_message_id: input.providerMessageId,
-      provider_status: input.providerStatus,
+      provider_status: providerStatus,
       event_id: input.eventId ?? null,
       error: input.error ?? null,
     },
   });
 
-  if (failed) {
-    await supabase
+  const providerError = typeof input.error === "string"
+    ? input.error
+    : JSON.stringify(input.error ?? `Provider reported ${providerStatus}`);
+
+  const flowStepRequest = failed || delivered
+    ? supabase
+      .from("flow_run_steps")
+      .update(failed ? { status: "failed", error: providerError } : { status: providerStatus === "played" ? "delivered" : providerStatus })
+      .eq("provider_message_id", input.providerMessageId)
+      .select("id,run_id,node_id")
+    : Promise.resolve({ data: [] as Array<{ id: string; run_id: string; node_id: string | null }>, error: null });
+
+  const [autoReplyResult, notificationResult, flowStepResult] = await Promise.all([
+    supabase
       .from("auto_reply_jobs")
-      .update({ last_error: JSON.stringify(input.error ?? "Provider reported failed") })
-      .eq("provider_message_id", input.providerMessageId);
+      .update(failed ? { status: "failed", last_error: providerError } : { last_error: null })
+      .eq("provider_message_id", input.providerMessageId)
+      .select("id,rule_id,template_id,customer"),
+    supabase
+      .from("notification_jobs")
+      .update(failed ? { status: "failed", last_error: providerError } : { last_error: null })
+      .eq("provider_message_id", input.providerMessageId)
+      .select("id,event_key,template_id,recipient"),
+    flowStepRequest,
+  ]);
+
+  if (autoReplyResult.error) console.error("[WhatsAppAudit] Status auto reply gagal diperbarui:", autoReplyResult.error.message);
+  if (notificationResult.error) console.error("[WhatsAppAudit] Status notifikasi gagal diperbarui:", notificationResult.error.message);
+  if (flowStepResult.error) console.error("[WhatsAppAudit] Status step flow gagal diperbarui:", flowStepResult.error.message);
+
+  const autoReplies = autoReplyResult.data ?? [];
+  const notifications = notificationResult.data ?? [];
+  const flowSteps = flowStepResult.data ?? [];
+  if (failed && flowSteps.length) {
+    await Promise.all(flowSteps.map((step) => supabase.from("flow_runs").update({
+      status: "failed",
+      last_error: providerError,
+      completed_at: new Date().toISOString(),
+    }).eq("id", step.run_id).in("status", ["active", "waiting"])));
   }
+  if (!failed && !delivered) return;
+
+  await Promise.all([
+    ...autoReplies.map((job) => writeActivityLog({
+      customer: job.customer,
+      eventType: `auto_reply.${failed ? "delivery_failed" : providerStatus}`,
+      status,
+      templateId: job.template_id,
+      message: failed ? `Auto reply gagal di provider: ${providerError}` : `Auto reply ${providerStatus} oleh provider`,
+      metadata: { job_id: job.id, rule_id: job.rule_id, provider_message_id: input.providerMessageId, provider_status: providerStatus, error: input.error ?? null },
+    })),
+    ...notifications.map((job) => writeActivityLog({
+      customer: job.recipient,
+      eventType: `notification.${failed ? "delivery_failed" : providerStatus}`,
+      status,
+      templateId: job.template_id,
+      message: failed ? `Notifikasi gagal di provider: ${providerError}` : `Notifikasi ${providerStatus} oleh provider`,
+      metadata: { job_id: job.id, event_key: job.event_key, provider_message_id: input.providerMessageId, provider_status: providerStatus, error: input.error ?? null },
+    })),
+    ...flowSteps.map((step) => writeActivityLog({
+      customer: input.customer,
+      eventType: `flow.node.${failed ? "delivery_failed" : providerStatus}`,
+      status,
+      message: failed ? `Node flow gagal di provider: ${providerError}` : `Node flow ${providerStatus} oleh provider`,
+      metadata: { flow_run_id: step.run_id, step_id: step.id, node_id: step.node_id, provider_message_id: input.providerMessageId, provider_status: providerStatus, error: input.error ?? null },
+    })),
+  ]);
 }
 
 export { supabase as whatsappAdminClient };

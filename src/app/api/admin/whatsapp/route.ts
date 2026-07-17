@@ -4,6 +4,7 @@ import { getAllAccounts, sendTestToAdmin, testConnection } from "@/lib/whatsapp/
 import { processCustomerMessage, processDueAutoReplyJobs } from "@/services/whatsapp-execution-engine";
 import { getOverviewMetrics } from "@/services/whatsapp-manager-service";
 import { processDueNotificationJobs, testNotificationRule } from "@/services/whatsapp-notification-service";
+import { processScheduledFlowTriggers, simulateFlow } from "@/services/whatsapp-flow-engine";
 
 async function getAuthenticatedClient() {
   const supabase = await createClient();
@@ -37,7 +38,7 @@ export async function POST(request: NextRequest) {
   const supabase = await getAuthenticatedClient();
   if (!supabase) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   try {
-    const body = await request.json() as { action?: string; phoneId?: string; sender?: string; message?: string; ruleId?: string; customerPhone?: string };
+    const body = await request.json() as { action?: string; phoneId?: string; sender?: string; message?: string; ruleId?: string; customerPhone?: string; flowId?: string };
     switch (body.action) {
       case "test_connection": {
         if (!body.phoneId) return NextResponse.json({ error: "phoneId diperlukan" }, { status: 400 });
@@ -69,6 +70,12 @@ export async function POST(request: NextRequest) {
         );
         return NextResponse.json(result);
       }
+      case "simulate_flow": {
+        if (!body.flowId) return NextResponse.json({ error: "flowId diperlukan" }, { status: 400 });
+        return NextResponse.json(await simulateFlow(body.flowId));
+      }
+      case "process_flow_triggers":
+        return NextResponse.json({ success: true, ...(await processScheduledFlowTriggers(50)), message: "Trigger flow terjadwal sudah diproses." });
       case "process_auto_reply_queue":
         return NextResponse.json({ success: true, ...(await processDueAutoReplyJobs(50)), message: "Antrean jatuh tempo sudah diproses." });
       case "process_notification_queue":
