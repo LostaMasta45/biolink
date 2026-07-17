@@ -194,12 +194,17 @@ export async function processInboxBackfillTick() {
       if (!unfinished.length) continue;
 
       // A message page performs more local writes than the light-weight
-      // inventories, so run one message page per minute. Inventories can safely
-      // advance one page for each configured account.
+      // inventories, so run one message page per tick. Conversation and contact
+      // inventories advance two pages per account to make large initial imports
+      // finish materially sooner while staying within the 60-second limit.
       const selected = resource === "messages" ? unfinished.slice(0, 1) : unfinished;
       for (const account of selected) {
-        const result = await syncInboxProviderPage({ account, resource });
-        jobs.push({ account: account.label, resource, processed: result.processed, hasMore: result.hasMore, completed: result.completed });
+        const pageLimit = resource === "messages" ? 1 : 2;
+        for (let page = 0; page < pageLimit; page += 1) {
+          const result = await syncInboxProviderPage({ account, resource });
+          jobs.push({ account: account.label, resource, processed: result.processed, hasMore: result.hasMore, completed: result.completed });
+          if (!result.hasMore) break;
+        }
       }
       return { skipped: false, processed: jobs.reduce((total, job) => total + job.processed, 0), jobs, accountCount: accounts.length };
     }
