@@ -93,17 +93,25 @@ export async function syncInboxAccounts(accounts: WhatsAppAccount[]) {
     is_customer_inbox: true,
   }));
   if (!rows.length) return [] as InboxAccount[];
+  // Do not order by `created_at`: early Inbox installations were created before
+  // that audit column existed. Account role is the reliable, user-facing order.
   const { data, error } = await inboxDb.from("wa_inbox_accounts").upsert(rows, { onConflict: "phone_number_id" })
-    .select("id,phone_number_id,phone_number,label,role,is_customer_inbox").order("created_at", { ascending: true });
+    .select("id,phone_number_id,phone_number,label,role,is_customer_inbox");
   if (error) throw new Error(`Akun Inbox tidak dapat disinkronkan: ${error.message}`);
-  return (data ?? []) as unknown as InboxAccount[];
+  return ((data ?? []) as unknown as InboxAccount[]).sort((left, right) => {
+    const roleOrder = { admin: 0, bot: 1 } as const;
+    return roleOrder[left.role] - roleOrder[right.role] || left.label.localeCompare(right.label, "id");
+  });
 }
 
 export async function listInboxAccounts() {
   const { data, error } = await inboxDb.from("wa_inbox_accounts")
-    .select("id,phone_number_id,phone_number,label,role,is_customer_inbox").eq("is_customer_inbox", true).order("created_at", { ascending: true });
+    .select("id,phone_number_id,phone_number,label,role,is_customer_inbox").eq("is_customer_inbox", true);
   if (error) throw new Error(`Akun Inbox tidak dapat dimuat: ${error.message}`);
-  return (data ?? []) as unknown as InboxAccount[];
+  return ((data ?? []) as unknown as InboxAccount[]).sort((left, right) => {
+    const roleOrder = { admin: 0, bot: 1 } as const;
+    return roleOrder[left.role] - roleOrder[right.role] || left.label.localeCompare(right.label, "id");
+  });
 }
 
 async function ensureContact(accountId: string, phone: string, profileName?: string | null): Promise<InboxContactRow> {
