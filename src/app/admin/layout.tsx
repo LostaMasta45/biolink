@@ -39,6 +39,7 @@ const navItems = [
     { href: "/admin/pembayaran", icon: CreditCard, label: "Pembayaran" },
     { href: "/admin/qris", icon: QrCode, label: "QRIS" },
     { href: "/admin/whatsapp", icon: MessageSquare, label: "WhatsApp" },
+    { href: "/admin/inbox", icon: MessageSquare, label: "Inbox" },
 ];
 
 export default function AdminLayout({

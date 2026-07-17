@@ -1,5 +1,5 @@
-import { InboxContactsManager } from "@/components/whatsapp/inbox-contacts-manager";
+import { redirect } from "next/navigation";
 
 export default function WhatsAppInboxContactsPage() {
-  return <InboxContactsManager />;
+  redirect("/admin/inbox/contacts");
 }

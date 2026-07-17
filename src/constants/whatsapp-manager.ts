@@ -1,11 +1,9 @@
 import {
   Activity,
   Braces,
-  ContactRound,
   FileText,
   GitBranch,
   LayoutDashboard,
-  MessagesSquare,
   MessageCircleReply,
   BellRing,
   Bot,
@@ -16,8 +14,6 @@ import type { TemplateType } from "@/types/whatsapp-manager";
 
 export const WHATSAPP_NAV_ITEMS = [
   { href: "/admin/whatsapp", label: "Overview", icon: LayoutDashboard },
-  { href: "/admin/whatsapp/inbox", label: "Inbox", icon: MessagesSquare },
-  { href: "/admin/whatsapp/inbox/contacts", label: "Kontak", icon: ContactRound },
   { href: "/admin/whatsapp/flow-builder", label: "Flow Builder", icon: GitBranch },
   { href: "/admin/whatsapp/templates", label: "Pesan Tersimpan", icon: FileText },
   { href: "/admin/whatsapp/auto-reply", label: "Keyword Automation", icon: MessageCircleReply },

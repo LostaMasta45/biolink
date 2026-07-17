@@ -257,14 +257,55 @@ export async function upsertInboxProviderContact(input: { phoneId: string; phone
   return data as unknown as InboxContact;
 }
 
-export async function getInboxSyncState(accountId: string, resource: "messages" | "contacts") {
+/**
+ * Stores the lightweight conversation inventory returned by KirimDev. This is
+ * deliberately separate from message backfill so the Inbox list becomes useful
+ * immediately, even when an account has a large message history.
+ */
+export async function upsertInboxProviderConversation(input: {
+  phoneId: string;
+  phoneNumber?: string | null;
+  providerConversationId: string;
+  contact: { id?: string | null; phone: string; name?: string | null; bsuid?: string | null };
+  status?: string | null;
+  unreadCount?: number | null;
+  lastMessageAt?: string | null;
+  lastInboundAt?: string | null;
+}) {
+  const account = await ensureAccount({ phoneId: input.phoneId, phoneNumber: input.phoneNumber, customerInbox: true });
+  const contact = await upsertInboxProviderContact({
+    phoneId: input.phoneId,
+    phoneNumber: input.phoneNumber,
+    providerContactId: input.contact.id ?? null,
+    phone: input.contact.phone,
+    bsuid: input.contact.bsuid ?? null,
+    name: input.contact.name ?? null,
+    profileName: input.contact.name ?? null,
+    metadata: { sync: true, source: "conversations" },
+  });
+  const conversation = await getOrCreateConversation(account.id, contact.id);
+  const status: InboxConversationStatus = input.status === "pending" || input.status === "resolved" ? input.status : "open";
+  const unreadCount = Math.max(0, Number(input.unreadCount ?? 0) || 0);
+  const { data, error } = await inboxDb.from("wa_inbox_conversations").update({
+    provider_conversation_id: input.providerConversationId,
+    status,
+    unread_count: unreadCount,
+    needs_reply: unreadCount > 0,
+    last_message_at: input.lastMessageAt ?? conversation.last_message_at,
+    last_inbound_at: input.lastInboundAt ?? conversation.last_inbound_at,
+  }).eq("id", conversation.id).select("id,wa_account_id,contact_id,status,priority,unread_count,needs_reply,last_message_at,last_inbound_at,last_outbound_at,service_window_expires_at,last_message_preview").single();
+  if (error) throw new Error(`Percakapan provider tidak dapat disimpan: ${error.message}`);
+  return data as unknown as InboxConversationRow;
+}
+
+export async function getInboxSyncState(accountId: string, resource: "messages" | "contacts" | "conversations") {
   const { data, error } = await inboxDb.from("wa_inbox_sync_state").select("cursor,last_success_at,last_error")
     .eq("wa_account_id", accountId).eq("resource", resource).maybeSingle();
   if (error) throw new Error(`Checkpoint sync tidak dapat dibaca: ${error.message}`);
   return data as { cursor: string | null; last_success_at: string | null; last_error: string | null } | null;
 }
 
-export async function saveInboxSyncState(accountId: string, resource: "messages" | "contacts", patch: { cursor?: string | null; lastSuccessAt?: string | null; lastError?: string | null }) {
+export async function saveInboxSyncState(accountId: string, resource: "messages" | "contacts" | "conversations", patch: { cursor?: string | null; lastSuccessAt?: string | null; lastError?: string | null }) {
   const { error } = await inboxDb.from("wa_inbox_sync_state").upsert({
     wa_account_id: accountId,
     resource,

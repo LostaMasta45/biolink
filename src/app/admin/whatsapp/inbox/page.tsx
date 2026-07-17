@@ -1,5 +1,5 @@
-import { InboxManager } from "@/components/whatsapp/inbox-manager";
+import { redirect } from "next/navigation";
 
 export default function WhatsAppInboxPage() {
-  return <InboxManager />;
+  redirect("/admin/inbox");
 }

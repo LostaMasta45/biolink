@@ -23,7 +23,7 @@ export function ManagerShell({ children }: { children: React.ReactNode }) {
         </div>
         <nav className="mt-5 flex gap-1 overflow-x-auto pb-1" aria-label="Navigasi WhatsApp Manager">
           {WHATSAPP_NAV_ITEMS.map((item) => {
-            const active = item.href === "/admin/whatsapp" || item.href === "/admin/whatsapp/inbox"
+            const active = item.href === "/admin/whatsapp"
               ? pathname === item.href
               : pathname.startsWith(item.href);
             const Icon = item.icon;

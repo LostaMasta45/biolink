@@ -75,7 +75,7 @@ async function getDynamicApiKey(): Promise<string> {
   return dbSettings?.api_key || process.env.KIRIMDEV_API_KEY || '';
 }
 
-export async function listKirimDevResourcePage(phoneId: string, resource: "messages" | "contacts", cursor?: string | null, limit = 50) {
+export async function listKirimDevResourcePage(phoneId: string, resource: "messages" | "contacts" | "conversations", cursor?: string | null, limit = 100) {
   const apiKey = await getDynamicApiKey();
   if (!apiKey) throw new Error("KIRIMDEV_API_KEY belum dikonfigurasi");
   const params = new URLSearchParams({ limit: String(Math.min(100, Math.max(1, limit))) });

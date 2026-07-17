@@ -32,12 +32,13 @@ Balas Cepat bukan Auto Reply dan bukan trigger Flow.
 
 Shortcut hanya aktif/nonaktif untuk tampilan composer. Menonaktifkan `/chat` tidak mengubah Keyword Automation, Flow Map, template, atau webhook.
 
-## Sync chat dan kontak bertahap
+## Sinkronisasi lengkap yang resumable
 
-- Tombol **Sync chat** mengambil satu halaman (maksimal 50 pesan) dari `GET /v1/{phone_number_id}/messages`, menyimpan cursor provider, lalu memberi tahu bila masih ada batch berikutnya.
-- Menu **Kontak** memiliki selector akun yang sama dan tombol **Sync kontak** untuk satu halaman `GET /v1/{phone_number_id}/contacts`.
-- Jalankan lagi tombol sync hingga pesan menyatakan semua batch selesai. Cursor KirimDev dipakai apa adanya dan checkpoint disimpan pada `wa_inbox_sync_state`, sehingga proses dapat dihentikan lalu dilanjutkan tanpa mengulang halaman sebelumnya.
-- Jangan menjalankan refresh penuh seluruh histori dalam satu request. KirimDev memakai cursor opaque untuk semua list endpoint; aplikasi tidak memodifikasi cursor tersebut.
+- Tombol **Sync semua** melakukan tiga tahap otomatis untuk akun yang dipilih: inventory `GET /v1/{phone_number_id}/conversations`, kontak `GET /v1/{phone_number_id}/contacts`, lalu riwayat `GET /v1/{phone_number_id}/messages`.
+- Setiap request memakai halaman hingga 100 data dan cursor opaque KirimDev. Cursor/checkpoint berada di `wa_inbox_sync_state`, jadi refresh halaman atau kegagalan jaringan tidak mengulang batch yang sudah berhasil.
+- Daftar percakapan disinkronkan lebih dahulu agar UI langsung terasa cepat. Riwayat pesan besar dilanjutkan bertahap sambil progres batch ditampilkan.
+- Tombol **Sync semua kontak** pada menu Kontak memakai alur cursor otomatis yang sama.
+- Pesan dari endpoint list KirimDev memakai field `content` sebagai teks; mapper Inbox menyimpannya menjadi body bubble agar tidak lagi kosong.
 
 ## Status dan pemulihan
 

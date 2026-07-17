@@ -162,6 +162,11 @@ export function MobileNav() {
                                             </DropdownMenuLabel>
                                             <DropdownMenuSeparator />
                                             <DropdownMenuItem asChild className="cursor-pointer">
+                                                <Link href="/admin/inbox" className="flex items-center gap-2">
+                                                    <MessageSquare className="w-4 h-4" /> Inbox
+                                                </Link>
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem asChild className="cursor-pointer">
                                                 <Link href="/admin/database" className="flex items-center gap-2">
                                                     <Database className="w-4 h-4" /> Database
                                                 </Link>
