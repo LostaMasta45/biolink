@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import type { ActivityStatus, WebhookDirection, WebhookStatus } from "@/types/whatsapp-manager";
+import { recordInboxOutboundAttempt } from "@/services/whatsapp-inbox-store";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -118,6 +119,24 @@ export async function auditApiSend(input: ApiSendAuditInput): Promise<void> {
       input.latencyMs,
     ),
   ]);
+
+  // Inbox adalah read model lokal. Kegagalannya tidak boleh membatalkan hasil
+  // pengiriman yang sudah diterima/ditolak KirimDev, tetapi tetap terlihat di log server.
+  if (!readReceipt) {
+    try {
+      await recordInboxOutboundAttempt({
+        phoneId: input.senderPhoneId,
+        customer: input.customer,
+        providerMessageId: input.providerMessageId,
+        success: input.success,
+        source: input.source,
+        correlationId: input.correlationId,
+        error: input.error,
+      });
+    } catch (inboxError) {
+      console.error("[WhatsAppAudit] Outbound Inbox gagal dicatat:", inboxError instanceof Error ? inboxError.message : inboxError);
+    }
+  }
 }
 
 export async function recordProviderDeliveryStatus(input: {

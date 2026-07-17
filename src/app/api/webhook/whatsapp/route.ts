@@ -11,6 +11,7 @@ import type { KirimDevWebhookPayload } from "@/lib/whatsapp/types";
 import { processCustomerMessage, processDueAutoReplyJobs } from "@/services/whatsapp-execution-engine";
 import { processDueNotificationJobs } from "@/services/whatsapp-notification-service";
 import { processFlowTriggers, recordCustomerActivity } from "@/services/whatsapp-flow-engine";
+import { persistInboxInbound, persistInboxOutbound, recordInboxProviderStatus } from "@/services/whatsapp-inbox-store";
 import {
   claimWebhookEvent,
   recordProviderDeliveryStatus,
@@ -21,6 +22,7 @@ import {
 interface ParsedInboundMessage {
   senderPhone: string;
   text: string;
+  messageType: string;
   phoneId: string;
   displayPhone: string;
   messageId: string;
@@ -89,10 +91,11 @@ function parseMetaInbound(payload: KirimDevWebhookPayload): ParsedInboundMessage
     text = button.button?.payload ?? button.button?.text ?? "";
   }
 
-  if (!message.from || !text) return null;
+  if (!message.from || !message.id) return null;
   return {
     senderPhone: message.from,
     text,
+    messageType: message.type ?? "text",
     phoneId: value?.metadata?.phone_number_id ?? "",
     displayPhone: value?.metadata?.display_phone_number ?? "",
     messageId: message.id ?? "",
@@ -111,10 +114,11 @@ function parseLegacyInbound(payload: KirimDevWebhookPayload): ParsedInboundMessa
   const listReply = interactive?.list_reply as Record<string, unknown> | undefined;
   const button = (message?.button ?? data.button) as Record<string, unknown> | undefined;
   const text = nestedText ?? textObject?.body ?? buttonReply?.id ?? listReply?.id ?? button?.payload ?? button?.text ?? data.text;
-  if (typeof data.from !== "string" || typeof text !== "string") return null;
+  if (typeof data.from !== "string") return null;
   return {
     senderPhone: data.from,
-    text,
+    text: typeof text === "string" ? text : "",
+    messageType: typeof data.type === "string" ? data.type : "text",
     phoneId: typeof data.phoneId === "string" ? data.phoneId : "",
     displayPhone: typeof data.to === "string" ? data.to : "",
     messageId: typeof data.id === "string" ? data.id : "",
@@ -178,6 +182,27 @@ function parseNativeFlowEvent(eventType: string, payload: KirimDevWebhookPayload
   return customer ? { triggerType, customer, phoneId, labels } : null;
 }
 
+function parseNativeSentMessage(payload: KirimDevWebhookPayload) {
+  const data = recordFromUnknown(payload.data);
+  const message = recordFromUnknown(data.message);
+  const meta = recordFromUnknown(data.meta);
+  const nativePayload = payload as KirimDevWebhookPayload & { created_at?: unknown };
+  const phoneId = [data.session, data.phone_number_id, meta.phone_number_id].find((value): value is string => typeof value === "string" && value.length > 0) ?? "";
+  const customer = typeof message.to === "string" ? message.to : "";
+  const providerMessageId = typeof message.provider_id === "string" ? message.provider_id : "";
+  if (!phoneId || !customer || !providerMessageId) return null;
+  return {
+    phoneId,
+    phoneNumber: typeof meta.display_phone_number === "string" ? meta.display_phone_number : null,
+    customer,
+    providerMessageId,
+    body: typeof message.body === "string" ? message.body : "",
+    messageType: typeof message.type === "string" ? message.type : "text",
+    source: typeof message.source === "string" ? message.source : "app",
+    createdAt: typeof data.timestamp === "string" ? data.timestamp : typeof nativePayload.created_at === "string" ? nativePayload.created_at : undefined,
+  };
+}
+
 export async function POST(req: NextRequest) {
   const startedAt = Date.now();
   const rawBody = await req.text();
@@ -231,6 +256,11 @@ export async function POST(req: NextRequest) {
         error: status.error,
         eventId,
       });
+      await recordInboxProviderStatus({
+        providerMessageId: status.messageId,
+        providerStatus: status.status,
+        error: status.error,
+      });
       await writeWebhookLog("outgoing", `message.${status.status}`, status.status === "failed" ? "failed" : "success", {
         event_id: eventId,
         provider_message_id: status.messageId,
@@ -239,6 +269,28 @@ export async function POST(req: NextRequest) {
       }, Date.now() - startedAt);
     }
     return NextResponse.json({ status: "ok", action: status ? "delivery_status_recorded" : "status_ignored" });
+  }
+
+  if (eventType === "message.sent") {
+    const sent = parseNativeSentMessage(payload);
+    if (sent) {
+      const accounts = await getAllAccounts();
+      const botPhoneId = accounts[1]?.phoneId;
+      if (sent.phoneId !== botPhoneId) {
+        await persistInboxOutbound({
+          phoneId: sent.phoneId,
+          phoneNumber: sent.phoneNumber,
+          customer: sent.customer,
+          providerMessageId: sent.providerMessageId,
+          body: sent.body,
+          messageType: sent.messageType,
+          source: sent.source,
+          providerCreatedAt: sent.createdAt,
+          payload: { event_id: eventId, source: sent.source },
+        });
+      }
+    }
+    return NextResponse.json({ status: "ok", action: sent ? "inbox_sent_persisted" : "sent_ignored" });
   }
 
   const nativeFlowEvent = parseNativeFlowEvent(eventType, payload);
@@ -282,7 +334,26 @@ export async function POST(req: NextRequest) {
     phoneId = (await getAllAccounts())[0]?.phoneId ?? "";
   }
 
+  const accounts = await getAllAccounts();
+  const botAccount = accounts[1];
+  const senderIsAdmin = await isAdminNumber(inbound.senderPhone);
+
+  // Nomor Bot dan command internal tidak pernah dimasukkan ke Inbox customer,
+  // tetapi command Admin -> Bot tetap meneruskan alur lama di bawah.
+  if (!botAccount?.phoneId || phoneId !== botAccount.phoneId) {
+    await persistInboxInbound({
+      phoneId,
+      phoneNumber: inbound.displayPhone || null,
+      customer: inbound.senderPhone,
+      providerMessageId: inbound.messageId,
+      body: inbound.text.trim(),
+      messageType: inbound.messageType,
+      payload: { event_id: eventId, message_type: inbound.messageType },
+    });
+  }
+
   const text = inbound.text.trim();
+  if (!text) return NextResponse.json({ status: "ok", action: "inbox_non_text_persisted" });
   await recordCustomerActivity({ customerPhone: inbound.senderPhone, senderPhoneId: phoneId, eventId, text });
   if (inbound.messageId.startsWith("wamid.")) {
     const { data: receiptSettings, error: receiptError } = await whatsappAdminClient
@@ -302,10 +373,6 @@ export async function POST(req: NextRequest) {
       if (!receipt.success) console.warn("[Webhook] Mark as read gagal:", receipt.error);
     }
   }
-
-  const accounts = await getAllAccounts();
-  const botAccount = accounts[1];
-  const senderIsAdmin = await isAdminNumber(inbound.senderPhone);
 
   // Command dan jawaban state-machine hanya boleh melalui Admin Utama -> Bot.
   if (senderIsAdmin) {

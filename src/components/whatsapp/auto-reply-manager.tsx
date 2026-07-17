@@ -107,14 +107,14 @@ export function AutoReplyManager() {
   return (
     <div className="space-y-6">
       <PageHeading
-        title="Balas Cepat (Auto Reply)"
-        description="Automation keyword dengan prioritas, delay, cooldown, jadwal, handover, dan mode test."
+        title="Keyword Automation"
+        description="Rule keyword otomatis dengan prioritas, delay, cooldown, jadwal, handover, dan mode test. Balas Cepat manual tersedia di Inbox."
         icon={MessageCircleReply}
-        action={<Button onClick={() => openRule(null)}><Plus />Balasan Baru</Button>}
+        action={<Button onClick={() => openRule(null)}><Plus />Rule Baru</Button>}
       />
 
       {rules.data.length === 0 ? (
-        <EmptyState title="Belum ada auto reply" description="Tambahkan rule balasan otomatis berdasarkan keyword." />
+        <EmptyState title="Belum ada rule keyword" description="Tambahkan rule automation berdasarkan keyword customer." />
       ) : (
         <div className="grid gap-3">
           {rules.data.map((rule) => (
@@ -149,7 +149,7 @@ export function AutoReplyManager() {
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-h-[90vh] max-w-[96vw] overflow-y-auto sm:max-w-2xl">
           <DialogHeader>
-            <DialogTitle>{editing ? "Edit Auto Reply" : "Auto Reply Baru"}</DialogTitle>
+            <DialogTitle>{editing ? "Edit Keyword Automation" : "Keyword Automation Baru"}</DialogTitle>
             <DialogDescription>Balasan customer tetap dikirim dari nomor Admin Utama. Tes koneksi dikirim dari Bot ke Admin.</DialogDescription>
           </DialogHeader>
           <form onSubmit={submit} className="space-y-5">
