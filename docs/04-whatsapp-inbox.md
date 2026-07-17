@@ -40,6 +40,13 @@ Shortcut hanya aktif/nonaktif untuk tampilan composer. Menonaktifkan `/chat` tid
 - Tombol **Sync semua kontak** pada menu Kontak memakai alur cursor otomatis yang sama.
 - Pesan dari endpoint list KirimDev memakai field `content` sebagai teks; mapper Inbox menyimpannya menjadi body bubble agar tidak lagi kosong.
 
+## Backfill otomatis
+
+- Production menjalankan worker `GET /api/cron/whatsapp-inbox-sync` setiap menit. Route hanya dapat dipanggil menggunakan `CRON_SECRET` dari scheduler Vercel.
+- Satu tick mengambil batch kecil dan menyimpan cursor. Prioritasnya: daftar percakapan, kontak, lalu riwayat pesan. Dengan pola ini 10.000 chat dan 6.000 kontak dapat diselesaikan tanpa request raksasa atau timeout.
+- Saat initial backfill selesai, webhook KirimDev tetap menjadi jalur utama untuk pesan baru dan perubahan status; worker tidak mengunduh ulang seluruh riwayat setiap menit.
+- Cek `webhook_logs` dengan event `inbox.backfill.worker` untuk jumlah data per tick, error provider, dan status penyelesaian.
+
 ## Status dan pemulihan
 
 - Bila pesan inbound belum muncul, periksa menu Webhook serta `webhook_logs` untuk event `message.received`.

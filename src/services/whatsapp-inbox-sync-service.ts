@@ -8,6 +8,8 @@ import {
   upsertInboxProviderContact,
   upsertInboxProviderConversation,
 } from "@/services/whatsapp-inbox-store";
+import { getAllAccounts } from "@/lib/whatsapp/kirimdev-client";
+import { listInboxAccounts, syncInboxAccounts } from "@/services/whatsapp-inbox-store";
 
 function record(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" ? value as Record<string, unknown> : {};
@@ -165,5 +167,45 @@ export async function syncInboxProviderPage(input: { account: InboxAccount; reso
     const message = error instanceof Error ? error.message : "Sync KirimDev gagal";
     await saveInboxSyncState(input.account.id, input.resource, { cursor, lastError: message });
     throw new Error(message);
+  }
+}
+
+let backgroundSyncInFlight = false;
+
+/**
+ * Advances an initial Inbox backfill without ever attempting to materialise the
+ * full provider history in one function invocation. Conversations are first so
+ * the UI becomes usable early, then contacts, then message history.
+ */
+export async function processInboxBackfillTick() {
+  if (backgroundSyncInFlight) return { skipped: true, reason: "worker_lokal_sedang_berjalan", processed: 0, jobs: [] as unknown[] };
+  backgroundSyncInFlight = true;
+  try {
+    const accounts = await syncInboxAccounts(await getAllAccounts());
+    const storedAccounts = await listInboxAccounts();
+    const jobs: Array<{ account: string; resource: "conversations" | "contacts" | "messages"; processed: number; hasMore: boolean; completed: boolean }> = [];
+
+    for (const resource of ["conversations", "contacts", "messages"] as const) {
+      const unfinished = [] as InboxAccount[];
+      for (const account of storedAccounts) {
+        const state = await getInboxSyncState(account.id, resource);
+        if (!state?.last_success_at || state.cursor) unfinished.push(account);
+      }
+      if (!unfinished.length) continue;
+
+      // A message page performs more local writes than the light-weight
+      // inventories, so run one message page per minute. Inventories can safely
+      // advance one page for each configured account.
+      const selected = resource === "messages" ? unfinished.slice(0, 1) : unfinished;
+      for (const account of selected) {
+        const result = await syncInboxProviderPage({ account, resource });
+        jobs.push({ account: account.label, resource, processed: result.processed, hasMore: result.hasMore, completed: result.completed });
+      }
+      return { skipped: false, processed: jobs.reduce((total, job) => total + job.processed, 0), jobs, accountCount: accounts.length };
+    }
+
+    return { skipped: false, processed: 0, jobs, completed: true, accountCount: accounts.length };
+  } finally {
+    backgroundSyncInFlight = false;
   }
 }
