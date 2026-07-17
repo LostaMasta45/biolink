@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS notification_rules (
     event_key TEXT NOT NULL UNIQUE,
     name TEXT NOT NULL,
     description TEXT,
-    recipient_type TEXT NOT NULL CHECK (recipient_type IN ('customer', 'admin', 'custom')),
+    recipient_type TEXT NOT NULL CHECK (recipient_type IN ('customer', 'admin', 'bot', 'custom')),
     custom_recipient TEXT,
     sender_role TEXT NOT NULL CHECK (sender_role IN ('admin', 'bot')),
     template_id UUID REFERENCES templates(id) ON DELETE SET NULL,

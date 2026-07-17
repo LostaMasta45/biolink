@@ -160,7 +160,7 @@ export const notificationRuleSchema = z.object({
   event_key: z.string().trim().regex(/^[a-z0-9_.-]+$/, "Event key hanya boleh huruf kecil, angka, titik, garis bawah, atau strip").max(100),
   name: z.string().trim().min(2).max(100),
   description: optionalText,
-  recipient_type: z.enum(["customer", "admin", "custom"]),
+  recipient_type: z.enum(["customer", "admin", "bot", "custom"]),
   custom_recipient: optionalText,
   sender_role: z.enum(["admin", "bot"]),
   template_id: z.string().uuid("Pilih Pesan Tersimpan").nullable().optional(),
@@ -173,8 +173,15 @@ export const notificationRuleSchema = z.object({
   if (value.recipient_type === "custom" && !value.custom_recipient?.replace(/\D/g, "")) {
     context.addIssue({ code: "custom", path: ["custom_recipient"], message: "Nomor tujuan wajib diisi" });
   }
-  if (value.recipient_type === "admin" && value.sender_role !== "bot") {
-    context.addIssue({ code: "custom", path: ["sender_role"], message: "Notifikasi ke Admin Utama wajib dikirim oleh Bot" });
+  const expectedSender = value.recipient_type === "admin" ? "bot" : "admin";
+  if (value.sender_role !== expectedSender) {
+    context.addIssue({
+      code: "custom",
+      path: ["sender_role"],
+      message: value.recipient_type === "admin"
+        ? "Notifikasi ke Admin Utama wajib dikirim oleh Bot"
+        : "Notifikasi ke Bot, customer, atau nomor custom wajib dikirim oleh Admin Utama",
+    });
   }
 });
 

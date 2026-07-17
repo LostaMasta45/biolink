@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getAllAccounts, sendTestToAdmin, testConnection } from "@/lib/whatsapp/kirimdev-client";
 import { processCustomerMessage, processDueAutoReplyJobs } from "@/services/whatsapp-execution-engine";
 import { getOverviewMetrics } from "@/services/whatsapp-manager-service";
-import { processDueNotificationJobs, testNotificationRuleToAdmin } from "@/services/whatsapp-notification-service";
+import { processDueNotificationJobs, testNotificationRule } from "@/services/whatsapp-notification-service";
 
 async function getAuthenticatedClient() {
   const supabase = await createClient();
@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
   const supabase = await getAuthenticatedClient();
   if (!supabase) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   try {
-    const body = await request.json() as { action?: string; phoneId?: string; sender?: string; message?: string; ruleId?: string };
+    const body = await request.json() as { action?: string; phoneId?: string; sender?: string; message?: string; ruleId?: string; customerPhone?: string };
     switch (body.action) {
       case "test_connection": {
         if (!body.phoneId) return NextResponse.json({ error: "phoneId diperlukan" }, { status: 400 });
@@ -75,9 +75,9 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: true, ...(await processDueNotificationJobs(50)), message: "Antrean notifikasi jatuh tempo sudah diproses." });
       case "test_notification_rule": {
         if (!body.ruleId) return NextResponse.json({ error: "ruleId diperlukan" }, { status: 400 });
-        const result = await testNotificationRuleToAdmin(body.ruleId);
+        const result = await testNotificationRule(body.ruleId, body.customerPhone);
         if (result.status === "failed") return NextResponse.json({ error: result.error }, { status: 502 });
-        return NextResponse.json({ success: true, message: "Tes rule dikirim aman dari Bot ke Admin Utama." });
+        return NextResponse.json({ success: true, message: "Tes rule dikirim sesuai rute pengirim dan penerima yang dikonfigurasi." });
       }
       case "send_test_to_admin": {
         const accounts = await getAllAccounts();

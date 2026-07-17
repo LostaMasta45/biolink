@@ -66,7 +66,7 @@ export interface WhatsAppTemplate {
   updated_at: string;
 }
 
-export type NotificationRecipientType = "customer" | "admin" | "custom";
+export type NotificationRecipientType = "customer" | "admin" | "bot" | "custom";
 export type WhatsAppSenderRole = "admin" | "bot";
 
 export interface NotificationRule {

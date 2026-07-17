@@ -2,7 +2,7 @@ import { getDynamicAccounts } from "@/lib/whatsapp/kirimdev-client";
 import { sendMappedTemplate, type TemplateData } from "@/services/kirimdev-mapper";
 import { whatsappAdminClient as supabase, writeActivityLog } from "@/services/whatsapp-audit-service";
 
-type RecipientType = "customer" | "admin" | "custom";
+type RecipientType = "customer" | "admin" | "bot" | "custom";
 type SenderRole = "admin" | "bot";
 
 interface NotificationRuleRow {
@@ -117,11 +117,21 @@ async function resolveRoute(recipientType: RecipientType, customRecipient: strin
   const accounts = await getDynamicAccounts();
   const admin = accounts[0];
   const bot = accounts[1];
+  const requiredSender: SenderRole = recipientType === "admin" ? "bot" : "admin";
+  if (senderRole !== requiredSender) {
+    throw new Error(
+      recipientType === "admin"
+        ? "Rute ke Admin Utama wajib dikirim oleh Bot"
+        : "Rute ke Bot, customer, atau nomor custom wajib dikirim oleh Admin Utama",
+    );
+  }
   const sender = senderRole === "bot" ? bot : admin;
   if (!sender?.phoneId) throw new Error(`Akun pengirim ${senderRole === "bot" ? "Bot" : "Admin Utama"} belum dikonfigurasi`);
 
   const recipient = recipientType === "admin"
     ? normalizePhone(admin?.phoneNumber ?? "")
+    : recipientType === "bot"
+      ? normalizePhone(bot?.phoneNumber ?? "")
     : recipientType === "custom"
       ? normalizePhone(customRecipient ?? "")
       : normalizePhone(customerPhone ?? "");
@@ -178,7 +188,7 @@ export async function emitNotification(input: EmitNotificationInput): Promise<Em
     if (!rule && !fallback) return { status: "skipped", reason: "Rule event belum tersedia" };
 
     const recipientType = rule?.recipient_type ?? fallback!.recipientType;
-    const senderRole = recipientType === "admin" ? "bot" : rule?.sender_role ?? fallback!.senderRole;
+    const senderRole = rule?.sender_role ?? fallback!.senderRole;
     const route = await resolveRoute(recipientType, rule?.custom_recipient ?? null, senderRole, input.customerPhone);
     const template = rule?.template ?? fallback?.template;
     if (!template) return { status: "failed", error: "Pesan Tersimpan belum dipilih pada rule notifikasi" };
@@ -271,21 +281,28 @@ export async function processDueNotificationJobs(limit = 25): Promise<{ processe
   return { processed: data?.length ?? 0, sent, failed };
 }
 
-export async function testNotificationRuleToAdmin(ruleId: string): Promise<EmitNotificationResult> {
-  const { data, error } = await supabase.from("notification_rules").select("id,event_key,template:templates(*)").eq("id", ruleId).single();
+export async function testNotificationRule(ruleId: string, customerPhone?: string): Promise<EmitNotificationResult> {
+  const { data, error } = await supabase
+    .from("notification_rules")
+    .select("id,event_key,recipient_type,custom_recipient,sender_role,template:templates(*)")
+    .eq("id", ruleId)
+    .single();
   if (error || !data) return { status: "failed", error: error?.message ?? "Rule tidak ditemukan" };
-  const accounts = await getDynamicAccounts();
-  if (!accounts[1]?.phoneId || !accounts[0]?.phoneNumber) return { status: "failed", error: "Admin Utama dan Bot harus dikonfigurasi" };
-  const template = data.template as unknown as TemplateData | null;
+  const rule = data as unknown as Pick<NotificationRuleRow, "id" | "event_key" | "recipient_type" | "custom_recipient" | "sender_role"> & { template: TemplateData | null };
+  if (rule.recipient_type === "customer" && !normalizePhone(customerPhone ?? "")) {
+    return { status: "failed", error: "Nomor customer untuk tes wajib diisi" };
+  }
+  const route = await resolveRoute(rule.recipient_type, rule.custom_recipient, rule.sender_role, customerPhone);
+  const template = rule.template;
   if (!template) return { status: "failed", error: "Pesan Tersimpan belum dipilih" };
   const variables = {
     customer_name: "Customer Test", company_name: "PT Contoh", package_name: "Paket Highlight",
     amount: "150.000", order_id: "TEST-123", invoice_number: "INV-TEST-123",
     payment_url: `${process.env.NEXT_PUBLIC_APP_URL || "https://infolokerjombang.net"}/pay/TEST-123`,
     invoice_url: `${process.env.NEXT_PUBLIC_APP_URL || "https://infolokerjombang.net"}/admin/invoices/TEST-123`,
-    scheduled_date: new Date().toLocaleDateString("id-ID"), poster_count: 1, customer_phone: accounts[0].phoneNumber,
+    scheduled_date: new Date().toLocaleDateString("id-ID"), poster_count: 1, customer_phone: normalizePhone(customerPhone ?? route.recipient),
   };
-  return sendDirect(data.event_key, accounts[1].phoneId, normalizePhone(accounts[0].phoneNumber), template, variables, `test:${ruleId}:${Date.now()}`, ruleId);
+  return sendDirect(rule.event_key, route.senderPhoneId, route.recipient, template, variables, `test:${ruleId}:${Date.now()}`, rule.id);
 }
 
 export function formatRupiahValue(value: unknown): string {
