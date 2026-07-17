@@ -1,9 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import {
     LayoutDashboard,
     FileText,
@@ -14,8 +13,8 @@ import {
     Menu,
     Settings,
     LogOut,
-    ChevronUp,
     QrCode,
+    MessageSquare,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -29,19 +28,12 @@ import {
 
 export function MobileNav() {
     const pathname = usePathname();
-    const [isMounted, setIsMounted] = useState(false);
-
-    useEffect(() => {
-        setIsMounted(true);
-    }, []);
-
-    if (!isMounted) return null;
 
     const navItems = [
         { href: "/admin", icon: LayoutDashboard, label: "Home" },
         { href: "/admin/keuangan", icon: Wallet, label: "Keuangan" },
         { href: "CENTER", icon: Plus, label: "Baru" },
-        { href: "/admin/antri", icon: ListTodo, label: "Antrian" },
+        { href: "/admin/whatsapp", icon: MessageSquare, label: "WhatsApp" },
         { href: "MORE", icon: Menu, label: "Menu" },
     ];
 
@@ -177,6 +169,11 @@ export function MobileNav() {
                                             <DropdownMenuItem asChild className="cursor-pointer">
                                                 <Link href="/admin/qris" className="flex items-center gap-2">
                                                     <QrCode className="w-4 h-4" /> QRIS
+                                                </Link>
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem asChild className="cursor-pointer">
+                                                <Link href="/admin/antri" className="flex items-center gap-2">
+                                                    <ListTodo className="w-4 h-4" /> Antrian
                                                 </Link>
                                             </DropdownMenuItem>
                                             <DropdownMenuItem asChild className="cursor-pointer">
