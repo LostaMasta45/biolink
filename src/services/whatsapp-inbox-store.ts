@@ -221,6 +221,10 @@ export async function listInboxConversations(input: { accountId?: string | null;
 
 export async function listInboxContacts(input: { accountId?: string | null; search?: string | null; cursor?: string | null; limit?: number }) {
   const limit = Math.min(100, Math.max(1, input.limit ?? 50));
+  let countQuery = inboxDb.from("wa_inbox_contacts").select("*", { count: "exact", head: true });
+  if (input.accountId) countQuery = countQuery.eq("wa_account_id", input.accountId);
+  const { count, error: countError } = await countQuery;
+  if (countError) throw new Error(`Jumlah kontak Inbox tidak dapat dimuat: ${countError.message}`);
   let query = inboxDb.from("wa_inbox_contacts")
     .select("id,wa_account_id,phone_number,recipient_key,name,profile_name,last_synced_at,updated_at")
     .order("updated_at", { ascending: false }).limit(limit + 1);
@@ -235,7 +239,7 @@ export async function listInboxContacts(input: { accountId?: string | null; sear
   }
   const hasMore = rows.length > limit;
   const visible = rows.slice(0, limit);
-  return { data: visible, nextCursor: hasMore ? visible.at(-1)?.updated_at ?? null : null };
+  return { data: visible, nextCursor: hasMore ? visible.at(-1)?.updated_at ?? null : null, total: count ?? visible.length };
 }
 
 export async function upsertInboxProviderContact(input: { phoneId: string; phoneNumber?: string | null; providerContactId?: string | null; phone: string; bsuid?: string | null; name?: string | null; profileName?: string | null; metadata?: Record<string, unknown> }) {

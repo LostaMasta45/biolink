@@ -4,15 +4,14 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { motion, AnimatePresence } from "framer-motion";
 import {
     LayoutDashboard,
-    Link as LinkIcon,
     FileText,
     ListTodo,
     Wallet,
     LogOut,
     Menu,
+    ChevronDown,
     ChevronRight,
     Settings,
     Bell,
@@ -29,6 +28,7 @@ import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { MobileNav } from "@/components/admin/mobile-nav";
 import { ModeToggle } from "@/components/mode-toggle";
+import { WHATSAPP_NAV_ITEMS } from "@/constants/whatsapp-manager";
 
 const navItems = [
     { href: "/admin", icon: LayoutDashboard, label: "Dashboard" },
@@ -59,6 +59,7 @@ export default function AdminLayout({
     };
 
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+    const [isWhatsAppOpen, setIsWhatsAppOpen] = useState(pathname.startsWith("/admin/whatsapp"));
 
     return (
         <div className="min-h-screen bg-background flex flex-col lg:flex-row overflow-x-hidden w-full">
@@ -110,6 +111,42 @@ export default function AdminLayout({
                         {navItems.map((item) => {
                             const Icon = item.icon;
                             const isActive = pathname === item.href || (item.href !== "/admin" && pathname.startsWith(item.href));
+
+                            if (item.href === "/admin/whatsapp") {
+                                return (
+                                    <div key={item.href} className="mb-1">
+                                        <div className="flex items-center">
+                                            <Link href={item.href} title={!isSidebarOpen ? item.label : undefined} className={cn("min-w-0", isSidebarOpen ? "flex-1" : "mx-auto")}>
+                                                <Button
+                                                    variant={isActive ? "secondary" : "ghost"}
+                                                    className={cn(
+                                                        "font-medium transition-all duration-300",
+                                                        isSidebarOpen ? "w-full justify-start h-11 px-4" : "w-11 h-11 justify-center px-0 flex",
+                                                        isActive ? "bg-emerald-500/10 text-emerald-700 hover:bg-emerald-500/15 dark:text-emerald-400" : "text-muted-foreground hover:text-foreground hover:bg-muted",
+                                                    )}
+                                                >
+                                                    <Icon className={cn("w-4 h-4 shrink-0", isSidebarOpen && "mr-3", isActive && "text-emerald-600")} />
+                                                    {isSidebarOpen && <span className="truncate">WhatsApp</span>}
+                                                </Button>
+                                            </Link>
+                                            {isSidebarOpen && (
+                                                <Button variant="ghost" size="icon" className="mr-1 h-8 w-8 shrink-0 text-muted-foreground" aria-label={isWhatsAppOpen ? "Tutup menu WhatsApp" : "Buka menu WhatsApp"} onClick={() => setIsWhatsAppOpen((open) => !open)}>
+                                                    <ChevronDown className={cn("h-4 w-4 transition-transform", isWhatsAppOpen && "rotate-180")} />
+                                                </Button>
+                                            )}
+                                        </div>
+                                        {isSidebarOpen && isWhatsAppOpen && (
+                                            <div className="ml-5 mt-1 space-y-0.5 border-l border-emerald-500/20 pl-3">
+                                                {WHATSAPP_NAV_ITEMS.map((subItem) => {
+                                                    const SubIcon = subItem.icon;
+                                                    const subActive = subItem.href === "/admin/whatsapp" ? pathname === subItem.href : pathname.startsWith(subItem.href);
+                                                    return <Link key={subItem.href} href={subItem.href} className={cn("flex h-8 items-center gap-2 rounded-lg px-2 text-xs font-medium transition-colors", subActive ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400" : "text-muted-foreground hover:bg-muted hover:text-foreground")}><SubIcon className="h-3.5 w-3.5 shrink-0" /><span className="truncate">{subItem.label}</span></Link>;
+                                                })}
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            }
 
                             return (
                                 <Link

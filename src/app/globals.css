@@ -342,6 +342,51 @@
   @apply bg-muted-foreground/20 rounded-full hover:bg-muted-foreground/30 transition-colors;
 }
 
+/* Inbox is an application workspace, not a long stack of cards. These rules
+   keep the conversation list and message timeline inside their own scroll areas. */
+@layer components {
+  .whatsapp-workspace {
+    overflow-x: clip;
+  }
+
+  .whatsapp-workspace .grid > * {
+    min-width: 0;
+  }
+
+  .inbox-workspace > div:first-child {
+    @apply rounded-2xl border bg-card/90 p-4 shadow-sm sm:p-5;
+  }
+
+  .inbox-workspace > div:first-child > div {
+    @apply gap-4;
+  }
+
+  .inbox-workspace > div:last-of-type > div {
+    min-height: 0;
+  }
+
+  .inbox-workspace aside {
+    display: flex;
+    min-height: 0;
+    flex-direction: column;
+  }
+
+  .inbox-workspace aside > div:last-child {
+    min-height: 0;
+    max-height: none;
+    flex: 1 1 0%;
+  }
+
+  .inbox-workspace section {
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .inbox-workspace section > div:nth-of-type(2) {
+    min-height: 0;
+  }
+}
+
 @layer base {
   .theme-biolink {
     /* Base Colors - Zinc */

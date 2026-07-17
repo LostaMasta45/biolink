@@ -17,6 +17,7 @@ import {
     MessageSquare,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { WHATSAPP_NAV_ITEMS } from "@/constants/whatsapp-manager";
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -33,13 +34,13 @@ export function MobileNav() {
         { href: "/admin", icon: LayoutDashboard, label: "Home" },
         { href: "/admin/keuangan", icon: Wallet, label: "Keuangan" },
         { href: "CENTER", icon: Plus, label: "Baru" },
-        { href: "/admin/whatsapp", icon: MessageSquare, label: "WhatsApp" },
+        { href: "WHATSAPP", icon: MessageSquare, label: "WhatsApp" },
         { href: "MORE", icon: Menu, label: "Menu" },
     ];
 
     const isActive = (href: string) => {
         if (href === "/admin") return pathname === "/admin";
-        return pathname.startsWith(href);
+        return href === "WHATSAPP" ? pathname.startsWith("/admin/whatsapp") : pathname.startsWith(href);
     };
 
     const containerVariants = {
@@ -190,6 +191,34 @@ export function MobileNav() {
                                             <DropdownMenuItem className="text-red-500 focus:text-red-500 cursor-pointer">
                                                 <LogOut className="w-4 h-4 mr-2" /> Logout
                                             </DropdownMenuItem>
+                                        </DropdownMenuContent>
+                                    </DropdownMenu>
+                                </motion.div>
+                            );
+                        }
+
+                        if (item.href === "WHATSAPP") {
+                            const active = isActive(item.href);
+                            return (
+                                <motion.div key={index} variants={itemVariants} className="flex-1">
+                                    <DropdownMenu>
+                                        <DropdownMenuTrigger asChild>
+                                            <motion.button whileTap={{ scale: 0.92 }} className="relative flex h-full w-full flex-col items-center justify-center gap-1 pt-1 pb-1">
+                                                {active && <motion.div layoutId="activeLight" className="absolute top-0 h-[2px] w-12 bg-gradient-to-r from-transparent via-primary to-transparent" />}
+                                                <div className={cn("rounded-2xl p-1.5 transition-colors", active ? "bg-primary/10 text-primary" : "text-muted-foreground/60")}><MessageSquare className={cn("h-5 w-5", active && "fill-primary/20")} /></div>
+                                                <span className={cn("text-[10px] font-medium", active ? "text-primary" : "text-muted-foreground/70")}>WhatsApp</span>
+                                            </motion.button>
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent align="center" side="top" className="mb-2 max-h-[70dvh] w-64 overflow-y-auto rounded-2xl border-border bg-background/95 p-2 shadow-2xl backdrop-blur-xl">
+                                            <DropdownMenuLabel className="px-2 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">WhatsApp</DropdownMenuLabel>
+                                            <DropdownMenuItem asChild className="cursor-pointer rounded-lg">
+                                                <Link href="/admin/inbox" className="flex items-center gap-2"><MessageSquare className="h-4 w-4 text-emerald-600" />Inbox</Link>
+                                            </DropdownMenuItem>
+                                            <DropdownMenuSeparator />
+                                            {WHATSAPP_NAV_ITEMS.map((whatsAppItem) => {
+                                                const WhatsAppIcon = whatsAppItem.icon;
+                                                return <DropdownMenuItem asChild key={whatsAppItem.href} className="cursor-pointer rounded-lg"><Link href={whatsAppItem.href} className="flex items-center gap-2"><WhatsAppIcon className="h-4 w-4" />{whatsAppItem.label}</Link></DropdownMenuItem>;
+                                            })}
                                         </DropdownMenuContent>
                                     </DropdownMenu>
                                 </motion.div>

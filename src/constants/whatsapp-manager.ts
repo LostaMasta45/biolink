@@ -7,6 +7,8 @@ import {
   MessageCircleReply,
   BellRing,
   Bot,
+  ContactRound,
+  Inbox,
   Settings,
   Webhook,
 } from "lucide-react";
@@ -22,6 +24,13 @@ export const WHATSAPP_NAV_ITEMS = [
   { href: "/admin/whatsapp/logs", label: "Logs", icon: Activity },
   { href: "/admin/whatsapp/webhook", label: "Webhook", icon: Webhook },
   { href: "/admin/whatsapp/settings", label: "Settings", icon: Settings },
+] as const;
+
+/** Kept in one place so the desktop sidebar and mobile menu never drift apart. */
+export const WHATSAPP_WORKSPACE_NAV_ITEMS = [
+  { href: "/admin/inbox", label: "Inbox", icon: Inbox },
+  { href: "/admin/inbox/contacts", label: "Kontak", icon: ContactRound },
+  ...WHATSAPP_NAV_ITEMS,
 ] as const;
 
 export const TEMPLATE_TYPE_LABELS: Record<TemplateType, string> = {
