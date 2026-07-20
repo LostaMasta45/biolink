@@ -81,16 +81,17 @@ export default function AdminQRISPage() {
                     <div className="absolute -right-4 -top-4 opacity-10 group-hover:opacity-20 group-hover:scale-110 transition-all duration-500">
                         <Wallet className="h-24 w-24 text-white" />
                     </div>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
-                        <CardTitle className="font-bold tracking-tight text-sm text-emerald-50">Total Pendapatan (Paid)</CardTitle>
-                        <div className="p-2 bg-white/20 rounded-full">
+                    <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2 relative z-10">
+                        <CardTitle className="font-semibold text-sm text-emerald-50 leading-snug pr-2">Total Pendapatan (Paid)</CardTitle>
+                        <div className="p-2 bg-white/20 rounded-full shrink-0">
                             <Wallet className="h-4 w-4 text-white" />
                         </div>
                     </CardHeader>
                     <CardContent className="relative z-10">
-                        <div className="text-3xl font-black tracking-tight">{formatRupiah(summary.totalRevenue)}</div>
-                        <p className="text-xs font-medium text-emerald-100 mt-1.5 flex items-center gap-1.5">
-                            <CheckCircle2 className="w-3.5 h-3.5" /> Dari {summary.paidCount} transaksi berhasil
+                        <div className="text-2xl lg:text-3xl font-bold tracking-tight">{formatRupiah(summary.totalRevenue)}</div>
+                        <p className="text-xs font-medium text-emerald-100 mt-2 flex items-start gap-1.5">
+                            <CheckCircle2 className="w-3.5 h-3.5 shrink-0 mt-0.5" /> 
+                            <span>Dari {summary.paidCount} transaksi berhasil</span>
                         </p>
                     </CardContent>
                 </Card>
@@ -99,15 +100,15 @@ export default function AdminQRISPage() {
                     <div className="absolute -right-4 -top-4 opacity-10 group-hover:opacity-20 group-hover:scale-110 transition-all duration-500">
                         <Clock className="h-24 w-24 text-white" />
                     </div>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
-                        <CardTitle className="font-bold tracking-tight text-sm text-amber-50">Menunggu Pembayaran</CardTitle>
-                        <div className="p-2 bg-white/20 rounded-full">
+                    <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2 relative z-10">
+                        <CardTitle className="font-semibold text-sm text-amber-50 leading-snug pr-2">Menunggu Pembayaran</CardTitle>
+                        <div className="p-2 bg-white/20 rounded-full shrink-0">
                             <Clock className="h-4 w-4 text-white" />
                         </div>
                     </CardHeader>
                     <CardContent className="relative z-10">
-                        <div className="text-3xl font-black tracking-tight">{summary.pendingCount}</div>
-                        <p className="text-xs font-medium text-amber-100 mt-1.5">
+                        <div className="text-2xl lg:text-3xl font-bold tracking-tight">{summary.pendingCount}</div>
+                        <p className="text-xs font-medium text-amber-100 mt-2">
                             Transaksi pending (belum bayar)
                         </p>
                     </CardContent>
@@ -117,15 +118,15 @@ export default function AdminQRISPage() {
                     <div className="absolute -right-4 -top-4 opacity-10 group-hover:opacity-20 group-hover:scale-110 transition-all duration-500">
                         <XCircle className="h-24 w-24 text-white" />
                     </div>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
-                        <CardTitle className="font-bold tracking-tight text-sm text-red-50">Transaksi Gagal</CardTitle>
-                        <div className="p-2 bg-white/20 rounded-full">
+                    <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2 relative z-10">
+                        <CardTitle className="font-semibold text-sm text-red-50 leading-snug pr-2">Transaksi Gagal</CardTitle>
+                        <div className="p-2 bg-white/20 rounded-full shrink-0">
                             <XCircle className="h-4 w-4 text-white" />
                         </div>
                     </CardHeader>
                     <CardContent className="relative z-10">
-                        <div className="text-3xl font-black tracking-tight">{summary.expiredCount}</div>
-                        <p className="text-xs font-medium text-red-100 mt-1.5">
+                        <div className="text-2xl lg:text-3xl font-bold tracking-tight">{summary.expiredCount}</div>
+                        <p className="text-xs font-medium text-red-100 mt-2">
                             Transaksi kedaluwarsa
                         </p>
                     </CardContent>
@@ -135,15 +136,15 @@ export default function AdminQRISPage() {
                     <div className="absolute -right-4 -top-4 opacity-10 group-hover:opacity-20 group-hover:scale-110 transition-all duration-500">
                         <Hash className="h-24 w-24 text-white" />
                     </div>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
-                        <CardTitle className="font-bold tracking-tight text-sm text-blue-50">Total Transaksi</CardTitle>
-                        <div className="p-2 bg-white/20 rounded-full">
+                    <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2 relative z-10">
+                        <CardTitle className="font-semibold text-sm text-blue-50 leading-snug pr-2">Total Transaksi</CardTitle>
+                        <div className="p-2 bg-white/20 rounded-full shrink-0">
                             <Hash className="h-4 w-4 text-white" />
                         </div>
                     </CardHeader>
                     <CardContent className="relative z-10">
-                        <div className="text-3xl font-black tracking-tight">{summary.totalCount}</div>
-                        <p className="text-xs font-medium text-blue-100 mt-1.5">
+                        <div className="text-2xl lg:text-3xl font-bold tracking-tight">{summary.totalCount}</div>
+                        <p className="text-xs font-medium text-blue-100 mt-2">
                             Total invoice QRIS yang digenerate
                         </p>
                     </CardContent>
