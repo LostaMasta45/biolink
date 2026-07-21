@@ -33,11 +33,25 @@ function messageBody(message: Record<string, unknown>) {
       const text = record(parsed.text);
       if (typeof text.body === "string") return text.body;
       if (typeof parsed.caption === "string") return parsed.caption;
+      // Extract caption from media type content (image/video/document)
+      for (const mediaKey of ["image", "video", "document", "audio", "sticker"]) {
+        const mediaObj = record(parsed[mediaKey]);
+        if (typeof mediaObj.caption === "string") return mediaObj.caption;
+      }
     } catch { return raw; }
   }
   const content = record(message.content);
   if (typeof content.body === "string") return content.body;
   if (typeof content.text === "string") return content.text;
+  // Extract caption from top-level media objects (image.caption, video.caption, etc.)
+  const type = string(message.type);
+  if (type) {
+    const mediaObj = record(message[type]);
+    if (typeof mediaObj.caption === "string") return mediaObj.caption;
+    const contentMediaObj = record(content[type]);
+    if (typeof contentMediaObj.caption === "string") return contentMediaObj.caption;
+  }
+  if (typeof message.caption === "string") return message.caption;
   return "";
 }
 
@@ -47,12 +61,26 @@ function messageMedia(message: Record<string, unknown>, messageType: string) {
     : record(message.content);
   const media = record(message[messageType]);
   const nestedMedia = record(content[messageType]);
-  const url = [message.media_url, media.link, media.url, nestedMedia.link, nestedMedia.url]
-    .find((value): value is string => typeof value === "string" && value.length > 0) ?? null;
-  const mimeType = [message.media_mime_type, media.mime_type, nestedMedia.mime_type]
-    .find((value): value is string => typeof value === "string" && value.length > 0) ?? null;
-  const filename = [message.media_filename, media.filename, nestedMedia.filename]
-    .find((value): value is string => typeof value === "string" && value.length > 0) ?? null;
+  // Also check for the generic `media` field that some providers return
+  const genericMedia = record(message.media);
+  const contentGenericMedia = record(content.media);
+  const url = [
+    message.media_url, message.media_link,
+    media.link, media.url, media.id ? null : null,
+    nestedMedia.link, nestedMedia.url,
+    genericMedia.link, genericMedia.url,
+    contentGenericMedia.link, contentGenericMedia.url,
+  ].find((value): value is string => typeof value === "string" && value.length > 0) ?? null;
+  const mimeType = [
+    message.media_mime_type, message.mime_type,
+    media.mime_type, nestedMedia.mime_type,
+    genericMedia.mime_type, contentGenericMedia.mime_type,
+  ].find((value): value is string => typeof value === "string" && value.length > 0) ?? null;
+  const filename = [
+    message.media_filename,
+    media.filename, nestedMedia.filename,
+    genericMedia.filename, contentGenericMedia.filename,
+  ].find((value): value is string => typeof value === "string" && value.length > 0) ?? null;
   return { url, mimeType, filename };
 }
 

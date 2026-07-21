@@ -161,7 +161,7 @@ export async function persistInboxInbound(input: {
 }) {
   if (!input.phoneId || !input.customer || !input.providerMessageId) return null;
   const { data: duplicate, error: duplicateError } = await inboxDb.from("wa_inbox_messages")
-    .select("id,conversation_id").eq("provider_message_id", input.providerMessageId).maybeSingle();
+    .select("id,conversation_id,body,message_type,media_url").eq("provider_message_id", input.providerMessageId).maybeSingle();
   if (duplicateError) throw new Error(`Pesan Inbox tidak dapat diduplikasi: ${duplicateError.message}`);
   if (duplicate) {
     if (input.mediaUrl) {
@@ -174,6 +174,13 @@ export async function persistInboxInbound(input: {
         payload: input.payload ?? {},
       }).eq("id", (duplicate as { id: string }).id);
       if (error) throw new Error(`Media pesan inbound tidak dapat diperbarui: ${error.message}`);
+    } else if (input.messageType && input.messageType !== "text") {
+      // Ensure message_type is patched even when no media_url is present
+      await inboxDb.from("wa_inbox_messages").update({
+        message_type: input.messageType,
+        body: input.body || (duplicate as { body?: string | null }).body || null,
+        payload: input.payload ?? {},
+      }).eq("id", (duplicate as { id: string }).id);
     }
     return duplicate as { id: string; conversation_id: string };
   }
@@ -182,7 +189,8 @@ export async function persistInboxInbound(input: {
   if (!account.is_customer_inbox) return null;
   const contact = await ensureContact(account.id, input.customer, input.profileName);
   const conversation = await getOrCreateConversation(account.id, contact.id);
-  const receivedAt = input.providerCreatedAt ?? new Date().toISOString();
+  const rawReceivedAt = input.providerCreatedAt && input.providerCreatedAt.trim() ? input.providerCreatedAt : null;
+  const receivedAt = rawReceivedAt && !isNaN(new Date(rawReceivedAt).getTime()) ? rawReceivedAt : new Date().toISOString();
   const { data: message, error } = await inboxDb.from("wa_inbox_messages").insert({
     wa_account_id: account.id,
     conversation_id: conversation.id,
@@ -205,16 +213,20 @@ export async function persistInboxInbound(input: {
   if (error) throw new Error(`Pesan inbound tidak dapat disimpan: ${error.message}`);
 
   const windowExpiresAt = new Date(new Date(receivedAt).getTime() + 24 * 60 * 60_000).toISOString();
-  const { error: conversationError } = await inboxDb.from("wa_inbox_conversations").update({
-    status: "open",
-    unread_count: conversation.unread_count + 1,
-    needs_reply: true,
-    last_message_preview: preview(input.body, input.messageType ?? "text"),
-    last_message_at: receivedAt,
-    last_inbound_at: receivedAt,
-    service_window_expires_at: windowExpiresAt,
-  }).eq("id", conversation.id);
-  if (conversationError) throw new Error(`Percakapan inbound tidak dapat diperbarui: ${conversationError.message}`);
+  try {
+    await inboxDb.from("wa_inbox_conversations").update({
+      status: "open",
+      unread_count: conversation.unread_count + 1,
+      needs_reply: true,
+      last_message_preview: preview(input.body, input.messageType ?? "text"),
+      last_message_at: receivedAt,
+      last_inbound_at: receivedAt,
+      service_window_expires_at: windowExpiresAt,
+    }).eq("id", conversation.id);
+  } catch (conversationUpdateError) {
+    // Non-fatal: the message itself is already persisted.
+    console.warn(`[Inbox] Inbound conversation metadata update skipped for ${conversation.id}:`, conversationUpdateError);
+  }
   return message as { id: string; conversation_id: string };
 }
 
@@ -497,16 +509,25 @@ export async function persistInboxOutbound(input: {
 }) {
   if (!input.phoneId || !input.customer || !input.providerMessageId) return null;
   const { data: existing, error: lookupError } = await inboxDb.from("wa_inbox_messages")
-    .select("id,conversation_id,body").eq("provider_message_id", input.providerMessageId).maybeSingle();
+    .select("id,conversation_id,body,media_url,message_type").eq("provider_message_id", input.providerMessageId).maybeSingle();
   if (lookupError) throw new Error(`Pesan outbound Inbox tidak dapat dibaca: ${lookupError.message}`);
   if (existing) {
-    const current = existing as { id: string; conversation_id: string; body: string | null };
-    if (!current.body && input.body) {
-      const { error } = await inboxDb.from("wa_inbox_messages").update({
-        body: input.body, message_type: input.messageType ?? "text", media_url: input.mediaUrl ?? null,
-        media_mime_type: input.mediaMimeType ?? null, media_filename: input.mediaFilename ?? null, payload: input.payload ?? {},
-      }).eq("id", current.id);
+    const current = existing as { id: string; conversation_id: string; body: string | null; media_url: string | null; message_type: string };
+    const shouldPatchBody = !current.body && input.body;
+    const shouldPatchMedia = input.mediaUrl && !current.media_url;
+    if (shouldPatchBody || shouldPatchMedia) {
+      const patch: Record<string, unknown> = { payload: input.payload ?? {} };
+      if (shouldPatchBody) { patch.body = input.body; patch.message_type = input.messageType ?? "text"; }
+      if (input.mediaUrl) { patch.media_url = input.mediaUrl; patch.media_mime_type = input.mediaMimeType ?? null; patch.media_filename = input.mediaFilename ?? null; }
+      if (input.messageType) patch.message_type = input.messageType;
+      const { error } = await inboxDb.from("wa_inbox_messages").update(patch).eq("id", current.id);
       if (error) throw new Error(`Isi pesan outbound tidak dapat diperbarui: ${error.message}`);
+      // Also update conversation preview when we enrich an existing message
+      try {
+        await inboxDb.from("wa_inbox_conversations").update({
+          last_message_preview: preview(input.body, input.messageType ?? "text"),
+        }).eq("id", current.conversation_id);
+      } catch { /* non-fatal preview update */ }
     }
     return current;
   }
@@ -514,7 +535,8 @@ export async function persistInboxOutbound(input: {
   if (!account.is_customer_inbox) return null;
   const contact = await ensureContact(account.id, input.customer);
   const conversation = await getOrCreateConversation(account.id, contact.id);
-  const sentAt = input.providerCreatedAt ?? new Date().toISOString();
+  const rawSentAt = input.providerCreatedAt && input.providerCreatedAt.trim() ? input.providerCreatedAt : null;
+  const sentAt = rawSentAt && !isNaN(new Date(rawSentAt).getTime()) ? rawSentAt : new Date().toISOString();
   // The synchronous API response can contain an internal `msg_*` id, while
   // message.sent reliably carries the Meta `wamid`. Reconcile the staged Inbox
   // row before inserting so one physical WhatsApp send remains one bubble.
@@ -565,13 +587,18 @@ export async function persistInboxOutbound(input: {
   }).select("id,conversation_id").single();
   if (error?.code === "23505") return null;
   if (error) throw new Error(`Pesan outbound tidak dapat disimpan: ${error.message}`);
-  const { error: conversationError } = await inboxDb.from("wa_inbox_conversations").update({
-    needs_reply: false,
-    last_message_preview: preview(input.body, input.messageType ?? "text"),
-    last_message_at: sentAt,
-    last_outbound_at: sentAt,
-  }).eq("id", conversation.id);
-  if (conversationError) throw new Error(`Percakapan outbound tidak dapat diperbarui: ${conversationError.message}`);
+  try {
+    await inboxDb.from("wa_inbox_conversations").update({
+      needs_reply: false,
+      last_message_preview: preview(input.body, input.messageType ?? "text"),
+      last_message_at: sentAt,
+      last_outbound_at: sentAt,
+    }).eq("id", conversation.id);
+  } catch (conversationUpdateError) {
+    // Non-fatal: the message itself is already persisted. The conversation
+    // metadata (preview, timestamps) will self-heal on the next message.
+    console.warn(`[Inbox] Conversation metadata update skipped for ${conversation.id}:`, conversationUpdateError);
+  }
   return data as { id: string; conversation_id: string };
 }
 
