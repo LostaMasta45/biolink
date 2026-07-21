@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import {
   AlertCircle,
   ArrowLeft,
@@ -275,6 +275,11 @@ export function InboxManager() {
   const [quickReplyDialog, setQuickReplyDialog] = useState(false);
   const [quickTemplateId, setQuickTemplateId] = useState("");
   const [quickShortcut, setQuickShortcut] = useState("");
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView();
+  }, [messages]);
 
   const selectedConversation = useMemo(
     () => conversations.find((item) => item.id === selectedId) ?? null,
@@ -869,6 +874,7 @@ export function InboxManager() {
                         </div>
                       ))
                     )}
+                    <div ref={messagesEndRef} />
                   </div>
                   <div className="border-t bg-[#f0f2f5] p-3 dark:bg-[#202c33]">
                     <div className="relative">

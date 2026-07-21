@@ -103,7 +103,7 @@ export const PAYMENT_PACKAGES: PaymentPackageConfig[] = [
             "Test webhook otomatis",
         ],
         isPopular: false,
-        isAvailable: false,
+        isAvailable: true,
         emoji: "🧪",
         gradient: "from-gray-500 to-slate-500",
     },
