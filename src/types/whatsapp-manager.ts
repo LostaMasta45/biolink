@@ -177,9 +177,10 @@ export interface AutoReplyRule {
   handover_duration_minutes: number;
   is_test_mode: boolean;
   test_phone_numbers: string[];
+  inbox_quick_reply_enabled: boolean;
   created_at: string;
   updated_at: string;
-  template?: Pick<WhatsAppTemplate, "id" | "name"> | null;
+  template?: Pick<WhatsAppTemplate, "id" | "name" | "body" | "type" | "is_active"> | null;
   flow?: Pick<CustomerFlow, "id" | "name"> | null;
 }
 

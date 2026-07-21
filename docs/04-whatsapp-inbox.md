@@ -20,10 +20,18 @@
 - Klik ganda aman karena setiap pengiriman membawa `client_request_id` UUID.
 - Pengiriman teks manual ditolak jelas bila jendela layanan WhatsApp 24 jam telah berakhir.
 - Semua pengiriman tetap ditulis ke Activity/API Logs; message Inbox menyimpan sumber `manual_inbox` atau `quick_reply`.
+- Satu pengiriman Inbox hanya menghasilkan satu bubble lokal. Respons API sementara direkonsiliasi dengan event `message.sent` melalui `wamid` KirimDev.
+
+## Media inbound dan outbound
+
+- Gambar, video, audio, dokumen, dan stiker disimpan sebagai metadata Inbox saat webhook atau backfill pesan diterima.
+- Inbox menampilkan media melalui endpoint admin yang aman. Bila URL hosted KirimDev belum ada pada data lama, endpoint mengambil media memakai `GET /v1/{phone_number_id}/messages/{wamid}/media` secara server-side.
+- Klik **Sync semua** juga menyinkronkan metadata media riwayat, bukan hanya isi teks/caption.
+- Untuk riwayat yang tersinkron sebelum fitur media ini tersedia, jalankan `supabase-migration-whatsapp-inbox-media-sync.sql` sekali agar worker melanjutkan backfill metadata media secara otomatis dan bertahap.
 
 ## Balas Cepat
 
-Balas Cepat bukan Auto Reply dan bukan trigger Flow.
+Balas Cepat tidak memicu Auto Reply atau Flow. Namun, Auto Reply dengan template fallback **teks** dapat ditampilkan kembali sebagai shortcut Inbox tanpa menyalin isi pesan.
 
 1. Di Inbox, buka **Balas Cepat**.
 2. Pilih satu **Pesan Tersimpan** bertipe teks dan isi shortcut, misalnya `chat`.
@@ -31,6 +39,17 @@ Balas Cepat bukan Auto Reply dan bukan trigger Flow.
 4. Isi Pesan Tersimpan dimasukkan ke draft. Admin boleh mengeditnya sebelum klik **Kirim**.
 
 Shortcut hanya aktif/nonaktif untuk tampilan composer. Menonaktifkan `/chat` tidak mengubah Keyword Automation, Flow Map, template, atau webhook.
+
+### Shortcut dari Keyword Automation
+
+1. Buka **WhatsApp → Keyword Automation** dan edit rule yang diinginkan.
+2. Aktifkan **Tampilkan sebagai Balas Cepat di Inbox**.
+3. Rule harus aktif, memakai Pesan Tersimpan bertipe teks, dan tidak terhubung ke Flow Map.
+4. Di composer Inbox, ketik `/` lalu nama keyword, misalnya `/hayolo`.
+5. Pilih hasilnya. Isi template fallback rule tersebut akan dimasukkan ke draft dan masih dapat diedit sebelum dikirim.
+
+Mengubah isi Pesan Tersimpan akan langsung mengubah isi shortcut ini; tidak ada salinan pesan kedua.
+Saat mengetik `/`, daftar shortcut terbuka dan menampilkan preview isi pesan sebelum CS memilihnya.
 
 ## Sinkronisasi lengkap yang resumable
 

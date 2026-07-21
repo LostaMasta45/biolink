@@ -1,294 +1,90 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
 import type { KlikQRISWebhookPayload } from "@/lib/payment-types";
-import { getTodayWIB, getTomorrowWIB, generateInvoiceNumber } from "@/lib/utils";
+import { confirmPaidPayment, getPaymentAdminClient, markPaymentExpired } from "@/services/payment-order-service";
 import { emitNotification, formatRupiahValue } from "@/services/whatsapp-notification-service";
 import { writeActivityLog } from "@/services/whatsapp-audit-service";
 
-function getSupabase() {
-    return createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    );
-}
-
-// Send Telegram notification directly (server-side, no need for API route)
 async function sendTelegramNotification(text: string) {
-    const botToken = process.env.TELEGRAM_BOT_TOKEN;
-    const chatId = process.env.TELEGRAM_ADMIN_CHAT_ID;
-
-    if (!botToken || !chatId) return;
-
-    try {
-        await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                chat_id: chatId,
-                text,
-                parse_mode: "HTML",
-                disable_web_page_preview: true,
-            }),
-        });
-    } catch (err) {
-        console.error("Telegram notification failed:", err);
-    }
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  const chatId = process.env.TELEGRAM_ADMIN_CHAT_ID;
+  if (!token || !chatId) return;
+  try {
+    await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: chatId, text, parse_mode: "HTML", disable_web_page_preview: true }),
+    });
+  } catch (error) {
+    console.error("[PaymentWebhook] Telegram notification failed", error);
+  }
 }
 
 export async function POST(request: Request) {
-    let auditCustomer = "payment:webhook";
-    let auditOrderId: string | null = null;
-    try {
-        const body: KlikQRISWebhookPayload = await request.json();
-        console.log("📥 Webhook received:", JSON.stringify(body, null, 2));
+  let orderId: string | null = null;
+  try {
+    const body = await request.json() as KlikQRISWebhookPayload;
+    const data = body?.data;
+    if (!data?.order_id) return NextResponse.json({ message: "Invalid payload" }, { status: 400 });
+    orderId = data.order_id;
 
-        const { data } = body;
-        if (!data || !data.order_id) {
-            await writeActivityLog({ customer: auditCustomer, eventType: "payment.webhook.invalid", status: "failed", message: "Webhook pembayaran tidak memiliki order_id" });
-            return NextResponse.json({ message: "Invalid payload" }, { status: 400 });
-        }
-        auditOrderId = data.order_id;
-        auditCustomer = `payment:${data.order_id}`;
-
-        const supabase = getSupabase();
-
-        // Find the order in our database
-        const { data: order, error: findError } = await supabase
-            .from("payment_orders")
-            .select("*")
-            .eq("order_id", data.order_id)
-            .single();
-
-        if (findError || !order) {
-            console.error("Order not found:", data.order_id);
-            await writeActivityLog({ customer: auditCustomer, eventType: "payment.webhook.order_not_found", status: "failed", message: "Order pembayaran tidak ditemukan", metadata: { order_id: data.order_id } });
-            // Return 200 so KlikQRIS doesn't retry
-            return NextResponse.json({ message: "Order not found" }, { status: 200 });
-        }
-
-        // Validate signature (double security)
-        if (order.signature && data.signature && order.signature !== data.signature) {
-            console.error("Signature mismatch for:", data.order_id);
-            await writeActivityLog({ customer: auditCustomer, eventType: "payment.webhook.invalid_signature", status: "failed", message: "Signature webhook pembayaran tidak cocok", metadata: { order_id: data.order_id } });
-            return NextResponse.json({ message: "Invalid signature" }, { status: 403 });
-        }
-
-        // Idempotency check — if already PAID, skip
-        if (order.status === "PAID") {
-            console.log("Order already PAID, skipping:", data.order_id);
-            await writeActivityLog({ customer: auditCustomer, eventType: "payment.webhook.duplicate", status: "skipped", message: "Webhook pembayaran duplikat diabaikan", metadata: { order_id: data.order_id } });
-            return NextResponse.json({ message: "Already processed" }, { status: 200 });
-        }
-
-        const webhookStatus = data.status?.toUpperCase();
-
-        if (webhookStatus === "PAID" || webhookStatus === "SUCCESS") {
-            // === PAYMENT SUCCESS ===
-            const updateData = {
-                status: "PAID",
-                paid_at: data.payment_date || new Date().toISOString(),
-                total_amount: data.amount_paid || order.total_amount,
-                updated_at: new Date().toISOString(),
-            };
-
-            const { error: paymentUpdateError } = await supabase
-                .from("payment_orders")
-                .update(updateData)
-                .eq("order_id", data.order_id);
-            if (paymentUpdateError) throw new Error(`Status pembayaran gagal diperbarui: ${paymentUpdateError.message}`);
-            await writeActivityLog({
-                customer: order.customer_whatsapp || auditCustomer,
-                eventType: "payment.paid",
-                status: "success",
-                message: `Pembayaran ${data.order_id} berhasil dikonfirmasi`,
-                metadata: { order_id: data.order_id, amount: data.amount_paid || order.total_amount || order.amount, provider_status: webhookStatus },
-            });
-                
-            const paidAmount = data.amount_paid || order.total_amount || order.amount;
-            const notificationVariables = {
-                customer_name: order.customer_name || "Pelanggan",
-                company_name: order.customer_company || "-",
-                package_name: order.package_name || "Paket Anda",
-                amount: formatRupiahValue(paidAmount),
-                order_id: data.order_id,
-            };
-            const adminNotification = await emitNotification({
-                eventKey: "payment.paid.admin",
-                variables: notificationVariables,
-                dedupeId: data.order_id,
-            });
-            if (adminNotification.status === "failed") console.error("WA admin notification failed:", adminNotification.error);
-
-            // Auto-sync to finance (transactions table)
-            try {
-                const { data: txData } = await supabase
-                    .from("transactions")
-                    .insert({
-                        mode: "business",
-                        type: "income",
-                        amount: data.amount_paid || order.amount,
-                        category: "posting",
-                        description: `Pembayaran QRIS - ${order.package_name} - ${order.customer_company}`,
-                        client: order.customer_company,
-                        date: getTodayWIB(),
-                        status: "paid",
-                        payment_method: "ewallet",
-                    })
-                    .select()
-                    .single();
-
-                if (txData) {
-                    await supabase
-                        .from("payment_orders")
-                        .update({
-                            synced_to_finance: true,
-                            related_transaction_id: txData.id,
-                        })
-                        .eq("order_id", data.order_id);
-                }
-            } catch (err) {
-                console.error("Finance sync failed:", err);
-            }
-
-            // Auto-create posting queue entry (draft — waiting for poster upload)
-            try {
-                const scheduledDate = getTomorrowWIB();
-
-                const { data: postData } = await supabase
-                    .from("posting_queue")
-                    .insert({
-                        company_name: order.customer_company,
-                        whatsapp_number: order.customer_whatsapp,
-                        scheduled_date: scheduledDate,
-                        scheduled_time: "pagi",
-                        package_id: order.package_id,
-                        addons: order.addons || [],
-                        total_price: data.amount_paid || order.amount,
-                        status: "draft",
-                        order_id: data.order_id,
-                        notes: `Auto dari QRIS | ${order.customer_name} | Order: ${data.order_id}`,
-                    })
-                    .select()
-                    .single();
-
-                if (postData) {
-                    await supabase
-                        .from("payment_orders")
-                        .update({
-                            synced_to_posting: true,
-                            related_posting_id: postData.id,
-                        })
-                        .eq("order_id", data.order_id);
-                }
-            } catch (err) {
-                console.error("Posting queue sync failed:", err);
-            }
-
-            // Auto-create invoice
-            try {
-                const invoiceNumber = generateInvoiceNumber(Math.floor(Math.random() * 1000));
-                const totalAmount = data.amount_paid || order.amount;
-
-                const { data: invoiceData, error: invoiceError } = await supabase
-                    .from("invoices")
-                    .insert({
-                        invoice_number: invoiceNumber,
-                        client_name: order.customer_name,
-                        client_phone: order.customer_whatsapp,
-                        client_address: order.customer_company,
-                        sender_name: "InfoLokerJombang",
-                        sender_address: "Jombang, Jawa Timur",
-                        sender_contact: "@infolokerjombang",
-                        invoice_date: getTodayWIB(),
-                        subtotal: totalAmount,
-                        discount_type: "nominal",
-                        discount_value: 0,
-                        discount_amount: 0,
-                        tax_enabled: false,
-                        tax_percent: 0,
-                        tax_amount: 0,
-                        total: totalAmount,
-                        bank_name: "QRIS",
-                        template: "modern",
-                        status: "paid",
-                        notes: `Order ID: ${data.order_id}`,
-                    })
-                    .select()
-                    .single();
-
-                if (invoiceData && !invoiceError) {
-                    await supabase.from("invoice_items").insert({
-                        invoice_id: invoiceData.id,
-                        description: `${order.package_name}${order.addon_names?.length > 0 ? ' + ' + order.addon_names.join(', ') : ''}`,
-                        quantity: 1,
-                        price: totalAmount,
-                        sort_order: 0,
-                    });
-                } else if (invoiceError) {
-                    console.error("Invoice creation failed:", invoiceError);
-                    await writeActivityLog({ customer: order.customer_whatsapp || auditCustomer, eventType: "invoice.sync_failed", status: "failed", message: `Invoice otomatis gagal dibuat: ${invoiceError.message}`, metadata: { order_id: data.order_id } });
-                }
-            } catch (err) {
-                console.error("Invoice sync failed:", err);
-                const message = err instanceof Error ? err.message : "Invoice otomatis gagal dibuat";
-                await writeActivityLog({ customer: order.customer_whatsapp || auditCustomer, eventType: "invoice.sync_failed", status: "failed", message, metadata: { order_id: data.order_id } });
-            }
-
-            // Send Telegram notification
-            const totalFormatted = (data.amount_paid || order.total_amount || order.amount).toLocaleString("id-ID");
-            const telegramMessage = `
-<b>💳 PEMBAYARAN BARU VIA QRIS</b>
-
-━━━━━━━━━━━━━━━━━━
-📋 <b>Order ID:</b> ${data.order_id}
-✅ <b>Status:</b> LUNAS
-━━━━━━━━━━━━━━━━━━
-
-👤 <b>Nama:</b> ${order.customer_name}
-📱 <b>WhatsApp:</b> ${order.customer_whatsapp}
-🏢 <b>Perusahaan:</b> ${order.customer_company}
-
-📦 <b>Paket:</b> ${order.package_name}
-${order.addon_names?.length > 0 ? `➕ <b>Add-on:</b> ${order.addon_names.join(", ")}` : ""}
-
-💰 <b>Total Bayar:</b>
-<code>Rp ${totalFormatted}</code>
-
-📅 <b>Dibayar:</b> ${data.payment_date || new Date().toLocaleString("id-ID")}
-━━━━━━━━━━━━━━━━━━
-🔔 Segera proses posting!
-            `.trim();
-
-            await sendTelegramNotification(telegramMessage);
-
-            const customerNotification = await emitNotification({
-                eventKey: "payment.paid.customer",
-                customerPhone: order.customer_whatsapp,
-                variables: notificationVariables,
-                dedupeId: data.order_id,
-            });
-            if (customerNotification.status === "failed") console.error("WA customer notification failed:", customerNotification.error);
-
-        } else if (webhookStatus === "EXPIRED") {
-            // === PAYMENT EXPIRED ===
-            const { error: expireUpdateError } = await supabase
-                .from("payment_orders")
-                .update({
-                    status: "EXPIRED",
-                    updated_at: new Date().toISOString(),
-                })
-                .eq("order_id", data.order_id);
-            if (expireUpdateError) throw new Error(`Status pembayaran expired gagal diperbarui: ${expireUpdateError.message}`);
-            await writeActivityLog({ customer: order.customer_whatsapp || auditCustomer, eventType: "payment.expired", status: "success", message: `Pembayaran ${data.order_id} expired`, metadata: { order_id: data.order_id, provider_status: webhookStatus } });
-        }
-
-        // MUST return 200 OK for KlikQRIS to stop retrying
-        return NextResponse.json({ message: "OK" }, { status: 200 });
-    } catch (error) {
-        console.error("Webhook Error:", error);
-        const message = error instanceof Error ? error.message : "Webhook pembayaran gagal diproses";
-        await writeActivityLog({ customer: auditCustomer, eventType: "payment.webhook.failed", status: "failed", message, metadata: { order_id: auditOrderId } });
-        // Still return 200 to prevent retries
-        return NextResponse.json({ message: "Error handled" }, { status: 200 });
+    const supabase = getPaymentAdminClient();
+    const { data: order, error } = await supabase.from("payment_orders").select("*").eq("order_id", orderId).maybeSingle();
+    if (error || !order) {
+      await writeActivityLog({ customer: `payment:${orderId}`, eventType: "payment.webhook.order_not_found", status: "failed", message: "Order pembayaran tidak ditemukan" });
+      return NextResponse.json({ message: "Order not found" }, { status: 200 });
     }
+    // KlikQRIS signature issued at creation remains a secondary validation. Add their
+    // documented request-signature/HMAC verification here when the provider exposes it.
+    if (order.signature && data.signature && order.signature !== data.signature) {
+      await writeActivityLog({ customer: order.customer_whatsapp, eventType: "payment.webhook.invalid_signature", status: "failed", message: "Signature webhook pembayaran tidak cocok", metadata: { order_id: orderId } });
+      return NextResponse.json({ message: "Invalid signature" }, { status: 403 });
+    }
+
+    const providerStatus = String(data.status || "").toUpperCase();
+    const eventKey = `webhook:${data.signature || data.payment_date || providerStatus}`;
+    if (providerStatus === "PAID" || providerStatus === "SUCCESS") {
+      const result = await confirmPaidPayment({
+        orderId,
+        paidAt: data.payment_date,
+        amountPaid: Number(data.amount_paid || 0) || undefined,
+        providerStatus,
+        eventKey,
+        payload: body,
+      });
+      const amount = Number(result.order.payable_amount || result.order.total_amount || result.order.amount);
+      await writeActivityLog({
+        customer: result.order.customer_whatsapp,
+        eventType: "payment.paid",
+        status: "success",
+        message: `Pembayaran ${orderId} berhasil dikonfirmasi`,
+        metadata: { order_id: orderId, amount, provider_status: providerStatus, first_confirmation: result.confirmed },
+      });
+
+      // Keep existing notifications, but only once per first successful confirmation.
+      if (result.confirmed) {
+        const variables = {
+          customer_name: result.order.customer_name || "Pelanggan",
+          company_name: result.order.customer_company || "-",
+          package_name: result.order.package_name || "Paket Anda",
+          amount: formatRupiahValue(amount),
+          order_id: orderId,
+        };
+        await Promise.all([
+          emitNotification({ eventKey: "payment.paid.admin", variables, dedupeId: orderId }),
+          emitNotification({ eventKey: "payment.paid.customer", customerPhone: result.order.customer_whatsapp, variables, dedupeId: orderId }),
+          sendTelegramNotification(`<b>💳 PEMBAYARAN QRIS LUNAS</b>\n\n<b>Order:</b> ${orderId}\n<b>Perusahaan:</b> ${result.order.customer_company}\n<b>Paket:</b> ${result.order.package_name}\n<b>Total:</b> ${formatRupiahValue(amount)}\n\nPoster dapat ditunggu di antrean posting.`),
+        ]);
+      }
+    } else if (providerStatus === "EXPIRED") {
+      await markPaymentExpired(orderId, eventKey, body);
+      await writeActivityLog({ customer: order.customer_whatsapp, eventType: "payment.expired", status: "success", message: `Pembayaran ${orderId} expired`, metadata: { order_id: orderId } });
+    }
+    return NextResponse.json({ message: "OK" });
+  } catch (error) {
+    console.error("[PaymentWebhook]", error);
+    await writeActivityLog({ customer: orderId ? `payment:${orderId}` : "payment:webhook", eventType: "payment.webhook.failed", status: "failed", message: error instanceof Error ? error.message : "Webhook pembayaran gagal diproses" });
+    // The event is retained by the provider as acknowledged; reconciliation will retry
+    // the idempotent downstream work from the status endpoint/job.
+    return NextResponse.json({ message: "Error handled" });
+  }
 }

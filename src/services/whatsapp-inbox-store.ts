@@ -21,6 +21,7 @@ interface InboxConversationRow {
 interface InboxMessageRow {
   id: string; wa_account_id: string; conversation_id: string; contact_id: string; provider_message_id: string | null;
   client_request_id: string | null; direction: "inbound" | "outbound" | "system"; message_type: string; body: string | null;
+  media_url: string | null; media_mime_type: string | null; media_filename: string | null;
   status: InboxMessageStatus; source: InboxMessageSource; quick_reply_id: string | null; error_message: string | null;
   provider_created_at: string | null; created_at: string; updated_at: string;
 }
@@ -151,6 +152,9 @@ export async function persistInboxInbound(input: {
   providerMessageId: string;
   body: string;
   messageType?: string;
+  mediaUrl?: string | null;
+  mediaMimeType?: string | null;
+  mediaFilename?: string | null;
   providerCreatedAt?: string;
   profileName?: string | null;
   payload?: Record<string, unknown>;
@@ -159,7 +163,20 @@ export async function persistInboxInbound(input: {
   const { data: duplicate, error: duplicateError } = await inboxDb.from("wa_inbox_messages")
     .select("id,conversation_id").eq("provider_message_id", input.providerMessageId).maybeSingle();
   if (duplicateError) throw new Error(`Pesan Inbox tidak dapat diduplikasi: ${duplicateError.message}`);
-  if (duplicate) return duplicate as { id: string; conversation_id: string };
+  if (duplicate) {
+    if (input.mediaUrl) {
+      const { error } = await inboxDb.from("wa_inbox_messages").update({
+        media_url: input.mediaUrl,
+        media_mime_type: input.mediaMimeType ?? null,
+        media_filename: input.mediaFilename ?? null,
+        body: input.body || null,
+        message_type: input.messageType ?? "text",
+        payload: input.payload ?? {},
+      }).eq("id", (duplicate as { id: string }).id);
+      if (error) throw new Error(`Media pesan inbound tidak dapat diperbarui: ${error.message}`);
+    }
+    return duplicate as { id: string; conversation_id: string };
+  }
 
   const account = await ensureAccount({ phoneId: input.phoneId, phoneNumber: input.phoneNumber, customerInbox: true });
   if (!account.is_customer_inbox) return null;
@@ -175,6 +192,9 @@ export async function persistInboxInbound(input: {
     direction: "inbound",
     message_type: input.messageType ?? "text",
     body: input.body || null,
+    media_url: input.mediaUrl ?? null,
+    media_mime_type: input.mediaMimeType ?? null,
+    media_filename: input.mediaFilename ?? null,
     status: "read",
     source: "provider",
     provider_created_at: receivedAt,
@@ -330,7 +350,7 @@ export async function getInboxConversation(id: string) {
 }
 
 export async function listInboxMessages(conversationId: string, before?: string | null, limit = 60) {
-  let query = inboxDb.from("wa_inbox_messages").select("id,wa_account_id,conversation_id,contact_id,provider_message_id,client_request_id,direction,message_type,body,status,source,quick_reply_id,error_message,provider_created_at,created_at,updated_at")
+  let query = inboxDb.from("wa_inbox_messages").select("id,wa_account_id,conversation_id,contact_id,provider_message_id,client_request_id,direction,message_type,body,media_url,media_mime_type,media_filename,status,source,quick_reply_id,error_message,provider_created_at,created_at,updated_at")
     .eq("conversation_id", conversationId).order("created_at", { ascending: false }).limit(Math.min(100, limit) + 1);
   if (before) query = query.lt("created_at", before);
   const { data, error } = await query;
@@ -339,6 +359,26 @@ export async function listInboxMessages(conversationId: string, before?: string 
   const hasMore = rows.length > limit;
   const visible = rows.slice(0, limit).reverse();
   return { data: visible, nextCursor: hasMore ? rows[limit - 1]?.created_at ?? null : null };
+}
+
+export async function getInboxMediaAttachment(messageId: string) {
+  const { data, error } = await inboxDb.from("wa_inbox_messages")
+    .select("id,provider_message_id,provider_wamid,message_type,media_url,media_mime_type,media_filename,account:wa_inbox_accounts(phone_number_id)")
+    .eq("id", messageId).maybeSingle();
+  if (error) throw new Error(`Lampiran Inbox tidak dapat dimuat: ${error.message}`);
+  if (!data) throw new Error("Lampiran Inbox tidak ditemukan");
+  const attachment = data as unknown as {
+    id: string; provider_message_id: string | null; provider_wamid: string | null; message_type: string;
+    media_url: string | null; media_mime_type: string | null; media_filename: string | null;
+    account: { phone_number_id: string } | null;
+  };
+  if (!["image", "video", "audio", "document", "sticker"].includes(attachment.message_type)) {
+    throw new Error("Pesan ini tidak memiliki lampiran media");
+  }
+  if (!attachment.account?.phone_number_id || !(attachment.provider_wamid ?? attachment.provider_message_id)) {
+    throw new Error("Identitas media KirimDev tidak lengkap");
+  }
+  return attachment;
 }
 
 export async function updateInboxConversation(id: string, patch: { status?: InboxConversationStatus; priority?: InboxPriority; markRead?: boolean }) {
@@ -357,7 +397,7 @@ export async function stageInboxManualMessage(input: { conversationId: string; b
   if (!conversation.account.is_customer_inbox) throw new Error("Akun ini bukan Inbox customer");
   if (!conversation.service_window_expires_at || new Date(conversation.service_window_expires_at).getTime() <= Date.now()) throw new Error("Jendela layanan 24 jam telah berakhir. Pesan teks tidak boleh dikirim.");
   const { data: existing, error: lookupError } = await inboxDb.from("wa_inbox_messages")
-    .select("id,wa_account_id,conversation_id,contact_id,provider_message_id,client_request_id,direction,message_type,body,status,source,quick_reply_id,error_message,provider_created_at,created_at,updated_at")
+    .select("id,wa_account_id,conversation_id,contact_id,provider_message_id,client_request_id,direction,message_type,body,media_url,media_mime_type,media_filename,status,source,quick_reply_id,error_message,provider_created_at,created_at,updated_at")
     .eq("wa_account_id", conversation.account.id).eq("client_request_id", input.clientRequestId).maybeSingle();
   if (lookupError) throw new Error(`Idempotency pesan tidak dapat diperiksa: ${lookupError.message}`);
   if (existing) return { message: existing as unknown as InboxMessage, conversation, alreadyExists: true };
@@ -374,7 +414,7 @@ export async function stageInboxManualMessage(input: { conversationId: string; b
     source,
     quick_reply_id: input.quickReplyId ?? null,
     sender_user_id: input.userId ?? null,
-  }).select("id,wa_account_id,conversation_id,contact_id,provider_message_id,client_request_id,direction,message_type,body,status,source,quick_reply_id,error_message,provider_created_at,created_at,updated_at").single();
+  }).select("id,wa_account_id,conversation_id,contact_id,provider_message_id,client_request_id,direction,message_type,body,media_url,media_mime_type,media_filename,status,source,quick_reply_id,error_message,provider_created_at,created_at,updated_at").single();
   if (error) throw new Error(`Pesan manual tidak dapat diantrikan: ${error.message}`);
   return { message: data as unknown as InboxMessage, conversation, alreadyExists: false };
 }
@@ -385,8 +425,10 @@ export async function completeInboxManualMessage(input: { messageId: string; con
   const { data, error } = await inboxDb.from("wa_inbox_messages").update(failed ? {
     status: "failed", error_message: input.error, failed_at: sentAt,
   } : {
-    status: "sent", provider_message_id: input.providerMessageId ?? null, sent_at: sentAt, error_message: null,
-  }).eq("id", input.messageId).select("id,wa_account_id,conversation_id,contact_id,provider_message_id,client_request_id,direction,message_type,body,status,source,quick_reply_id,error_message,provider_created_at,created_at,updated_at").single();
+    status: "sent", provider_message_id: input.providerMessageId ?? null,
+    provider_wamid: input.providerMessageId?.startsWith("wamid.") ? input.providerMessageId : null,
+    sent_at: sentAt, error_message: null,
+  }).eq("id", input.messageId).select("id,wa_account_id,conversation_id,contact_id,provider_message_id,client_request_id,direction,message_type,body,media_url,media_mime_type,media_filename,status,source,quick_reply_id,error_message,provider_created_at,created_at,updated_at").single();
   if (error) throw new Error(`Status pesan manual tidak dapat diperbarui: ${error.message}`);
   if (!failed) {
     const { error: conversationError } = await inboxDb.from("wa_inbox_conversations").update({
@@ -412,7 +454,7 @@ export async function recordInboxOutboundAttempt(input: { phoneId: string; custo
   const now = new Date().toISOString();
   let message: InboxMessage | null = null;
   if (input.correlationId) {
-    const { data } = await inboxDb.from("wa_inbox_messages").select("id,wa_account_id,conversation_id,contact_id,provider_message_id,client_request_id,direction,message_type,body,status,source,quick_reply_id,error_message,provider_created_at,created_at,updated_at")
+    const { data } = await inboxDb.from("wa_inbox_messages").select("id,wa_account_id,conversation_id,contact_id,provider_message_id,client_request_id,direction,message_type,body,media_url,media_mime_type,media_filename,status,source,quick_reply_id,error_message,provider_created_at,created_at,updated_at")
       .eq("wa_account_id", accountRow.id).eq("client_request_id", input.correlationId).maybeSingle();
     message = data as unknown as InboxMessage | null;
   }
@@ -446,6 +488,9 @@ export async function persistInboxOutbound(input: {
   providerMessageId: string;
   body?: string | null;
   messageType?: string;
+  mediaUrl?: string | null;
+  mediaMimeType?: string | null;
+  mediaFilename?: string | null;
   source?: string;
   providerCreatedAt?: string;
   payload?: Record<string, unknown>;
@@ -457,7 +502,10 @@ export async function persistInboxOutbound(input: {
   if (existing) {
     const current = existing as { id: string; conversation_id: string; body: string | null };
     if (!current.body && input.body) {
-      const { error } = await inboxDb.from("wa_inbox_messages").update({ body: input.body, message_type: input.messageType ?? "text", payload: input.payload ?? {} }).eq("id", current.id);
+      const { error } = await inboxDb.from("wa_inbox_messages").update({
+        body: input.body, message_type: input.messageType ?? "text", media_url: input.mediaUrl ?? null,
+        media_mime_type: input.mediaMimeType ?? null, media_filename: input.mediaFilename ?? null, payload: input.payload ?? {},
+      }).eq("id", current.id);
       if (error) throw new Error(`Isi pesan outbound tidak dapat diperbarui: ${error.message}`);
     }
     return current;
@@ -467,6 +515,36 @@ export async function persistInboxOutbound(input: {
   const contact = await ensureContact(account.id, input.customer);
   const conversation = await getOrCreateConversation(account.id, contact.id);
   const sentAt = input.providerCreatedAt ?? new Date().toISOString();
+  // The synchronous API response can contain an internal `msg_*` id, while
+  // message.sent reliably carries the Meta `wamid`. Reconcile the staged Inbox
+  // row before inserting so one physical WhatsApp send remains one bubble.
+  if (input.providerMessageId.startsWith("wamid.")) {
+    const { data: staged, error: stagedError } = await inboxDb.from("wa_inbox_messages")
+      .select("id,conversation_id")
+      .eq("wa_account_id", account.id).eq("conversation_id", conversation.id)
+      .eq("direction", "outbound").not("client_request_id", "is", null).is("provider_wamid", null)
+      .gte("created_at", new Date(Date.now() - 5 * 60_000).toISOString())
+      .order("created_at", { ascending: false }).limit(1).maybeSingle();
+    if (stagedError) throw new Error(`Pesan Inbox tertunda tidak dapat dibaca: ${stagedError.message}`);
+    if (staged) {
+      const { error: reconcileError } = await inboxDb.from("wa_inbox_messages").update({
+        provider_message_id: input.providerMessageId,
+        provider_wamid: input.providerMessageId,
+        message_type: input.messageType ?? "text",
+        body: input.body ?? null,
+        media_url: input.mediaUrl ?? null,
+        media_mime_type: input.mediaMimeType ?? null,
+        media_filename: input.mediaFilename ?? null,
+        status: "sent",
+        provider_created_at: sentAt,
+        sent_at: sentAt,
+        error_message: null,
+        payload: input.payload ?? {},
+      }).eq("id", (staged as { id: string }).id);
+      if (reconcileError) throw new Error(`Pesan Inbox tidak dapat direkonsiliasi: ${reconcileError.message}`);
+      return staged as { id: string; conversation_id: string };
+    }
+  }
   const { data, error } = await inboxDb.from("wa_inbox_messages").insert({
     wa_account_id: account.id,
     conversation_id: conversation.id,
@@ -476,6 +554,9 @@ export async function persistInboxOutbound(input: {
     direction: "outbound",
     message_type: input.messageType ?? "text",
     body: input.body ?? null,
+    media_url: input.mediaUrl ?? null,
+    media_mime_type: input.mediaMimeType ?? null,
+    media_filename: input.mediaFilename ?? null,
     status: "sent",
     source: sourceFromSend(input.source),
     provider_created_at: sentAt,

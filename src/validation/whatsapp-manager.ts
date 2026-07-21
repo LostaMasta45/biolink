@@ -148,6 +148,7 @@ export const autoReplySchema = z.object({
   handover_duration_minutes: z.number().int().min(1).max(10080),
   is_test_mode: z.boolean(),
   test_phone_numbers: z.array(z.string().trim().regex(/^\d{8,16}$/, "Nomor test harus berupa 8-16 digit")).max(20),
+  inbox_quick_reply_enabled: z.boolean().default(true),
   is_active: z.boolean(),
 });
 

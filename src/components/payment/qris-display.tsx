@@ -6,10 +6,10 @@ import { Clock, RefreshCcw, Loader2, CheckCircle2, XCircle, Wallet, Instagram, S
 import { cn } from "@/lib/utils";
 import { toPng } from "html-to-image";
 import toast from "react-hot-toast";
-import { Button } from "@/components/ui/button";
 
 interface QrisDisplayProps {
     orderId: string;
+    accessToken: string;
     totalAmount: number;
     qrisImage: string | null;
     qrisUrl: string | null;
@@ -20,6 +20,7 @@ interface QrisDisplayProps {
 
 export function QrisDisplay({
     orderId,
+    accessToken,
     totalAmount,
     qrisImage,
     qrisUrl,
@@ -93,7 +94,7 @@ export function QrisDisplay({
         if (status !== "PENDING") return;
         setIsChecking(true);
         try {
-            const res = await fetch(`/api/payment/status/${orderId}`, { cache: "no-store" });
+            const res = await fetch(`/api/payment/status/${orderId}?token=${encodeURIComponent(accessToken)}`, { cache: "no-store" });
             const data = await res.json();
             if (data.success && data.data) {
                 if (data.data.status === "PAID") {
@@ -109,12 +110,21 @@ export function QrisDisplay({
         } finally {
             setIsChecking(false);
         }
-    }, [orderId, status, onPaymentSuccess, onPaymentExpired]);
+    }, [orderId, accessToken, status, onPaymentSuccess, onPaymentExpired]);
 
     useEffect(() => {
         if (status !== "PENDING") return;
-        const interval = setInterval(checkStatus, 1000);
-        return () => clearInterval(interval);
+        const interval = setInterval(() => {
+            if (document.visibilityState === "visible") void checkStatus();
+        }, 7000);
+        const onVisibilityChange = () => {
+            if (document.visibilityState === "visible") void checkStatus();
+        };
+        document.addEventListener("visibilitychange", onVisibilityChange);
+        return () => {
+            clearInterval(interval);
+            document.removeEventListener("visibilitychange", onVisibilityChange);
+        };
     }, [checkStatus, status]);
 
     const qrSrc = qrisImage || qrisUrl || "";

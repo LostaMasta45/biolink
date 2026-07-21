@@ -26,6 +26,9 @@ interface ParsedInboundMessage {
   phoneId: string;
   displayPhone: string;
   messageId: string;
+  mediaUrl: string | null;
+  mediaMimeType: string | null;
+  mediaFilename: string | null;
 }
 
 interface ParsedMessageStatus {
@@ -92,6 +95,10 @@ function parseMetaInbound(payload: KirimDevWebhookPayload): ParsedInboundMessage
   }
 
   if (!message.from || !message.id) return null;
+  const media = message.type && message[message.type] && typeof message[message.type] === "object"
+    ? message[message.type] as Record<string, unknown>
+    : {};
+  const enrichment = recordFromUnknown((payload as unknown as { kirim?: unknown }).kirim);
   return {
     senderPhone: message.from,
     text,
@@ -99,6 +106,9 @@ function parseMetaInbound(payload: KirimDevWebhookPayload): ParsedInboundMessage
     phoneId: value?.metadata?.phone_number_id ?? "",
     displayPhone: value?.metadata?.display_phone_number ?? "",
     messageId: message.id ?? "",
+    mediaUrl: typeof enrichment.media_url === "string" ? enrichment.media_url : typeof media.link === "string" ? media.link : null,
+    mediaMimeType: typeof media.mime_type === "string" ? media.mime_type : null,
+    mediaFilename: typeof media.filename === "string" ? media.filename : null,
   };
 }
 
@@ -122,6 +132,9 @@ function parseLegacyInbound(payload: KirimDevWebhookPayload): ParsedInboundMessa
     phoneId: typeof data.phoneId === "string" ? data.phoneId : "",
     displayPhone: typeof data.to === "string" ? data.to : "",
     messageId: typeof data.id === "string" ? data.id : "",
+    mediaUrl: typeof message?.mediaUrl === "string" ? message.mediaUrl : typeof message?.media_url === "string" ? message.media_url : null,
+    mediaMimeType: typeof message?.mime_type === "string" ? message.mime_type : null,
+    mediaFilename: typeof message?.filename === "string" ? message.filename : null,
   };
 }
 
@@ -200,6 +213,11 @@ function parseNativeSentMessage(payload: KirimDevWebhookPayload) {
     messageType: typeof message.type === "string" ? message.type : "text",
     source: typeof message.source === "string" ? message.source : "app",
     createdAt: typeof data.timestamp === "string" ? data.timestamp : typeof nativePayload.created_at === "string" ? nativePayload.created_at : undefined,
+    mediaUrl: typeof message.media_url === "string" ? message.media_url : null,
+    mediaMimeType: typeof (message[typeof message.type === "string" ? message.type : ""] as Record<string, unknown> | undefined)?.mime_type === "string"
+      ? (message[message.type as string] as Record<string, unknown>).mime_type as string : null,
+    mediaFilename: typeof (message.document as Record<string, unknown> | undefined)?.filename === "string"
+      ? (message.document as Record<string, unknown>).filename as string : null,
   };
 }
 
@@ -285,6 +303,9 @@ export async function POST(req: NextRequest) {
           providerMessageId: sent.providerMessageId,
           body: sent.body,
           messageType: sent.messageType,
+          mediaUrl: sent.mediaUrl,
+          mediaMimeType: sent.mediaMimeType,
+          mediaFilename: sent.mediaFilename,
           source: sent.source,
           providerCreatedAt: sent.createdAt,
           payload: { event_id: eventId, source: sent.source },
@@ -350,6 +371,9 @@ export async function POST(req: NextRequest) {
       providerMessageId: inbound.messageId,
       body: inbound.text.trim(),
       messageType: inbound.messageType,
+      mediaUrl: inbound.mediaUrl,
+      mediaMimeType: inbound.mediaMimeType,
+      mediaFilename: inbound.mediaFilename,
       payload: { event_id: eventId, message_type: inbound.messageType },
     });
   }

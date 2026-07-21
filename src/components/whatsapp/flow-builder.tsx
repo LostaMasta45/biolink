@@ -98,6 +98,7 @@ function autoReplyPayload(rule: AutoReplyRule, patch: Partial<AutoReplyFormValue
     handover_duration_minutes: rule.handover_duration_minutes,
     is_test_mode: rule.is_test_mode,
     test_phone_numbers: rule.test_phone_numbers,
+    inbox_quick_reply_enabled: rule.inbox_quick_reply_enabled,
     is_active: rule.is_active,
     ...patch,
   };

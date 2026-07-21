@@ -1,0 +1,33 @@
+{
+  "provider": {
+    "9router": {
+      "npm": "@ai-sdk/openai-compatible",
+      "options": {
+        "baseURL": "http://127.0.0.1:20128/v1",
+        "apiKey": "sk-d558ba80d6a6e6cd-g0czqr-06c57033"
+      },
+      "models": {
+        "OpenCOde": {
+          "name": "OpenCOde",
+          "modalities": {
+            "input": [
+              "text",
+              "image"
+            ],
+            "output": [
+              "text"
+            ]
+          }
+        }
+      }
+    }
+  },
+  "model": "9router/OpenCOde",
+  "agent": {
+    "explorer": {
+      "description": "Fast explorer subagent for codebase exploration",
+      "mode": "subagent",
+      "model": "9router/OpenCOde"
+    }
+  }
+}

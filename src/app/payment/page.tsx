@@ -5,8 +5,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { 
     ShieldCheck, Sparkles, User, Phone, Building2, 
     ArrowLeft, ArrowRight, CreditCard, Loader2, 
-    CheckCircle2, Copy, MessageCircle, Instagram, Heart, FileText, Download,
-    Check, Clock, Zap, Home, Upload, X, ImagePlus, Send, SkipForward
+    CheckCircle2, Copy, MessageCircle, FileText,
+    Clock, Zap, Home, Upload, X, ImagePlus, Send, SkipForward
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -28,6 +28,28 @@ const STEPS = [
     { label: "Upload Poster", icon: "4" },
 ];
 
+const AVAILABLE_PAYMENT_PACKAGES = PAYMENT_PACKAGES.filter((item) => item.isAvailable !== false);
+
+type ActivePayment = {
+    order_id: string;
+    amount: number;
+    total_amount: number;
+    qris_url: string | null;
+    qris_image: string | null;
+    direct_url: string | null;
+    signature: string;
+    expired_at: string;
+    package_name: string;
+    addon_names: string[];
+    public_token: string;
+    upload_token: string;
+    package_id: number;
+    addons: number[];
+    customer_name: string;
+    customer_whatsapp: string;
+    customer_company: string;
+};
+
 function PaymentContent() {
     const searchParams = useSearchParams();
     const [isClient, setIsClient] = useState(false);
@@ -42,7 +64,7 @@ function PaymentContent() {
     
     // Payment States
     const [isLoading, setIsLoading] = useState(false);
-    const [paymentData, setPaymentData] = useState<any>(null);
+    const [paymentData, setPaymentData] = useState<ActivePayment | null>(null);
     
     // Success States
     const [isSuccess, setIsSuccess] = useState(false);
@@ -56,73 +78,83 @@ function PaymentContent() {
     const [isUploading, setIsUploading] = useState(false);
     const [isDragOver, setIsDragOver] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
-    const [isDownloading, setIsDownloading] = useState(false);
+    const paymentAttemptRef = useRef<string | null>(null);
 
     useEffect(() => {
         setIsClient(true);
         let hasActivePayment = false;
 
         // Restore form data
-        const savedForm = localStorage.getItem("ilj_payment_form");
+        const savedForm = localStorage.getItem("ilj_payment_form_v2");
         if (savedForm) {
             try {
                 const parsed = JSON.parse(savedForm);
-                if (parsed.customerName) setCustomerName(parsed.customerName);
-                if (parsed.customerWhatsapp) setCustomerWhatsapp(parsed.customerWhatsapp);
-                if (parsed.customerCompany) setCustomerCompany(parsed.customerCompany);
-                if (parsed.selectedPackage) setSelectedPackage(parsed.selectedPackage);
-                if (parsed.selectedAddons) setSelectedAddons(parsed.selectedAddons);
-            } catch (e) {}
+                const isFresh = parsed.schemaVersion === 2 && Date.now() - Number(parsed.updatedAt || 0) < 30 * 24 * 60 * 60 * 1000;
+                if (isFresh) {
+                    if (parsed.customerName) setCustomerName(parsed.customerName);
+                    if (parsed.customerWhatsapp) setCustomerWhatsapp(parsed.customerWhatsapp);
+                    if (parsed.customerCompany) setCustomerCompany(parsed.customerCompany);
+                    if (parsed.selectedPackage) setSelectedPackage(parsed.selectedPackage);
+                    if (parsed.selectedAddons) setSelectedAddons(parsed.selectedAddons);
+                } else localStorage.removeItem("ilj_payment_form_v2");
+            } catch {}
         }
 
         // Restore payment data
-        const savedPayment = localStorage.getItem("ilj_active_payment");
+        const savedPayment = localStorage.getItem("ilj_active_payment_v2");
         if (savedPayment) {
             try {
                 const parsedPayment = JSON.parse(savedPayment);
                 const expiry = new Date(parsedPayment.expired_at).getTime();
                 if (expiry > Date.now()) {
-                    setPaymentData(parsedPayment);
+                    setPaymentData(parsedPayment as ActivePayment);
                     setStep(3);
                     hasActivePayment = true;
                 } else {
-                    localStorage.removeItem("ilj_active_payment");
+                    localStorage.removeItem("ilj_active_payment_v2");
                 }
-            } catch (e) {}
+            } catch {}
         }
 
         const pkgId = searchParams.get("package");
-        if (pkgId && PAYMENT_PACKAGES.find(p => p.id === Number(pkgId))) {
+        if (pkgId && AVAILABLE_PAYMENT_PACKAGES.find(p => p.id === Number(pkgId))) {
             setSelectedPackage(Number(pkgId));
             if (!hasActivePayment) setStep(2); // Auto proceed to step 2 if package pre-selected
         }
     }, [searchParams]);
 
+    useEffect(() => {
+        paymentAttemptRef.current = null;
+    }, [customerName, customerWhatsapp, customerCompany, selectedPackage, selectedAddons]);
+
     // Save form data to cache
     useEffect(() => {
         if (!isClient) return;
-        localStorage.setItem("ilj_payment_form", JSON.stringify({
+        const timeout = window.setTimeout(() => localStorage.setItem("ilj_payment_form_v2", JSON.stringify({
+            schemaVersion: 2,
+            updatedAt: Date.now(),
             customerName,
             customerWhatsapp,
             customerCompany,
             selectedPackage,
             selectedAddons
-        }));
+        })), 350);
+        return () => window.clearTimeout(timeout);
     }, [customerName, customerWhatsapp, customerCompany, selectedPackage, selectedAddons, isClient]);
 
     // Save payment data to cache
     useEffect(() => {
         if (!isClient) return;
         if (paymentData) {
-            localStorage.setItem("ilj_active_payment", JSON.stringify(paymentData));
+            localStorage.setItem("ilj_active_payment_v2", JSON.stringify({ ...paymentData, savedAt: Date.now() }));
         } else {
-            localStorage.removeItem("ilj_active_payment");
+            localStorage.removeItem("ilj_active_payment_v2");
         }
     }, [paymentData, isClient]);
 
     if (!isClient) return null;
 
-    const pkg = PAYMENT_PACKAGES.find((p) => p.id === selectedPackage);
+    const pkg = AVAILABLE_PAYMENT_PACKAGES.find((p) => p.id === selectedPackage);
     const addonsTotal = PAYMENT_ADDONS.filter(a => selectedAddons.includes(a.id)).reduce((acc, curr) => acc + curr.price, 0);
     const totalPrice = (pkg?.price || 0) + addonsTotal;
     const canProceed = step === 1 ? !!selectedPackage : (customerName.trim() !== "" && customerWhatsapp.trim() !== "" && customerCompany.trim() !== "");
@@ -143,7 +175,8 @@ function PaymentContent() {
                 if (expiry > Date.now()) {
                     const isSamePackage = paymentData.package_id === selectedPackage;
                     const isSameAddons = JSON.stringify(paymentData.addons) === JSON.stringify(selectedAddons);
-                    if (isSamePackage && isSameAddons) {
+                    const isSameCustomer = paymentData.customer_whatsapp === customerWhatsapp && paymentData.customer_name === customerName && paymentData.customer_company === customerCompany;
+                    if (isSamePackage && isSameAddons && isSameCustomer) {
                         setStep(3);
                         return;
                     }
@@ -161,15 +194,19 @@ function PaymentContent() {
                         customer_company: customerCompany,
                         package_id: selectedPackage,
                         addons: selectedAddons,
+                        idempotency_key: paymentAttemptRef.current || (paymentAttemptRef.current = crypto.randomUUID()),
                     }),
                 });
                 
                 const data = await res.json();
                 if (data.success && data.data) {
-                    const paymentToSave = {
+                    const paymentToSave: ActivePayment = {
                         ...data.data,
                         package_id: selectedPackage,
                         addons: selectedAddons,
+                        customer_name: customerName,
+                        customer_whatsapp: customerWhatsapp,
+                        customer_company: customerCompany,
                     };
                     setPaymentData(paymentToSave);
                     setStep(3);
@@ -200,7 +237,7 @@ function PaymentContent() {
         const validFiles: File[] = [];
         const newPreviews: string[] = [];
 
-        fileArray.forEach(file => {
+        fileArray.slice(0, Math.max(0, 10 - posterFiles.length)).forEach(file => {
             if (file.size > 50 * 1024 * 1024) {
                 alert(`File ${file.name} terlalu besar (max 50MB)`);
                 return;
@@ -255,6 +292,7 @@ function PaymentContent() {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     order_id: paymentData?.order_id,
+                    upload_token: paymentData?.upload_token,
                     poster_urls: uploadedUrls,
                     caption: posterCaption || undefined,
                 }),
@@ -269,8 +307,8 @@ function PaymentContent() {
             posterPreviews.forEach(url => URL.revokeObjectURL(url));
 
             // Clear payment cache
-            localStorage.removeItem("ilj_active_payment");
-            localStorage.removeItem("ilj_payment_form");
+            localStorage.removeItem("ilj_active_payment_v2");
+            localStorage.removeItem("ilj_payment_form_v2");
 
             // Show success
             setIsSuccess(true);
@@ -284,20 +322,32 @@ function PaymentContent() {
         }
     };
 
-    const handleSkipUpload = () => {
-        // Clear payment cache
-        localStorage.removeItem("ilj_active_payment");
-        localStorage.removeItem("ilj_payment_form");
-
-        // Show success without poster
-        setIsSuccess(true);
-        setShowConfetti(true);
-        setTimeout(() => setShowConfetti(false), 5000);
+    const handleSkipUpload = async () => {
+        setIsUploading(true);
+        try {
+            const response = await fetch("/api/payment/defer-poster", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ order_id: paymentData?.order_id, upload_token: paymentData?.upload_token }),
+            });
+            const data = await response.json();
+            if (!data.success) throw new Error(data.error || "Status unggah nanti tidak dapat disimpan");
+            localStorage.removeItem("ilj_active_payment_v2");
+            localStorage.removeItem("ilj_payment_form_v2");
+            setIsSuccess(true);
+            setShowConfetti(true);
+            setTimeout(() => setShowConfetti(false), 5000);
+        } catch (error) {
+            alert(error instanceof Error ? error.message : "Coba lagi untuk menyimpan pilihan unggah nanti");
+        } finally {
+            setIsUploading(false);
+        }
     };
 
     const handlePaymentExpired = () => {
         alert("Waktu pembayaran telah habis. Silakan ulangi pesanan.");
-        setStep(1);
+        localStorage.removeItem("ilj_active_payment_v2");
+        setStep(2);
         setPaymentData(null);
     };
 
@@ -307,13 +357,6 @@ function PaymentContent() {
             setCopied(true);
             setTimeout(() => setCopied(false), 2000);
         }
-    };
-
-    const handleDownload = async (format: "pdf" | "png") => {
-        setIsDownloading(true);
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        alert(`Mendownload invoice format ${format.toUpperCase()}`);
-        setIsDownloading(false);
     };
 
     // Calculate details for success page
@@ -721,7 +764,7 @@ function PaymentContent() {
                                     initial="hidden" animate="show"
                                     className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8"
                                 >
-                                    {PAYMENT_PACKAGES.map((p) => (
+                                    {AVAILABLE_PAYMENT_PACKAGES.map((p) => (
                                         <motion.div
                                             key={p.id}
                                             variants={{
@@ -792,10 +835,13 @@ function PaymentContent() {
                                             <input
                                                 type="tel"
                                                 value={customerWhatsapp}
-                                                onChange={(e) => setCustomerWhatsapp(e.target.value)}
+                                                onChange={(e) => setCustomerWhatsapp(e.target.value.replace(/[^0-9+]/g, ''))}
                                                 placeholder="08xxxxxxxxxx"
                                                 className="w-full px-4 py-3 rounded-xl border border-border/60 bg-background text-foreground placeholder:text-muted-foreground/70 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all text-sm shadow-sm"
                                             />
+                                            <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                                                Gunakan nomor WhatsApp yang sebelumnya dipakai untuk chat admin agar data pesanan mudah kami cocokkan.
+                                            </p>
                                         </div>
                                         <div>
                                             <label className="flex items-center gap-2 text-xs font-semibold text-foreground mb-1.5">
@@ -862,6 +908,7 @@ function PaymentContent() {
 
                                 <QrisDisplay
                                     orderId={paymentData.order_id}
+                                    accessToken={paymentData.public_token}
                                     totalAmount={paymentData.total_amount}
                                     qrisImage={paymentData.qris_image}
                                     qrisUrl={paymentData.qris_url}
@@ -1064,7 +1111,7 @@ function PaymentContent() {
                     <div className="absolute -bottom-20 -left-10 w-56 h-56 bg-[#9a181e]/30 rounded-full blur-[3rem] pointer-events-none" />
                     
                     {/* Top Action Bar */}
-                    <div className="flex items-center justify-between relative z-10 mb-2">
+                    <div className="flex items-center justify-between relative z-10 mb-2 mt-6">
                         <button 
                             onClick={handleBack} 
                             disabled={step === 1} 
@@ -1140,7 +1187,7 @@ function PaymentContent() {
                                         <h2 className="font-extrabold text-slate-800 text-[16px] tracking-tight">Paket Tersedia</h2>
                                     </div>
                                     <div className="grid grid-cols-1 gap-3.5">
-                                        {PAYMENT_PACKAGES.map((p) => (
+                                        {AVAILABLE_PAYMENT_PACKAGES.map((p) => (
                                             <PackageCard key={p.id} pkg={p} selected={selectedPackage === p.id} onSelect={setSelectedPackage} />
                                         ))}
                                     </div>
@@ -1189,11 +1236,12 @@ function PaymentContent() {
                                             <input
                                                 type="tel"
                                                 value={customerWhatsapp}
-                                                onChange={(e) => setCustomerWhatsapp(e.target.value)}
+                                                onChange={(e) => setCustomerWhatsapp(e.target.value.replace(/[^0-9+]/g, ''))}
                                                 placeholder="08xxxxxxxxxx"
                                                 className="w-full pl-12 pr-5 py-4 rounded-[1.25rem] bg-white border border-slate-100 shadow-[0_5px_15px_-5px_rgba(0,0,0,0.05)] text-slate-800 placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[#0b411d]/30 focus:border-[#0b411d] font-medium text-[15px] transition-all"
                                             />
                                         </div>
+                                        <p className="mt-2 px-1 text-[11px] leading-relaxed text-slate-400">Gunakan nomor WhatsApp yang sebelumnya dipakai untuk chat admin agar data pesanan mudah kami cocokkan.</p>
                                     </div>
                                     <div className="relative">
                                         <label className="block text-[12px] font-extrabold text-slate-500 mb-2 ml-1 uppercase tracking-wider">Nama Perusahaan / Usaha</label>
@@ -1239,6 +1287,7 @@ function PaymentContent() {
                                 <div className="bg-white rounded-[1.5rem] p-6 shadow-[0_5px_20px_-5px_rgba(0,0,0,0.05)] border border-slate-100">
                                     <QrisDisplay
                                         orderId={paymentData.order_id}
+                                        accessToken={paymentData.public_token}
                                         totalAmount={paymentData.total_amount}
                                         qrisImage={paymentData.qris_image}
                                         qrisUrl={paymentData.qris_url}

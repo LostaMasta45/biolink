@@ -41,6 +41,21 @@ function messageBody(message: Record<string, unknown>) {
   return "";
 }
 
+function messageMedia(message: Record<string, unknown>, messageType: string) {
+  const content = typeof message.content === "string"
+    ? (() => { try { return record(JSON.parse(message.content)); } catch { return {}; } })()
+    : record(message.content);
+  const media = record(message[messageType]);
+  const nestedMedia = record(content[messageType]);
+  const url = [message.media_url, media.link, media.url, nestedMedia.link, nestedMedia.url]
+    .find((value): value is string => typeof value === "string" && value.length > 0) ?? null;
+  const mimeType = [message.media_mime_type, media.mime_type, nestedMedia.mime_type]
+    .find((value): value is string => typeof value === "string" && value.length > 0) ?? null;
+  const filename = [message.media_filename, media.filename, nestedMedia.filename]
+    .find((value): value is string => typeof value === "string" && value.length > 0) ?? null;
+  return { url, mimeType, filename };
+}
+
 async function processConcurrent<T>(values: T[], worker: (value: T) => Promise<boolean>, concurrency = 8) {
   let next = 0;
   let processed = 0;
@@ -62,6 +77,7 @@ async function syncMessagesPage(account: InboxAccount, cursor?: string | null) {
     const type = string(message.type) || "text";
     const createdAt = string(message.created_at) || string(message.timestamp) || undefined;
     const source = string(message.source) || "provider";
+    const media = messageMedia(message, type);
     if (!providerMessageId) return false;
     if (direction === "inbound") {
       // KirimDev's history endpoint represents the peer as `to` for both
@@ -75,6 +91,9 @@ async function syncMessagesPage(account: InboxAccount, cursor?: string | null) {
         providerMessageId,
         body: messageBody(message),
         messageType: type,
+        mediaUrl: media.url,
+        mediaMimeType: media.mimeType,
+        mediaFilename: media.filename,
         providerCreatedAt: createdAt,
         payload: { provider_id: string(message.id), sync: true },
       });
@@ -89,6 +108,9 @@ async function syncMessagesPage(account: InboxAccount, cursor?: string | null) {
         providerMessageId,
         body: messageBody(message),
         messageType: type,
+        mediaUrl: media.url,
+        mediaMimeType: media.mimeType,
+        mediaFilename: media.filename,
         source,
         providerCreatedAt: createdAt,
         payload: { provider_id: string(message.id), sync: true },

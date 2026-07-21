@@ -10,11 +10,9 @@ import {
     XCircle,
     Search,
     RefreshCcw,
-    ExternalLink,
     Phone,
     Building2,
     User,
-    Filter,
     Package,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
@@ -56,7 +54,8 @@ export default function AdminPembayaranPage() {
     }, [filterStatus]);
 
     useEffect(() => {
-        fetchOrders();
+        const timer = window.setTimeout(() => { void fetchOrders(); }, 0);
+        return () => window.clearTimeout(timer);
     }, [fetchOrders]);
 
     // Stats
@@ -67,14 +66,14 @@ export default function AdminPembayaranPage() {
         expired: orders.filter(o => o.status === "EXPIRED").length,
         revenue: orders
             .filter(o => o.status === "PAID")
-            .reduce((sum, o) => sum + (o.total_amount || o.amount), 0),
+            .reduce((sum, o) => sum + (o.payable_amount || o.total_amount || o.amount), 0),
         todayRevenue: orders
             .filter(o => {
                 if (o.status !== "PAID") return false;
                 const today = getTodayWIB();
                 return o.paid_at?.startsWith(today) || o.created_at?.startsWith(today);
             })
-            .reduce((sum, o) => sum + (o.total_amount || o.amount), 0),
+            .reduce((sum, o) => sum + (o.payable_amount || o.total_amount || o.amount), 0),
     };
 
     // Filter by search
@@ -273,7 +272,7 @@ export default function AdminPembayaranPage() {
                                                     ? "text-emerald-600 dark:text-emerald-400"
                                                     : "text-foreground"
                                             )}>
-                                                Rp {(order.total_amount || order.amount).toLocaleString("id-ID")}
+                                                Rp {(order.payable_amount || order.total_amount || order.amount).toLocaleString("id-ID")}
                                             </p>
                                             <p className="text-[10px] text-muted-foreground">
                                                 {new Date(order.created_at).toLocaleDateString("id-ID", {

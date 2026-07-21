@@ -9,8 +9,37 @@ import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
 import toast from "react-hot-toast";
 
+type InvoiceItem = { description: string; quantity: number; price: number };
+type InvoiceOrder = {
+    order_id: string;
+    status: string;
+    created_at?: string;
+    invoice_date?: string;
+    customer_name?: string;
+    customer_whatsapp?: string;
+    package_name?: string;
+    amount?: number;
+    total_amount?: number;
+    total?: number;
+    subtotal?: number;
+    discount_type?: string;
+    discount_value?: number;
+    discount_amount?: number;
+    tax_amount?: number;
+    tax_enabled?: boolean;
+    tax_percent?: number;
+    sender_name?: string;
+    notes?: string;
+    bank_name?: string;
+    bank_account_number?: string;
+    bank_account_name?: string;
+    is_new_format?: boolean;
+    raw_items?: InvoiceItem[];
+    price_snapshot?: Array<{ name: string; quantity: number; unit_price: number }>;
+};
+
 interface InvoiceClientProps {
-    order: any;
+    order: InvoiceOrder;
 }
 
 export default function InvoiceClient({ order }: InvoiceClientProps) {
@@ -21,29 +50,24 @@ export default function InvoiceClient({ order }: InvoiceClientProps) {
     const invoiceDate = new Date(order.created_at || order.invoice_date || Date.now()).toISOString();
     
     // Construct items list for UI & PDF
-    let items: any[] = [];
-    if (order.is_new_format && order.raw_items) {
+    let items: InvoiceItem[] = [];
+    if (order.is_new_format && order.raw_items?.length) {
         items = order.raw_items;
+    } else if (Array.isArray(order.price_snapshot) && order.price_snapshot.length) {
+        items = order.price_snapshot.map((item: { name: string; quantity: number; unit_price: number }) => ({
+            description: item.name,
+            quantity: item.quantity,
+            price: item.unit_price,
+        }));
     } else {
         items = [
             {
-                description: order.package_name,
+                description: order.package_name || "Layanan InfoLokerJombang",
                 quantity: 1,
-                price: order.amount,
+                price: order.amount || 0,
             }
         ];
 
-        if (order.addon_names && order.addons) {
-            order.addon_names.forEach((name: string, idx: number) => {
-                if (name && order.addons[idx]) {
-                    items.push({
-                        description: name,
-                        quantity: 1,
-                        price: order.addons[idx],
-                    });
-                }
-            });
-        }
     }
 
     const subtotal = order.subtotal || items.reduce((sum, item) => sum + item.quantity * item.price, 0);

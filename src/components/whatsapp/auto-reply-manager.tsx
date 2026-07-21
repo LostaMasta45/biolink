@@ -34,6 +34,7 @@ const defaults: AutoReplyFormValues = {
   handover_duration_minutes: 480,
   is_test_mode: false,
   test_phone_numbers: [],
+  inbox_quick_reply_enabled: true,
   is_active: true,
 };
 
@@ -49,12 +50,14 @@ export function AutoReplyManager() {
   const [testPhoneInput, setTestPhoneInput] = useState("");
   const form = useForm<AutoReplyFormValues>({ resolver: zodResolver(autoReplySchema), defaultValues: defaults });
   const templateId = useWatch({ control: form.control, name: "template_id" }) ?? "";
+  const keyword = useWatch({ control: form.control, name: "keyword" }) ?? "";
   const flowId = useWatch({ control: form.control, name: "flow_id" });
   const matchType = useWatch({ control: form.control, name: "match_type" }) ?? "equals";
   const scheduleMode = useWatch({ control: form.control, name: "schedule_mode" }) ?? "always";
   const active = useWatch({ control: form.control, name: "is_active" }) ?? true;
   const handover = useWatch({ control: form.control, name: "handover_to_human" }) ?? false;
   const testMode = useWatch({ control: form.control, name: "is_test_mode" }) ?? false;
+  const inboxQuickReplyEnabled = useWatch({ control: form.control, name: "inbox_quick_reply_enabled" }) ?? true;
 
   const openRule = (rule: AutoReplyRule | null) => {
     setEditing(rule);
@@ -71,6 +74,7 @@ export function AutoReplyManager() {
       handover_duration_minutes: rule?.handover_duration_minutes ?? 480,
       is_test_mode: rule?.is_test_mode ?? false,
       test_phone_numbers: rule?.test_phone_numbers ?? [],
+      inbox_quick_reply_enabled: rule?.inbox_quick_reply_enabled ?? true,
       is_active: rule?.is_active ?? true,
     } : defaults;
     form.reset(values);
@@ -108,7 +112,7 @@ export function AutoReplyManager() {
     <div className="space-y-6">
       <PageHeading
         title="Keyword Automation"
-        description="Rule keyword otomatis dengan prioritas, delay, cooldown, jadwal, handover, dan mode test. Balas Cepat manual tersedia di Inbox."
+        description="Rule keyword otomatis dengan prioritas, delay, cooldown, jadwal, handover, dan mode test. Aktifkan opsi Inbox untuk memakai template teks yang sama lewat /keyword."
         icon={MessageCircleReply}
         action={<Button onClick={() => openRule(null)}><Plus />Rule Baru</Button>}
       />
@@ -127,6 +131,7 @@ export function AutoReplyManager() {
                     <span className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">Prioritas {rule.priority}</span>
                     {rule.is_test_mode && <StatusBadge status="pending" label="Test mode" />}
                     {rule.handover_to_human && <StatusBadge status="degraded" label="Handover" />}
+                    {rule.inbox_quick_reply_enabled && !rule.flow_id && rule.template?.type === "text" && <StatusBadge status="active" label="Inbox /keyword" />}
                   </div>
                   <p className="truncate text-sm text-muted-foreground">→ {rule.template?.name ?? "Template tidak tersedia"}</p>
                   {rule.flow_id && <p className="mt-1 text-xs text-primary">Memulai Flow Map saat keyword cocok</p>}
@@ -214,6 +219,13 @@ export function AutoReplyManager() {
                 <Switch id="test-mode" checked={testMode} onCheckedChange={(checked) => form.setValue("is_test_mode", checked)} />
               </div>
               {testMode && <div className="mt-3 space-y-2"><Label>Nomor allowlist</Label><Input value={testPhoneInput} onChange={(event) => { setTestPhoneInput(event.target.value); form.setValue("test_phone_numbers", event.target.value.split(/[\s,]+/).map((item) => item.replace(/\D/g, "")).filter(Boolean), { shouldValidate: true }); }} placeholder="62812..., 62813..." /><p className="text-xs text-muted-foreground">Pisahkan nomor dengan koma.</p></div>}
+            </div>
+
+            <div className="rounded-xl border p-4">
+              <div className="flex items-center justify-between gap-4">
+                <div><Label htmlFor="inbox-quick-reply">Tampilkan sebagai Balas Cepat di Inbox</Label><p className="mt-1 text-xs text-muted-foreground">CS dapat mengetik /{keyword || "keyword"}. Isi template fallback teks yang sama akan dimasukkan ke draft; rule yang memulai Flow Map tidak ditampilkan.</p></div>
+                <Switch id="inbox-quick-reply" checked={inboxQuickReplyEnabled} onCheckedChange={(checked) => form.setValue("inbox_quick_reply_enabled", checked)} />
+              </div>
             </div>
 
             <div className="flex items-center justify-between rounded-xl border p-3">

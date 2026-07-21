@@ -102,6 +102,28 @@ export async function listKirimDevResourcePage(phoneId: string, resource: "messa
 }
 
 /**
+ * Retrieves media bytes for an inbound WhatsApp message. KirimDev accepts the
+ * Meta `wamid` received in the webhook, keeping the API key on the server.
+ */
+export async function fetchKirimDevMessageMedia(phoneId: string, messageId: string) {
+  const apiKey = await getDynamicApiKey();
+  if (!apiKey) throw new Error("KIRIMDEV_API_KEY belum dikonfigurasi");
+  const response = await fetch(`https://api.kirimdev.com/v1/${phoneId}/messages/${encodeURIComponent(messageId)}/media`, {
+    headers: { Authorization: `Bearer ${apiKey}` },
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    const detail = (await response.text()).slice(0, 500);
+    throw new Error(`Media KirimDev tidak dapat diambil: ${detail || `HTTP ${response.status}`}`);
+  }
+  return {
+    bytes: await response.arrayBuffer(),
+    contentType: response.headers.get("content-type") ?? "application/octet-stream",
+    filename: response.headers.get("content-disposition") ?? null,
+  };
+}
+
+/**
  * Normalisasi nomor telepon ke format 62xxx (tanpa + dan 0)
  */
 function normalizePhone(phone: string): string {

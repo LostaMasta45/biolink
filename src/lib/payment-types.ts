@@ -23,6 +23,20 @@ export interface PaymentOrder {
     // Amounts
     amount: number;
     total_amount: number | null;
+    catalog_subtotal?: number | null;
+    payable_amount?: number | null;
+    price_snapshot?: Array<{
+        code: string;
+        name: string;
+        quantity: number;
+        unit_price: number;
+        subtotal: number;
+        kind: "package" | "addon";
+    }>;
+    public_token?: string | null;
+    upload_token?: string | null;
+    related_invoice_id?: string | null;
+    poster_status?: "pending" | "uploaded" | "deferred";
 
     // QRIS Data
     qris_url: string | null;
@@ -62,6 +76,7 @@ export interface PaymentPackageConfig {
     description: string;
     features: string[];
     isPopular: boolean;
+    isAvailable?: boolean;
     emoji: string;
     gradient: string;
 }
@@ -88,6 +103,7 @@ export const PAYMENT_PACKAGES: PaymentPackageConfig[] = [
             "Test webhook otomatis",
         ],
         isPopular: false,
+        isAvailable: false,
         emoji: "🧪",
         gradient: "from-gray-500 to-slate-500",
     },
@@ -210,6 +226,7 @@ export interface CreatePaymentRequest {
     customer_company: string;
     package_id: number;
     addons: number[];
+    idempotency_key: string;
 }
 
 export interface CreatePaymentResponse {
@@ -225,6 +242,8 @@ export interface CreatePaymentResponse {
         expired_at: string;
         package_name: string;
         addon_names: string[];
+        public_token?: string;
+        upload_token?: string;
     };
     error?: string;
 }

@@ -25,7 +25,7 @@ const SELECTS: Record<ManagerResource, string> = {
   flow_triggers: "*",
   flow_runs: "*, flow:flows(id,name), current_node:flow_nodes(id,name)",
   flow_run_steps: "*, node:flow_nodes(id,name)",
-  auto_reply: "*, template:templates(id,name)",
+  auto_reply: "*, template:templates(id,name,body,type,is_active)",
   logs: "*, automation:automation(id,name), template:templates(id,name)",
   webhook_logs: "*",
   settings: "*",
