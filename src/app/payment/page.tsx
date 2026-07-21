@@ -1105,13 +1105,13 @@ function PaymentContent() {
                 ======================================================== */}
             <div className="md:hidden min-h-screen bg-slate-50 flex flex-col relative text-slate-800 font-sans">
                 {/* Mobile Premium Header (True Native Mobile Style) */}
-                <div className="bg-[#0b411d] pt-10 pb-16 px-6 relative overflow-hidden">
+                <div className="bg-[#0b411d] pt-10 pb-24 px-6 relative overflow-hidden">
                     {/* Ambient Glow Kombinasi Merah & Hijau */}
                     <div className="absolute -top-10 -right-10 w-64 h-64 bg-[#9a181e]/40 rounded-full blur-[3rem] pointer-events-none" />
                     <div className="absolute -bottom-20 -left-10 w-56 h-56 bg-[#9a181e]/30 rounded-full blur-[3rem] pointer-events-none" />
                     
                     {/* Top Action Bar */}
-                    <div className="flex items-center justify-between relative z-10 mb-2 mt-6">
+                    <div className="flex items-center justify-between relative z-50 mb-2 mt-2">
                         <button 
                             onClick={handleBack} 
                             disabled={step === 1} 
