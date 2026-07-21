@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Clock, RefreshCcw, Loader2, CheckCircle2, XCircle, Wallet, Instagram, ShieldCheck, Download } from "lucide-react";
+import { Clock, RefreshCcw, Loader2, CheckCircle2, XCircle, Wallet, Instagram, ShieldCheck, Download, ArrowLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toPng } from "html-to-image";
 import toast from "react-hot-toast";
@@ -16,6 +16,7 @@ interface QrisDisplayProps {
     expiredAt: string;
     onPaymentSuccess: () => void;
     onPaymentExpired: () => void;
+    onBack?: () => void;
 }
 
 export function QrisDisplay({
@@ -27,6 +28,7 @@ export function QrisDisplay({
     expiredAt,
     onPaymentSuccess,
     onPaymentExpired,
+    onBack,
 }: QrisDisplayProps) {
     const [status, setStatus] = useState<"PENDING" | "PAID" | "EXPIRED">("PENDING");
     const [timeLeft, setTimeLeft] = useState("");
@@ -81,9 +83,16 @@ export function QrisDisplay({
                 return;
             }
 
-            const minutes = Math.floor(diff / 60000);
-            const seconds = Math.floor((diff % 60000) / 1000);
-            setTimeLeft(`${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`);
+            const totalSeconds = Math.floor(diff / 1000);
+            const hours = Math.floor(totalSeconds / 3600);
+            const minutes = Math.floor((totalSeconds % 3600) / 60);
+            const seconds = totalSeconds % 60;
+            
+            if (hours > 0) {
+                setTimeLeft(`${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`);
+            } else {
+                setTimeLeft(`${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`);
+            }
         }, 1000);
 
         return () => clearInterval(timer);
@@ -360,28 +369,38 @@ export function QrisDisplay({
             {/* Mobile Native View (Full Screen - Green E-Wallet Style) */}
             <div className="flex md:hidden fixed inset-0 z-[100] bg-[#00a550] flex-col font-sans">
                 {/* Header (Diabaikan saat download) */}
-                <div className="flex justify-between items-center px-6 pt-12 pb-6 text-white relative z-10" data-html2canvas-ignore="true">
-                    <div className="flex items-center gap-3">
+                <div className="flex items-center px-4 pt-10 pb-4 text-white relative z-10 gap-3" data-html2canvas-ignore="true">
+                    {onBack && (
+                        <button 
+                            onClick={onBack}
+                            className="w-10 h-10 flex shrink-0 items-center justify-center bg-white/20 backdrop-blur-md rounded-full transition-all active:scale-95"
+                        >
+                            <ArrowLeft className="w-5 h-5 text-white" />
+                        </button>
+                    )}
+                    
+                    <div className="flex-1 flex items-center gap-2 overflow-hidden">
                         {status === "PENDING" && (
                             <>
-                                <Loader2 className="w-5 h-5 animate-spin" />
-                                <span className="font-bold text-lg">Menunggu Pembayaran</span>
+                                <Loader2 className="w-5 h-5 animate-spin shrink-0" />
+                                <span className="font-bold text-[17px] leading-tight truncate">Menunggu Pembayaran</span>
                             </>
                         )}
                         {status === "PAID" && (
                             <>
-                                <CheckCircle2 className="w-5 h-5" />
-                                <span className="font-bold text-lg">Pembayaran Berhasil</span>
+                                <CheckCircle2 className="w-5 h-5 shrink-0" />
+                                <span className="font-bold text-[17px] leading-tight truncate">Pembayaran Berhasil</span>
                             </>
                         )}
                         {status === "EXPIRED" && (
                             <>
-                                <XCircle className="w-5 h-5" />
-                                <span className="font-bold text-lg">Pembayaran Kadaluarsa</span>
+                                <XCircle className="w-5 h-5 shrink-0" />
+                                <span className="font-bold text-[17px] leading-tight truncate">Pembayaran Kadaluarsa</span>
                             </>
                         )}
                     </div>
-                    <ShieldCheck className="w-6 h-6 opacity-90" />
+                    
+                    <ShieldCheck className="w-6 h-6 opacity-90 shrink-0 ml-auto" />
                 </div>
                 
                 {/* Timer Display */}

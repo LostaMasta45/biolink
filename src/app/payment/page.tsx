@@ -6,7 +6,7 @@ import {
     ShieldCheck, Sparkles, User, Phone, Building2, 
     ArrowLeft, ArrowRight, CreditCard, Loader2, 
     CheckCircle2, Copy, MessageCircle, FileText,
-    Clock, Zap, Home, Upload, X, ImagePlus, Send, SkipForward
+    Clock, Zap, Home, Upload, X, ImagePlus, Send, SkipForward, Download
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,11 @@ import { cn } from "@/lib/utils";
 import { uploadPoster } from "@/lib/posting-service";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import toast from "react-hot-toast";
+import html2canvas from "html2canvas";
+import { jsPDF } from "jspdf";
+import { formatDate, formatRupiah } from "@/lib/utils";
+import type { InvoiceData, InvoiceItemData } from "@/lib/invoice-types";
 
 const STEPS = [
     { label: "Pilih Paket", icon: "1" },
@@ -68,6 +73,7 @@ function PaymentContent() {
     
     // Success States
     const [isSuccess, setIsSuccess] = useState(false);
+    const [isDownloadingInvoice, setIsDownloadingInvoice] = useState(false);
     const [showConfetti, setShowConfetti] = useState(false);
     const [copied, setCopied] = useState(false);
 
@@ -366,6 +372,252 @@ function PaymentContent() {
     const waText = encodeURIComponent(`Halo min, saya sudah transfer untuk pesanan ${orderId}.\n\nPaket: ${packageName}\nNama: ${customerName}\nPerusahaan: ${customerCompany}\n\nBerikut bukti transfer & materi lowongannya:`);
     const waLink = `https://wa.me/6281234567890?text=${waText}`;
 
+    const generateInvoiceData = (): InvoiceData | null => {
+        if (!paymentData) return null;
+        const items: InvoiceItemData[] = [
+            {
+                id: "1",
+                description: paymentData.package_name,
+                quantity: 1,
+                price: paymentData.amount,
+            }
+        ];
+
+        if (paymentData.addon_names && Array.isArray(paymentData.addon_names)) {
+            let addonsTotal = (paymentData.total_amount || paymentData.amount) - paymentData.amount;
+            if (addonsTotal > 0 && paymentData.addon_names.length > 0) {
+                const pricePerAddon = Math.round(addonsTotal / paymentData.addon_names.length);
+                paymentData.addon_names.forEach((name: string, idx: number) => {
+                    items.push({ id: `addon-${idx}`, description: `Add-on: ${name}`, quantity: 1, price: pricePerAddon });
+                });
+            } else if (paymentData.addon_names.length > 0) {
+                paymentData.addon_names.forEach((name: string, idx: number) => {
+                    items.push({ id: `addon-${idx}`, description: `Add-on: ${name}`, quantity: 1, price: 0 });
+                });
+            }
+        }
+
+        return {
+            invoice_number: `INV-${paymentData.order_id.replace("ORD-", "")}`,
+            client_name: paymentData.customer_name,
+            client_phone: paymentData.customer_whatsapp,
+            client_address: paymentData.customer_company,
+            invoice_date: new Date().toISOString().split("T")[0],
+            items,
+            subtotal: paymentData.total_amount || paymentData.amount,
+            discount_type: "nominal",
+            discount_value: 0,
+            discount_amount: 0,
+            tax_enabled: false,
+            tax_percent: 0,
+            tax_amount: 0,
+            total: paymentData.total_amount || paymentData.amount,
+            status: "paid",
+            template: "modern",
+            color_theme: "default",
+            notes: "Pembayaran via QRIS.\nKonfirmasi ke WhatsApp Admin setelah pembayaran berhasil.",
+            sender_name: "InfoLokerJombang",
+            sender_contact: "@infolokerjombang",
+            sender_address: "Jombang, Jawa Timur",
+        };
+    };
+
+    const handleDownloadInvoice = async (format: "pdf" | "png") => {
+        const invoiceData = generateInvoiceData();
+        if (!invoiceData) return;
+        setIsDownloadingInvoice(true);
+        const loadingToast = toast.loading("Generating Invoice...");
+
+        try {
+            const generateInvoiceHTML = () => {
+                const colors = {
+                    primary: '#059669', light: '#ecfdf5', lightBorder: '#10b98120',
+                    slate50: '#f8fafc', slate100: '#f1f5f9', slate200: '#e2e8f0',
+                    slate400: '#94a3b8', slate500: '#64748b', slate900: '#0f172a', white: '#ffffff',
+                };
+                return `
+                    <!DOCTYPE html>
+                    <html>
+                    <head>
+                        <meta charset="UTF-8">
+                        <style>
+                            * { margin: 0; padding: 0; box-sizing: border-box; }
+                            body { font-family: system-ui, -apple-system, sans-serif; background: ${colors.white}; color: ${colors.slate900}; width: 794px; min-height: 1123px; }
+                            .container { padding: 48px; position: relative; }
+                            .watermark { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; z-index: 0; }
+                            .watermark span { font-size: 128px; font-weight: 700; transform: rotate(-12deg); opacity: 0.05; color: ${colors.primary}; }
+                            .content { position: relative; z-index: 10; }
+                            .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 48px; border-bottom: 1px solid ${colors.light}; padding-bottom: 32px; }
+                            .logo { width: 96px; height: 96px; border-radius: 16px; overflow: hidden; }
+                            .logo img { width: 100%; height: 100%; object-fit: cover; }
+                            .title { font-size: 32px; font-weight: 800; color: ${colors.primary}; text-transform: uppercase; letter-spacing: -0.025em; }
+                            .meta { color: ${colors.slate500}; font-size: 14px; font-weight: 500; margin-top: 8px; text-align: right; }
+                            .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; margin-bottom: 40px; }
+                            .from-label, .to-label { font-size: 12px; font-weight: 700; opacity: 0.4; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.05em; }
+                            .from-name, .to-name { font-weight: 700; font-size: 18px; margin-bottom: 4px; color: ${colors.slate900}; }
+                            .info-sub { opacity: 0.7; font-size: 14px; color: ${colors.slate500}; }
+                            .bill-to { background: ${colors.light}; padding: 24px; border-radius: 12px; border: 1px solid ${colors.lightBorder}; }
+                            table { width: 100%; border-collapse: collapse; margin-bottom: 32px; }
+                            th { background: ${colors.primary}; color: ${colors.white}; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700; padding: 16px; text-align: left; }
+                            th.center { text-align: center; } th.right { text-align: right; }
+                            td { padding: 16px; border-bottom: 1px solid ${colors.slate100}; font-size: 14px; }
+                            td.center { text-align: center; opacity: 0.8; } td.right { text-align: right; }
+                            td.bold { font-weight: 600; color: ${colors.slate900}; }
+                            .footer-grid { display: grid; grid-template-columns: 1.5fr 1fr; gap: 48px; margin-top: 32px; }
+                            .bank-box { padding: 20px; border-radius: 12px; border: 1px dashed ${colors.slate400}; background: ${colors.slate50}; margin-bottom: 24px; }
+                            .bank-label { font-size: 12px; font-weight: 700; color: ${colors.slate500}; margin-bottom: 12px; text-transform: uppercase; }
+                            .bank-name { font-weight: 700; font-size: 18px; color: ${colors.primary}; }
+                            .bank-number { font-family: monospace; font-size: 20px; letter-spacing: 0.05em; margin: 4px 0; font-weight: 600; }
+                            .bank-holder { font-size: 14px; color: ${colors.slate500}; }
+                            .notes { color: ${colors.slate500}; font-size: 14px; }
+                            .notes-label { font-weight: 700; margin-bottom: 8px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: ${colors.slate400}; }
+                            .notes-text { white-space: pre-line; line-height: 1.6; }
+                            .totals { background: ${colors.slate50}; padding: 24px; border-radius: 12px; }
+                            .total-row { display: flex; justify-content: space-between; align-items: center; font-size: 14px; margin-bottom: 12px; color: ${colors.slate500}; }
+                            .total-row span:last-child { font-weight: 600; color: ${colors.slate900}; }
+                            .grand-total { padding-top: 16px; margin-top: 8px; border-top: 1px solid ${colors.slate200}; display: flex; justify-content: space-between; align-items: flex-end; }
+                            .grand-label { color: ${colors.slate500}; font-weight: 600; text-transform: uppercase; font-size: 14px; }
+                            .grand-value { font-size: 28px; font-weight: 800; color: ${colors.primary}; line-height: 1; }
+                            .footer-msg { color: ${colors.slate400}; font-size: 12px; margin-top: 48px; padding-top: 32px; border-top: 1px solid ${colors.slate100}; text-align: center; }
+                        </style>
+                    </head>
+                    <body>
+                        <div class="container">
+                            <div class="watermark"><span>LUNAS</span></div>
+                            <div class="content">
+                                <div class="header">
+                                    <div class="logo">
+                                        <img src="${window.location.origin}/profile.png" alt="Logo" />
+                                    </div>
+                                    <div style="text-align: right;">
+                                        <div class="title">INVOICE</div>
+                                        <div class="meta">
+                                            <p><span style="opacity: 0.6;">No.</span> ${invoiceData.invoice_number}</p>
+                                            <p><span style="opacity: 0.6;">Tanggal:</span> ${formatDate(invoiceData.invoice_date)}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="info-grid">
+                                    <div>
+                                        <div class="from-label">Dari</div>
+                                        <div class="from-name">${invoiceData.sender_name}</div>
+                                        <div class="info-sub">${invoiceData.sender_contact}</div>
+                                        <div class="info-sub">${invoiceData.sender_address}</div>
+                                    </div>
+                                    <div class="bill-to">
+                                        <div class="to-label">Kepada</div>
+                                        <div class="to-name">${invoiceData.client_name}</div>
+                                        ${invoiceData.client_phone ? `<div class="info-sub">${invoiceData.client_phone}</div>` : ''}
+                                        ${invoiceData.client_address ? `<div class="info-sub" style="margin-top: 4px;">${invoiceData.client_address}</div>` : ''}
+                                    </div>
+                                </div>
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>Deskripsi</th>
+                                            <th class="center" style="width: 96px;">Qty</th>
+                                            <th class="right" style="width: 160px;">Harga</th>
+                                            <th class="right" style="width: 160px;">Total</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${invoiceData.items.map(item => `
+                                            <tr>
+                                                <td class="bold">${item.description}</td>
+                                                <td class="center">${item.quantity}</td>
+                                                <td class="right">${formatRupiah(item.price)}</td>
+                                                <td class="right bold">${formatRupiah(item.quantity * item.price)}</td>
+                                            </tr>
+                                        `).join('')}
+                                    </tbody>
+                                </table>
+                                <div class="footer-grid">
+                                    <div>
+                                        <div class="bank-box">
+                                            <div class="bank-label">Pembayaran</div>
+                                            <div class="bank-name">QRIS</div>
+                                            <div class="bank-number">LUNAS</div>
+                                            <div class="bank-holder">Otomatis Terverifikasi</div>
+                                        </div>
+                                        <div class="notes">
+                                            <div class="notes-label">Catatan</div>
+                                            <div class="notes-text">${invoiceData.notes}</div>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <div class="totals">
+                                            <div class="total-row">
+                                                <span>Subtotal</span>
+                                                <span>${formatRupiah(invoiceData.subtotal)}</span>
+                                            </div>
+                                            <div class="grand-total">
+                                                <span class="grand-label">Total Tagihan</span>
+                                                <span class="grand-value">${formatRupiah(invoiceData.total)}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="footer-msg">Terima kasih atas kepercayaan Anda bekerja sama dengan ${invoiceData.sender_name}.</div>
+                            </div>
+                        </div>
+                    </body>
+                    </html>
+                `;
+            };
+
+            const iframe = document.createElement('iframe');
+            iframe.style.position = 'absolute';
+            iframe.style.left = '-9999px';
+            iframe.style.top = '0';
+            iframe.style.width = '794px';
+            iframe.style.height = '1123px';
+            iframe.style.border = 'none';
+            document.body.appendChild(iframe);
+
+            const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+            if (!iframeDoc) {
+                document.body.removeChild(iframe);
+                throw new Error('Cannot create iframe document');
+            }
+
+            iframeDoc.open();
+            iframeDoc.write(generateInvoiceHTML());
+            iframeDoc.close();
+
+            await new Promise((resolve) => {
+                iframe.onload = () => setTimeout(resolve, 500);
+            });
+
+            const element = iframeDoc.querySelector('.container') as HTMLElement;
+            if (!element) throw new Error('Cannot find container element in iframe');
+
+            const canvas = await html2canvas(element, { scale: 2, useCORS: true, logging: false });
+            
+            if (format === 'png') {
+                const link = document.createElement('a');
+                link.download = `Invoice-${invoiceData.invoice_number}.png`;
+                link.href = canvas.toDataURL('image/png');
+                link.click();
+                toast.success('Invoice PNG berhasil didownload', { id: loadingToast });
+            } else if (format === 'pdf') {
+                const imgData = canvas.toDataURL('image/png');
+                const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+                const pdfWidth = pdf.internal.pageSize.getWidth();
+                const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+                pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+                pdf.save(`Invoice-${invoiceData.invoice_number}.pdf`);
+                toast.success('Invoice PDF berhasil didownload', { id: loadingToast });
+            }
+            
+            document.body.removeChild(iframe);
+        } catch (error) {
+            console.error('Error generating invoice:', error);
+            toast.error('Gagal membuat invoice', { id: loadingToast });
+        } finally {
+            setIsDownloadingInvoice(false);
+        }
+    };
+
     if (isSuccess) {
         return (
             <>
@@ -528,6 +780,39 @@ function PaymentContent() {
                                 </div>
                             </Card>
 
+                            <Card className="p-5 border-emerald-500/20 bg-emerald-500/5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-full bg-emerald-500/20 flex items-center justify-center shrink-0">
+                                        <FileText className="w-5 h-5 text-emerald-500" />
+                                    </div>
+                                    <div>
+                                        <h3 className="font-bold text-foreground">Invoice Tersedia</h3>
+                                        <p className="text-xs text-muted-foreground">Download bukti pembayaran Anda</p>
+                                    </div>
+                                </div>
+                                <div className="flex gap-2">
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => handleDownloadInvoice("png")}
+                                        disabled={isDownloadingInvoice}
+                                        className="rounded-lg bg-background"
+                                    >
+                                        {isDownloadingInvoice ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Download className="w-4 h-4 mr-2" />}
+                                        PNG
+                                    </Button>
+                                    <Button
+                                        size="sm"
+                                        onClick={() => handleDownloadInvoice("pdf")}
+                                        disabled={isDownloadingInvoice}
+                                        className="rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white"
+                                    >
+                                        {isDownloadingInvoice ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <FileText className="w-4 h-4 mr-2" />}
+                                        PDF
+                                    </Button>
+                                </div>
+                            </Card>
+
                             <div className="space-y-3">
                                 <a href={waLink} target="_blank" rel="noopener noreferrer" className="block">
                                     <Button size="lg" className="w-full rounded-xl font-bold bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 text-white shadow-lg shadow-emerald-500/30 h-12">
@@ -675,9 +960,44 @@ function PaymentContent() {
                             </div>
                         </motion.div>
                         
+                        {/* Download Invoice Card (Mobile) */}
+                        <motion.div
+                            initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.9 }}
+                            className="w-full bg-white rounded-3xl p-5 mb-5 shadow-sm border border-slate-100 flex flex-col"
+                        >
+                            <div className="flex items-center gap-3 mb-4">
+                                <div className="w-10 h-10 rounded-full bg-emerald-50 flex items-center justify-center shrink-0">
+                                    <FileText className="w-5 h-5 text-emerald-600" />
+                                </div>
+                                <div>
+                                    <h4 className="font-bold text-slate-800 text-[15px]">Invoice Tersedia</h4>
+                                    <p className="text-[12px] text-slate-500">Download bukti pembayaran Anda</p>
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
+                                <Button
+                                    variant="outline"
+                                    onClick={() => handleDownloadInvoice("png")}
+                                    disabled={isDownloadingInvoice}
+                                    className="w-full rounded-[14px] border-slate-200 text-slate-700 font-semibold"
+                                >
+                                    {isDownloadingInvoice ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Download className="w-4 h-4 mr-2" />}
+                                    PNG
+                                </Button>
+                                <Button
+                                    onClick={() => handleDownloadInvoice("pdf")}
+                                    disabled={isDownloadingInvoice}
+                                    className="w-full rounded-[14px] bg-slate-800 hover:bg-slate-900 text-white font-semibold"
+                                >
+                                    {isDownloadingInvoice ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <FileText className="w-4 h-4 mr-2" />}
+                                    PDF
+                                </Button>
+                            </div>
+                        </motion.div>
+
                         {/* Action Buttons */}
                         <motion.div 
-                            initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.6 }}
+                            initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 1 }}
                             className="w-full space-y-3 mt-auto"
                         >
                             <Link href={waLink} target="_blank" className="w-full bg-[#00a550] hover:bg-[#008c44] text-white py-4 rounded-2xl font-bold text-[15px] flex justify-center items-center gap-2 shadow-lg shadow-emerald-500/25 active:scale-[0.98] transition-all">
@@ -1294,6 +1614,7 @@ function PaymentContent() {
                                         expiredAt={paymentData.expired_at}
                                         onPaymentSuccess={handlePaymentSuccess}
                                         onPaymentExpired={handlePaymentExpired}
+                                        onBack={handleBack}
                                     />
                                 </div>
                             </motion.div>
