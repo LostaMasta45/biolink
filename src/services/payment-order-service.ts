@@ -8,7 +8,7 @@ import {
   type PaymentLineItem,
 } from "@/lib/payment-order";
 import type { KlikQRISCreateResponse } from "@/lib/payment-types";
-import { emitInvoiceCreatedNotifications } from "@/services/whatsapp-notification-service";
+import { emitInvoiceCreatedNotifications, schedulePendingPaymentReminder } from "@/services/whatsapp-notification-service";
 
 type DatabaseRow = {
   id?: string;
@@ -39,6 +39,8 @@ type DatabaseRow = {
   updated_at?: string | null;
   [key: string]: unknown;
 };
+
+const PAYMENT_WINDOW_MS = 30 * 60 * 1000;
 
 function getPaymentAdminClient() {
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -71,6 +73,7 @@ function toPostingAddonIds(addons: number[]): number[] {
 function asPaymentResponse(order: DatabaseRow) {
   return {
     order_id: order.order_id,
+    status: order.status,
     amount: Number(order.catalog_subtotal || order.amount),
     total_amount: getPayableAmount(order),
     qris_url: order.qris_url || null,
@@ -82,6 +85,12 @@ function asPaymentResponse(order: DatabaseRow) {
     addon_names: order.addon_names || [],
     public_token: order.public_token || undefined,
     upload_token: order.upload_token || undefined,
+    poster_status: order.poster_status || "pending",
+    customer_name: order.customer_name,
+    customer_whatsapp: order.customer_whatsapp,
+    customer_company: order.customer_company,
+    package_id: order.package_id,
+    addons: order.addons || [],
   };
 }
 
@@ -258,6 +267,11 @@ export async function createPaymentOrder(input: CreatePaymentInput) {
     if (!response.ok || !provider.status) throw new Error(provider.message || "Provider QRIS menolak pembuatan pembayaran");
 
     const payableAmount = Math.ceil(Number(provider.data.total_amount || snapshot.catalogSubtotal));
+    const providerExpiry = provider.data.expired_at ? new Date(provider.data.expired_at).getTime() : NaN;
+    const expiredAt = new Date(Math.min(
+      Date.now() + PAYMENT_WINDOW_MS,
+      Number.isFinite(providerExpiry) ? providerExpiry : Number.POSITIVE_INFINITY,
+    )).toISOString();
     const { data: order, error: updateError } = await supabase.from("payment_orders").update({
       payable_amount: payableAmount,
       total_amount: payableAmount,
@@ -265,7 +279,7 @@ export async function createPaymentOrder(input: CreatePaymentInput) {
       qris_image: provider.data.qris_image || null,
       direct_url: provider.data.direct_url || null,
       signature: provider.data.signature,
-      expired_at: provider.data.expired_at,
+      expired_at: expiredAt,
       processing_error: null,
       updated_at: new Date().toISOString(),
     }).eq("order_id", orderId).select("*").single();
@@ -274,6 +288,7 @@ export async function createPaymentOrder(input: CreatePaymentInput) {
     const invoiceResult = await ensureInvoice(supabase, order, "pending");
     if (invoiceResult.created) {
       await emitInvoiceCreatedNotifications({ order, invoiceNumber: invoiceResult.invoice.invoice_number });
+      await schedulePendingPaymentReminder(order);
     }
     return asPaymentResponse(order);
   } catch (error) {
@@ -287,6 +302,13 @@ export async function confirmPaidPayment(input: { orderId: string; paidAt?: stri
   const supabase = getPaymentAdminClient();
   const { data: initial, error: initialError } = await supabase.from("payment_orders").select("*").eq("order_id", input.orderId).maybeSingle();
   if (initialError || !initial) throw new Error("Order pembayaran tidak ditemukan");
+
+  const expiresAt = initial.expired_at ? new Date(initial.expired_at).getTime() : NaN;
+  const paidAt = input.paidAt ? new Date(input.paidAt).getTime() : Date.now();
+  if (initial.status === "PENDING" && Number.isFinite(expiresAt) && paidAt > expiresAt) {
+    const expired = await markPaymentExpired(input.orderId, `local_expiry:${initial.updated_at || initial.order_id}`, input.payload);
+    return { order: expired ?? initial, confirmed: false, processed: false, processingError: "Pembayaran diterima setelah batas 30 menit berakhir" };
+  }
 
   const amount = getPayableAmount(initial, input.amountPaid);
   const { data: claimed, error: claimError } = await supabase.from("payment_orders").update({
@@ -317,7 +339,7 @@ export async function confirmPaidPayment(input: { orderId: string; paidAt?: stri
     // already accepted, its unique notification job prevents a duplicate; this
     // also repairs PAID orders created before the invoice event was wired up.
     const invoiceResult = await ensureInvoice(supabase, order, "paid");
-    await emitInvoiceCreatedNotifications({ order, invoiceNumber: invoiceResult.invoice.invoice_number });
+    await emitInvoiceCreatedNotifications({ order, invoiceNumber: invoiceResult.invoice.invoice_number, includeCustomer: false });
     await ensureFinanceTransaction(supabase, order, amount);
     await ensurePostingDraft(supabase, order, amount);
     await supabase.from("payment_orders").update({ processed_at: new Date().toISOString(), processing_error: null }).eq("order_id", input.orderId);

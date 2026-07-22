@@ -75,7 +75,7 @@ function ThankYouContent() {
                     // We don't have individual addon prices saved, so we distribute the remaining total amount.
                     // Or we just add them as 0 price items if total_amount is not available.
                     // In reality, total_amount = amount + addons.
-                    let addonsTotal = (data.total_amount || data.amount) - data.amount;
+                    const addonsTotal = (data.total_amount || data.amount) - data.amount;
                     if (addonsTotal > 0 && data.addon_names.length > 0) {
                         const pricePerAddon = Math.round(addonsTotal / data.addon_names.length);
                         data.addon_names.forEach((name: string, idx: number) => {
@@ -646,7 +646,7 @@ function ThankYouContent() {
             {/* Mobile View */}
             <motion.div 
                 initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                className="md:hidden min-h-screen bg-[#00a550] flex flex-col font-sans relative overflow-x-hidden"
+                className="md:hidden min-h-[100dvh] bg-[#00a550] flex flex-col font-sans relative overflow-x-hidden"
             >
                 {/* Background elements */}
                 <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/4 pointer-events-none" />
@@ -658,7 +658,7 @@ function ThankYouContent() {
                 </div>
                 
                 {/* Floating Content Card */}
-                <div className="flex-1 bg-[#f8fafc] rounded-t-[32px] pt-20 px-6 pb-8 flex flex-col items-center relative shadow-[0_-20px_40px_rgba(0,0,0,0.15)] z-20">
+                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-[#f8fafc] rounded-t-[32px] pt-20 px-4 sm:px-6 pb-[calc(2rem+env(safe-area-inset-bottom))] flex flex-col items-center relative shadow-[0_-20px_40px_rgba(0,0,0,0.15)] z-20">
                     {/* Floating Success Icon */}
                     <div className="absolute -top-14 left-1/2 -translate-x-1/2 w-28 h-28 z-30">
                         <motion.div 
@@ -769,6 +769,45 @@ function ThankYouContent() {
                             </div>
                         </div>
                     </motion.div>
+
+                    {/* Download Invoice — also available on small screens */}
+                    {invoiceData && (
+                        <motion.div
+                            initial={{ y: 20, opacity: 0 }}
+                            animate={{ y: 0, opacity: 1 }}
+                            transition={{ delay: 0.55 }}
+                            className="w-full bg-white rounded-3xl p-5 border border-emerald-100 shadow-sm mb-8"
+                        >
+                            <div className="flex items-center gap-3 mb-4">
+                                <div className="w-10 h-10 rounded-full bg-emerald-50 flex items-center justify-center shrink-0">
+                                    <FileText className="w-5 h-5 text-emerald-600" />
+                                </div>
+                                <div>
+                                    <h3 className="font-bold text-slate-800">Invoice Tersedia</h3>
+                                    <p className="text-xs text-slate-500">Download bukti pembayaran</p>
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
+                                <Button
+                                    variant="outline"
+                                    onClick={() => handleDownload("png")}
+                                    disabled={isDownloading}
+                                    className="w-full rounded-xl bg-white"
+                                >
+                                    {isDownloading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Download className="w-4 h-4 mr-2" />}
+                                    PNG
+                                </Button>
+                                <Button
+                                    onClick={() => handleDownload("pdf")}
+                                    disabled={isDownloading}
+                                    className="w-full rounded-xl bg-slate-800 text-white hover:bg-slate-900"
+                                >
+                                    {isDownloading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <FileText className="w-4 h-4 mr-2" />}
+                                    PDF
+                                </Button>
+                            </div>
+                        </motion.div>
+                    )}
                     
                     {/* Action Buttons */}
                     <motion.div 

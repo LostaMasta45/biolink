@@ -18,7 +18,7 @@ import { StepIndicator } from "@/components/payment/step-indicator";
 import { PAYMENT_PACKAGES, PAYMENT_ADDONS } from "@/lib/payment-types";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import toast from "react-hot-toast";
 import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
@@ -36,6 +36,7 @@ const AVAILABLE_PAYMENT_PACKAGES = PAYMENT_PACKAGES.filter((item) => item.isAvai
 
 type ActivePayment = {
     order_id: string;
+    status?: "PENDING" | "PAID" | "EXPIRED" | "CANCELLED";
     amount: number;
     total_amount: number;
     qris_url: string | null;
@@ -52,10 +53,12 @@ type ActivePayment = {
     customer_name: string;
     customer_whatsapp: string;
     customer_company: string;
+    poster_status?: "pending" | "uploaded" | "deferred";
 };
 
 function PaymentContent() {
     const searchParams = useSearchParams();
+    const router = useRouter();
     const [isClient, setIsClient] = useState(false);
     
     // States
@@ -88,6 +91,7 @@ function PaymentContent() {
     useEffect(() => {
         setIsClient(true);
         let hasActivePayment = false;
+        const resumeToken = searchParams.get("resume");
 
         // Restore form data
         const savedForm = localStorage.getItem("ilj_payment_form_v2");
@@ -107,7 +111,7 @@ function PaymentContent() {
 
         // Restore payment data
         const savedPayment = localStorage.getItem("ilj_active_payment_v2");
-        if (savedPayment) {
+        if (savedPayment && !resumeToken) {
             try {
                 const parsedPayment = JSON.parse(savedPayment);
                 const expiry = new Date(parsedPayment.expired_at).getTime();
@@ -126,7 +130,34 @@ function PaymentContent() {
             setSelectedPackage(Number(pkgId));
             if (!hasActivePayment) setStep(2); // Auto proceed to step 2 if package pre-selected
         }
-    }, [searchParams]);
+
+        if (resumeToken && !hasActivePayment) {
+            localStorage.removeItem("ilj_active_payment_v2");
+            void fetch(`/api/payment/resume/${encodeURIComponent(resumeToken)}`, { cache: "no-store" })
+                .then(async (response) => {
+                    const data = await response.json();
+                    if (!response.ok || !data.success || !data.data) throw new Error(data.error || "Sesi pembayaran tidak ditemukan");
+                    const resumed = data.data as ActivePayment;
+                    setPaymentData(resumed);
+                    setCustomerName(resumed.customer_name || "");
+                    setCustomerWhatsapp(resumed.customer_whatsapp || "");
+                    setCustomerCompany(resumed.customer_company || "");
+                    setSelectedPackage(resumed.package_id || null);
+                    setSelectedAddons(Array.isArray(resumed.addons) ? resumed.addons : []);
+                    if (resumed.status === "PAID" && !["uploaded", "deferred"].includes(resumed.poster_status || "pending")) {
+                        setStep(4);
+                    } else if (resumed.status === "PAID") {
+                        router.replace(`/payment/thankyou?order=${encodeURIComponent(resumed.order_id)}`);
+                    } else {
+                        setStep(3);
+                    }
+                })
+                .catch((error) => {
+                    console.error("Payment resume error", error);
+                    toast.error("Sesi pembayaran tidak dapat dilanjutkan. Silakan buka ulang link QRIS.");
+                });
+        }
+    }, [router, searchParams]);
 
     useEffect(() => {
         paymentAttemptRef.current = null;
@@ -232,7 +263,10 @@ function PaymentContent() {
     };
 
     const handlePaymentSuccess = () => {
-        // Instead of showing success, go to Step 4 (Upload Poster)
+        if (!paymentData?.order_id) return;
+        // Keep the active payment session alive until the poster step is
+        // completed. Thank-you is the final step, not the immediate payment
+        // callback destination.
         setStep(4);
     };
 
@@ -319,10 +353,8 @@ function PaymentContent() {
             localStorage.removeItem("ilj_active_payment_v2");
             localStorage.removeItem("ilj_payment_form_v2");
 
-            // Show success
-            setIsSuccess(true);
-            setShowConfetti(true);
-            setTimeout(() => setShowConfetti(false), 5000);
+            toast.success("Poster berhasil masuk antrean");
+            router.replace(`/payment/thankyou?order=${encodeURIComponent(paymentData.order_id)}`);
         } catch (error) {
             console.error("Upload error:", error);
             alert(error instanceof Error ? error.message : "Terjadi kesalahan saat upload poster");
@@ -343,9 +375,8 @@ function PaymentContent() {
             if (!data.success) throw new Error(data.error || "Status unggah nanti tidak dapat disimpan");
             localStorage.removeItem("ilj_active_payment_v2");
             localStorage.removeItem("ilj_payment_form_v2");
-            setIsSuccess(true);
-            setShowConfetti(true);
-            setTimeout(() => setShowConfetti(false), 5000);
+            toast.success("Poster akan dikirim kemudian");
+            if (paymentData?.order_id) router.replace(`/payment/thankyou?order=${encodeURIComponent(paymentData.order_id)}`);
         } catch (error) {
             alert(error instanceof Error ? error.message : "Coba lagi untuk menyimpan pilihan unggah nanti");
         } finally {
@@ -387,7 +418,7 @@ function PaymentContent() {
         ];
 
         if (paymentData.addon_names && Array.isArray(paymentData.addon_names)) {
-            let addonsTotal = (paymentData.total_amount || paymentData.amount) - paymentData.amount;
+            const addonsTotal = (paymentData.total_amount || paymentData.amount) - paymentData.amount;
             if (addonsTotal > 0 && paymentData.addon_names.length > 0) {
                 const pricePerAddon = Math.round(addonsTotal / paymentData.addon_names.length);
                 paymentData.addon_names.forEach((name: string, idx: number) => {

@@ -220,7 +220,9 @@ export const COMMANDS: Record<string, Command> = {
 
       const wa = data.customer_whatsapp;
       const nominal = data.amount || 0;
-      const payUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'https://infolokerjombang.net'}/pay/${orderId}`;
+      const payUrl = data.public_token
+        ? `${process.env.NEXT_PUBLIC_APP_URL || 'https://infolokerjombang.net'}/pay/${data.public_token}/qris`
+        : `${process.env.NEXT_PUBLIC_APP_URL || 'https://infolokerjombang.net'}/payment`;
 
       const notification = await emitNotification({
         eventKey: 'invoice.reminder.customer',
@@ -565,11 +567,18 @@ async function handleConversationState(phoneId: string, senderPhone: string, tex
   const data = session.data || {};
   let nextState = 'IDLE';
   let reply = '';
+  let buttons: Array<{ id: string; title: string }> | null = null;
   const inputText = text.trim();
 
   console.log(`[StateMachine] 🔄 Processing | state=${state} | input="${inputText.substring(0, 50)}" | phoneId(webhook)=${phoneId} | phoneId(session)=${sessionPhoneId}`);
 
   try {
+    const normalizedInput = inputText.toUpperCase().replace(/[\s-]+/g, '_');
+    if (normalizedInput === 'BATAL' || normalizedInput === 'CANCEL') {
+      await supabase.from('bot_sessions').delete().eq('sender_phone', senderPhone);
+      await sendTextMessage(phoneId, senderPhone, 'Pembuatan invoice dibatalkan. Tidak ada transaksi yang dibuat.');
+      return true;
+    }
     // === ALUR LOWONGAN ===
     if (state === 'LOWONGAN_AWAIT_NAME') {
       data.customer_name = text.trim();
@@ -585,7 +594,8 @@ async function handleConversationState(phoneId: string, senderPhone: string, tex
       data.amount = parseInt(text.replace(/[^0-9]/g, ''));
       const orderId = `INV-${Date.now().toString().slice(-6)}`;
       
-      // Save to payment_orders (legacy)
+      // !buat_invoice adalah invoice manual: pembayaran sudah diterima.
+      // Tidak ada QRIS atau alur penagihan yang dibuat dari command ini.
       await supabase.from('payment_orders').insert({
         order_id: orderId,
         customer_name: data.customer_name,
@@ -595,7 +605,8 @@ async function handleConversationState(phoneId: string, senderPhone: string, tex
         package_name: 'Loker Highlight',
         amount: data.amount,
         total_amount: data.amount,
-        status: 'PENDING'
+        status: 'PAID',
+        paid_at: new Date().toISOString()
       });
 
       // Save to invoices (dashboard)
@@ -612,7 +623,7 @@ async function handleConversationState(phoneId: string, senderPhone: string, tex
         tax_percent: 0,
         tax_amount: 0,
         total: data.amount,
-        status: 'sent',
+        status: 'paid',
         template: 'modern'
       }).select().single();
 
@@ -642,8 +653,103 @@ async function handleConversationState(phoneId: string, senderPhone: string, tex
     }
     else if (state === 'UMUM_AWAIT_WA') {
       data.wa = text.replace(/[^0-9]/g, '');
-      nextState = 'UMUM_AWAIT_PACKAGE';
+      data.items = [];
+      nextState = 'UMUM_ITEM_KIND';
+      buttons = [{ id: 'PAKET', title: 'Paket Utama' }, { id: 'ADDON', title: 'Add-on' }, { id: 'BATAL', title: 'Batal' }];
       reply = '📦 Masukkan *Nama Paket / Layanan Utama*:';
+    }
+    else if (state === 'UMUM_ITEM_KIND') {
+      if (!['PAKET', 'ADDON', 'ADD_ON'].includes(normalizedInput)) {
+        nextState = 'UMUM_ITEM_KIND';
+        buttons = [{ id: 'PAKET', title: 'Paket Utama' }, { id: 'ADDON', title: 'Add-on' }, { id: 'BATAL', title: 'Batal' }];
+        reply = 'Pilih tombol Paket Utama atau Add-on.';
+      } else {
+        data.pending_item_kind = normalizedInput === 'PAKET' ? 'package' : 'addon';
+        nextState = 'UMUM_ITEM_NAME';
+        reply = 'Masukkan nama paket/add-on:';
+      }
+    }
+    else if (state === 'UMUM_ITEM_NAME') {
+      if (!inputText) throw new Error('Nama item tidak boleh kosong.');
+      data.pending_item_name = inputText;
+      nextState = 'UMUM_ITEM_PRICE';
+      reply = 'Masukkan harga satuan (angka saja):';
+    }
+    else if (state === 'UMUM_ITEM_PRICE') {
+      const unitPrice = Number(inputText.replace(/[^0-9]/g, ''));
+      if (!Number.isInteger(unitPrice) || unitPrice <= 0) throw new Error('Harga harus berupa angka lebih dari 0.');
+      data.pending_item_price = unitPrice;
+      nextState = 'UMUM_ITEM_QTY';
+      reply = 'Masukkan jumlah/qty item ini (minimal 1):';
+    }
+    else if (state === 'UMUM_ITEM_QTY') {
+      const quantity = Number(inputText.replace(/[^0-9]/g, ''));
+      if (!Number.isInteger(quantity) || quantity < 1 || quantity > 999) throw new Error('Qty harus bilangan bulat 1 sampai 999.');
+      data.items = Array.isArray(data.items) ? data.items : [];
+      const item = { kind: data.pending_item_kind || 'addon', name: data.pending_item_name, unit_price: data.pending_item_price, quantity };
+      data.items.push(item);
+      delete data.pending_item_kind; delete data.pending_item_name; delete data.pending_item_price;
+      nextState = 'UMUM_ITEM_ACTION';
+      buttons = [{ id: 'TAMBAH_PAKET', title: 'Tambah Paket' }, { id: 'TAMBAH_ADDON', title: 'Tambah Add-on' }, { id: 'SELESAI', title: 'Selesai' }];
+      reply = `Item ditambahkan: *${item.name}* — ${quantity} × Rp ${Number(item.unit_price).toLocaleString('id-ID')} = *Rp ${(quantity * Number(item.unit_price)).toLocaleString('id-ID')}*.`;
+    }
+    else if (state === 'UMUM_ITEM_ACTION') {
+      if (normalizedInput === 'TAMBAH_PAKET' || normalizedInput === 'TAMBAH_ADDON') {
+        data.pending_item_kind = normalizedInput === 'TAMBAH_PAKET' ? 'package' : 'addon';
+        nextState = 'UMUM_ITEM_NAME';
+        reply = 'Masukkan nama paket/add-on:';
+      } else if (normalizedInput === 'SELESAI') {
+        const items = Array.isArray(data.items) ? data.items : [];
+        if (!items.length) throw new Error('Tambahkan minimal satu item terlebih dahulu.');
+        nextState = 'UMUM_CONFIRM';
+        const summary = items.map((item: any, index: number) => `${index + 1}. ${item.name}\n   ${item.quantity} × Rp ${Number(item.unit_price).toLocaleString('id-ID')} = Rp ${(Number(item.unit_price) * item.quantity).toLocaleString('id-ID')}`).join('\n');
+        const total = items.reduce((sum: number, item: any) => sum + Number(item.unit_price) * Number(item.quantity), 0);
+        buttons = [{ id: 'LANJUT', title: 'Lanjut Buat Invoice' }, { id: 'TAMBAH_ITEM', title: 'Tambah Item' }, { id: 'BATAL', title: 'Batal' }];
+        reply = `RINGKASAN INVOICE\n\nKlien: ${data.customer_name}\nWA: ${data.wa}\n\n${summary}\n\n*TOTAL LUNAS: Rp ${total.toLocaleString('id-ID')}*\n\nPilih LANJUT, TAMBAH ITEM, atau BATAL.`;
+      } else {
+        nextState = 'UMUM_ITEM_ACTION';
+        buttons = [{ id: 'TAMBAH_PAKET', title: 'Tambah Paket' }, { id: 'TAMBAH_ADDON', title: 'Tambah Add-on' }, { id: 'SELESAI', title: 'Selesai' }];
+        reply = 'Pilih Tambah Paket, Tambah Add-on, atau Selesai.';
+      }
+    }
+    else if (state === 'UMUM_CONFIRM') {
+      if (normalizedInput === 'TAMBAH_ITEM') {
+        nextState = 'UMUM_ITEM_KIND';
+        buttons = [{ id: 'PAKET', title: 'Paket Utama' }, { id: 'ADDON', title: 'Add-on' }, { id: 'BATAL', title: 'Batal' }];
+        reply = 'Pilih jenis item yang ingin ditambahkan:';
+      } else if (normalizedInput !== 'LANJUT') {
+        nextState = 'UMUM_CONFIRM';
+        buttons = [{ id: 'LANJUT', title: 'Lanjut Buat Invoice' }, { id: 'TAMBAH_ITEM', title: 'Tambah Item' }, { id: 'BATAL', title: 'Batal' }];
+        reply = 'Invoice belum dibuat. Pilih LANJUT, TAMBAH ITEM, atau BATAL.';
+      } else {
+        const items = Array.isArray(data.items) ? data.items : [];
+        if (!items.length) throw new Error('Invoice harus memiliki minimal satu item.');
+        const totalAmount = items.reduce((sum: number, item: any) => sum + Number(item.unit_price) * Number(item.quantity), 0);
+        const orderId = `INV-${Date.now().toString().slice(-6)}`;
+        const paidAt = new Date().toISOString();
+        const packageItem = items.find((item: any) => item.kind === 'package') || items[0];
+        const addons = items.filter((item: any) => item !== packageItem);
+        const { error: orderError } = await supabase.from('payment_orders').insert({
+          order_id: orderId, customer_name: data.customer_name, customer_whatsapp: data.wa,
+          customer_company: data.customer_name, package_id: 999, package_name: packageItem.name,
+          amount: totalAmount, total_amount: totalAmount,
+          addons: addons.map((item: any) => Number(item.unit_price) * Number(item.quantity)), addon_names: addons.map((item: any) => item.name),
+          price_snapshot: items.map((item: any) => ({ name: item.name, quantity: item.quantity, unit_price: Number(item.unit_price) })), status: 'PAID', paid_at: paidAt,
+        });
+        if (orderError) throw new Error(`Gagal menyimpan transaksi: ${orderError.message}`);
+        const { data: invoice, error: invoiceError } = await supabase.from('invoices').insert({
+          invoice_number: orderId, client_name: data.customer_name, client_phone: data.wa, invoice_date: paidAt,
+          subtotal: totalAmount, discount_type: 'nominal', discount_value: 0, discount_amount: 0,
+          tax_enabled: false, tax_percent: 0, tax_amount: 0, total: totalAmount, status: 'paid', template: 'modern',
+        }).select().single();
+        if (invoiceError || !invoice) throw new Error(`Gagal menyimpan invoice: ${invoiceError?.message || 'data kosong'}`);
+        const { error: itemsError } = await supabase.from('invoice_items').insert(items.map((item: any, index: number) => ({ invoice_id: invoice.id, description: item.name, quantity: Number(item.quantity), price: Number(item.unit_price), sort_order: index })));
+        if (itemsError) throw new Error(`Gagal menyimpan item invoice: ${itemsError.message}`);
+        const payUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'https://infolokerjombang.net'}/pay/${orderId}`;
+        const summary = items.map((item: any, index: number) => `${index + 1}. ${item.name} — ${item.quantity} × Rp ${Number(item.unit_price).toLocaleString('id-ID')}`).join('\n');
+        reply = `Invoice berhasil dibuat & LUNAS\n\nID: ${orderId}\nKlien: ${data.customer_name}\n\n${summary}\n\n*Total: Rp ${totalAmount.toLocaleString('id-ID')}*\n\nSilakan forward pesan ini ke customer:\n\nHalo Kak ${data.customer_name} 👋\n\nPembayaran sebesar *Rp ${totalAmount.toLocaleString('id-ID')}* telah kami terima (LUNAS).\n\nBukti invoice:\n${payUrl}`;
+        nextState = 'IDLE';
+      }
     }
     else if (state === 'UMUM_AWAIT_PACKAGE') {
       data.package_name = text.trim();
@@ -660,7 +766,7 @@ async function handleConversationState(phoneId: string, senderPhone: string, tex
         data.addons = [];
         data.addon_names = [];
         nextState = 'UMUM_AWAIT_STATUS';
-        reply = '💳 Ketik *1* jika LUNAS, ketik *2* jika PENDING:';
+        reply = '✅ Invoice manual akan ditandai *LUNAS*. Ketik *LANJUT* untuk membuat invoice:';
       } else {
         data.addon_names = [text.trim()];
         nextState = 'UMUM_AWAIT_ADDON_PRICE';
@@ -670,11 +776,11 @@ async function handleConversationState(phoneId: string, senderPhone: string, tex
     else if (state === 'UMUM_AWAIT_ADDON_PRICE') {
       data.addons = [parseInt(text.replace(/[^0-9]/g, ''))];
       nextState = 'UMUM_AWAIT_STATUS';
-      reply = '💳 Ketik *1* jika LUNAS, ketik *2* jika PENDING:';
+      reply = '✅ Invoice manual akan ditandai *LUNAS*. Ketik *LANJUT* untuk membuat invoice:';
     }
     else if (state === 'UMUM_AWAIT_STATUS') {
-      const isLunas = text.trim() === '1';
-      const status = isLunas ? 'PAID' : 'PENDING';
+      const isLunas = true;
+      const status = 'PAID';
       const orderId = `INV-${Date.now().toString().slice(-6)}`;
       const addonTotal = (data.addons || []).reduce((a: number,b: number) => a+b, 0);
       const totalAmount = data.amount + addonTotal;
@@ -773,6 +879,9 @@ async function handleConversationState(phoneId: string, senderPhone: string, tex
 
     if (reply) {
       await sendTextMessage(phoneId, senderPhone, reply);
+    }
+    if (buttons?.length) {
+      await sendButtonMessage(phoneId, senderPhone, 'Pilih langkah berikutnya:', buttons);
     }
     return true;
 

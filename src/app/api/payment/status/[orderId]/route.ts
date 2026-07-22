@@ -1,9 +1,12 @@
 import { NextResponse } from "next/server";
 import { asPaymentResponse, confirmPaidPayment, getPaymentAdminClient, markPaymentExpired } from "@/services/payment-order-service";
-import { emitPaymentPaidNotifications } from "@/services/whatsapp-notification-service";
+import { emitPaymentPaidNotifications, processDueNotificationJobs } from "@/services/whatsapp-notification-service";
 
 export async function GET(request: Request, { params }: { params: Promise<{ orderId: string }> }) {
   try {
+    // The public QRIS page polls this route, so it also drains due payment
+    // reminders while the customer keeps the QRIS page open.
+    await processDueNotificationJobs(5).catch((error) => console.error("[PaymentStatus] notification worker gagal", error));
     const { orderId } = await params;
     const token = new URL(request.url).searchParams.get("token");
     const supabase = getPaymentAdminClient();
@@ -20,6 +23,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ orde
     }
     if (order.status === "EXPIRED" || order.status === "CANCELLED") {
       return NextResponse.json({ success: true, data: { ...asPaymentResponse(order), status: order.status, paid_at: order.paid_at } });
+    }
+    if (order.expired_at && new Date(order.expired_at).getTime() <= Date.now()) {
+      const expired = await markPaymentExpired(orderId, `local_expiry:${order.updated_at}`);
+      return NextResponse.json({ success: true, data: { ...asPaymentResponse(expired || order), status: "EXPIRED", paid_at: order.paid_at } });
     }
 
     try {

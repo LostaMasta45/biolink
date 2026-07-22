@@ -5,17 +5,63 @@
       "npm": "@ai-sdk/openai-compatible",
       "name": "9Router",
       "options": {
-        "baseURL": "http://localhost:20128/v1",
-        "apiKey": "{sk-d558ba80d6a6e6cd-g0czqr-06c57033}"
+        "baseURL": "http://127.0.0.1:20128/v1",
+        "apiKey": "sk-d558ba80d6a6e6cd-g0czqr-06c57033"
       },
       "models": {
+        "OpenCOde": {
+          "name": "OpenCOde",
+          "modalities": {
+            "input": ["text", "image"],
+            "output": ["text"]
+          }
+        },
         "ar/gpt-5.5": {
-          "name": "AgentRouter GPT-5.5"
+          "name": "AgentRouter GPT-5.5",
+          "modalities": {
+            "input": ["text", "image"],
+            "output": ["text"]
+          }
+        },
+        "cx/gpt-5.6-sol": {
+          "name": "Codex GPT-5.6 Sol",
+          "modalities": {
+            "input": ["text", "image"],
+            "output": ["text"]
+          }
+        },
+        "cx/gpt-5.6-luna": {
+          "name": "Codex GPT-5.6 Luna",
+          "modalities": {
+            "input": ["text", "image"],
+            "output": ["text"]
+          }
+        },
+        "cx/gpt-5.5": {
+          "name": "Codex GPT-5.5",
+          "modalities": {
+            "input": ["text", "image"],
+            "output": ["text"]
+          }
+        },
+        "cx/gpt-5.4": {
+          "name": "Codex GPT-5.4",
+          "modalities": {
+            "input": ["text", "image"],
+            "output": ["text"]
+          }
+        },
+        "cx/gpt-5.4-mini": {
+          "name": "Codex GPT-5.4 Mini",
+          "modalities": {
+            "input": ["text", "image"],
+            "output": ["text"]
+          }
         }
       }
     }
   },
-  "model": "9router/ar/gpt-5.5",
+  "model": "9router/OpenCOde",
   "permission": {
     "edit": "ask",
     "bash": "ask"

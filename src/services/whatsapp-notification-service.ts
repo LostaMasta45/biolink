@@ -29,7 +29,7 @@ interface NotificationJobRow {
   template_id: string | null;
   recipient: string;
   sender_phone_id: string;
-  payload: { variables?: Record<string, unknown>; fallback_template?: TemplateData; requires_recipient_window?: boolean };
+  payload: { variables?: Record<string, unknown>; fallback_template?: TemplateData; requires_recipient_window?: boolean; payment_order_id?: string };
   attempts: number;
   max_attempts: number;
   template: TemplateData | null;
@@ -46,7 +46,7 @@ interface FallbackDefinition {
 const FALLBACKS: Record<string, FallbackDefinition> = {
   "payment.paid.customer": {
     recipientType: "customer", senderRole: "admin", delaySeconds: 2, dedupeWindowSeconds: 86400,
-    template: { id: "fallback-payment-customer", name: "Notif Pembayaran Customer", type: "text", body: "Halo Kak {{customer_name}} 👋\n\nPembayaran untuk *{{package_name}}* sebesar *Rp {{amount}}* telah berhasil kami terima. ✅\n\nOrder ID: *{{order_id}}*\nPoster dan pesanan Kakak akan segera kami proses.\n\nTerima kasih — Admin InfoLokerJombang" },
+    template: { id: "fallback-payment-customer", name: "Invoice Setelah Pembayaran", type: "url_button", body: "Halo Kak {{customer_name}} 👋\n\nPembayaran untuk *{{package_name}}* sebesar *Rp {{amount}}* telah berhasil kami terima. ✅\n\nTekan tombol di bawah untuk membuka invoice pembayaran.\n\nPoster dan pesanan Kakak akan segera kami proses. Terima kasih — Admin InfoLokerJombang", buttons: [{ id: "open_invoice", title: "Buka Invoice", url: "{{invoice_url}}" }] },
   },
   "payment.paid.admin": {
     recipientType: "admin", senderRole: "bot", delaySeconds: 0, dedupeWindowSeconds: 86400,
@@ -54,7 +54,7 @@ const FALLBACKS: Record<string, FallbackDefinition> = {
   },
   "invoice.created.admin": {
     recipientType: "admin", senderRole: "bot", delaySeconds: 0, dedupeWindowSeconds: 300,
-    template: { id: "fallback-invoice-admin", name: "Notif Invoice Baru Admin", type: "text", body: "🚨 *INVOICE BARU DIBUAT*\n\nID: {{invoice_number}}\nKlien: {{customer_name}}\nTotal: Rp {{amount}}\nStatus: Menunggu Pembayaran\n\n{{invoice_url}}" },
+    template: { id: "fallback-invoice-admin", name: "Notif Invoice Baru Admin", type: "url_button", body: "🚨 *INVOICE BARU DIBUAT*\n\nID: {{invoice_number}}\nKlien: {{customer_name}}\nTotal: Rp {{amount}}\nStatus: Menunggu Pembayaran", buttons: [{ id: "open_admin_invoice", title: "Buka Invoice", url: "{{invoice_url}}" }] },
   },
   "poster.received.customer": {
     recipientType: "customer", senderRole: "admin", delaySeconds: 2, dedupeWindowSeconds: 86400,
@@ -70,11 +70,11 @@ const FALLBACKS: Record<string, FallbackDefinition> = {
   },
   "invoice.created.customer": {
     recipientType: "customer", senderRole: "admin", delaySeconds: 2, dedupeWindowSeconds: 86400,
-    template: { id: "fallback-invoice-customer", name: "Invoice Baru Customer", type: "text", body: "Halo Kak {{customer_name}} 👋\n\nBerikut invoice untuk *{{package_name}}* senilai *Rp {{amount}}*.\n\n🔗 {{payment_url}}\n\nSilakan buka link untuk melihat detail tagihan dan menyelesaikan pembayaran. Terima kasih." },
+    template: { id: "fallback-invoice-customer", name: "QRIS Baru Customer", type: "url_button", body: "Halo Kak {{customer_name}} 👋\n\nQRIS untuk *{{package_name}}* senilai *Rp {{amount}}* sudah siap.\n\nTekan tombol di bawah untuk membuka QRIS dan menyelesaikan pembayaran. Terima kasih.", buttons: [{ id: "open_qris", title: "Buka QRIS", url: "{{payment_url}}" }] },
   },
   "invoice.reminder.customer": {
     recipientType: "customer", senderRole: "admin", delaySeconds: 2, dedupeWindowSeconds: 3600,
-    template: { id: "fallback-invoice-reminder", name: "Pengingat Pembayaran Customer", type: "text", body: "Halo Kak {{customer_name}} 👋\n\nKami mengingatkan bahwa tagihan *{{package_name}}* senilai *Rp {{amount}}* masih menunggu pembayaran.\n\n🔗 {{payment_url}}\n\nJika sudah membayar, pesan ini dapat diabaikan. Terima kasih." },
+    template: { id: "fallback-invoice-reminder", name: "Pengingat QRIS Customer", type: "url_button", body: "Halo Kak {{customer_name}} 👋\n\nPembayaran QRIS untuk *{{package_name}}* sebesar *Rp {{amount}}* masih menunggu.\n\nTekan tombol di bawah untuk melanjutkan pembayaran. Jika sudah membayar, pesan ini dapat diabaikan. Terima kasih.", buttons: [{ id: "open_qris_reminder", title: "Buka QRIS", url: "{{payment_url}}" }] },
   },
 };
 
@@ -83,6 +83,8 @@ export interface EmitNotificationInput {
   customerPhone?: string | null;
   variables: Record<string, unknown>;
   dedupeId?: string | null;
+  delaySeconds?: number;
+  paymentOrderId?: string | null;
 }
 
 interface PaymentNotificationOrder {
@@ -94,6 +96,7 @@ interface PaymentNotificationOrder {
   amount?: number | null;
   total_amount?: number | null;
   payable_amount?: number | null;
+  public_token?: string | null;
 }
 
 interface InvoiceNotificationOrder extends PaymentNotificationOrder {
@@ -113,12 +116,14 @@ function getAppUrl(): string {
 /** Emits the two configured payment-success rules. The job dedupe key makes this safe to call again during reconciliation. */
 export async function emitPaymentPaidNotifications(order: PaymentNotificationOrder): Promise<EmitNotificationResult[]> {
   const amount = Number(order.payable_amount || order.total_amount || order.amount || 0);
+  const invoiceUrl = order.public_token ? `${getAppUrl()}/pay/${order.public_token}` : `${getAppUrl()}/payment`;
   const variables = {
     customer_name: order.customer_name || "Pelanggan",
     company_name: order.customer_company || "-",
     package_name: order.package_name || "Paket Anda",
     amount: formatRupiahValue(amount),
     order_id: order.order_id,
+    invoice_url: invoiceUrl,
   };
   return Promise.all([
     emitNotification({ eventKey: "payment.paid.admin", variables, dedupeId: order.order_id }),
@@ -126,11 +131,33 @@ export async function emitPaymentPaidNotifications(order: PaymentNotificationOrd
   ]);
 }
 
+/** Queue one reminder five minutes after QRIS creation. The worker verifies the order is still pending before sending it. */
+export async function schedulePendingPaymentReminder(order: PaymentNotificationOrder): Promise<EmitNotificationResult> {
+  const amount = Number(order.payable_amount || order.total_amount || order.amount || 0);
+  const paymentUrl = order.public_token ? `${getAppUrl()}/pay/${order.public_token}/qris` : `${getAppUrl()}/payment`;
+  return emitNotification({
+    eventKey: "invoice.reminder.customer",
+    customerPhone: order.customer_whatsapp,
+    dedupeId: `payment-reminder:${order.order_id}`,
+    delaySeconds: 5 * 60,
+    paymentOrderId: order.order_id,
+    variables: {
+      customer_name: order.customer_name || "Pelanggan",
+      company_name: order.customer_company || "-",
+      package_name: order.package_name || "Paket Anda",
+      amount: formatRupiahValue(amount),
+      order_id: order.order_id,
+      payment_url: paymentUrl,
+    },
+  });
+}
+
 /** Emits invoice rules immediately after a QRIS order has successfully created its invoice. */
-export async function emitInvoiceCreatedNotifications(input: { order: InvoiceNotificationOrder; invoiceNumber: string }): Promise<EmitNotificationResult[]> {
+export async function emitInvoiceCreatedNotifications(input: { order: InvoiceNotificationOrder; invoiceNumber: string; includeCustomer?: boolean }): Promise<EmitNotificationResult[]> {
   const { order, invoiceNumber } = input;
   const amount = Number(order.payable_amount || order.total_amount || order.amount || 0);
-  const paymentUrl = order.public_token ? `${getAppUrl()}/pay/${order.public_token}` : `${getAppUrl()}/payment`;
+  const paymentUrl = order.public_token ? `${getAppUrl()}/pay/${order.public_token}/qris` : `${getAppUrl()}/payment`;
+  const invoiceUrl = order.public_token ? `${getAppUrl()}/pay/${order.public_token}` : `${getAppUrl()}/payment`;
   const variables = {
     customer_name: order.customer_name || "Pelanggan",
     customer_phone: normalizePhone(order.customer_whatsapp || ""),
@@ -140,12 +167,14 @@ export async function emitInvoiceCreatedNotifications(input: { order: InvoiceNot
     order_id: order.order_id,
     invoice_number: invoiceNumber,
     payment_url: paymentUrl,
-    invoice_url: paymentUrl,
+    invoice_url: invoiceUrl,
   };
-  return Promise.all([
+  const results = await Promise.all([
     emitNotification({ eventKey: "invoice.created.admin", variables, dedupeId: order.order_id }),
-    emitNotification({ eventKey: "invoice.created.customer", customerPhone: order.customer_whatsapp, variables, dedupeId: order.order_id }),
   ]);
+  if (input.includeCustomer === false) return results;
+  results.push(await emitNotification({ eventKey: "invoice.created.customer", customerPhone: order.customer_whatsapp, variables, dedupeId: order.order_id }));
+  return results;
 }
 
 export async function emitPosterReceivedNotifications(input: {
@@ -298,7 +327,7 @@ export async function emitNotification(input: EmitNotificationInput): Promise<Em
     const template = rule?.template ?? fallback?.template;
     if (!template) return { status: "failed", error: "Pesan Tersimpan belum dipilih pada rule notifikasi" };
     const variables = { ...(rule?.variable_defaults ?? {}), ...input.variables };
-    const delaySeconds = rule?.delay_seconds ?? fallback?.delaySeconds ?? 0;
+    const delaySeconds = input.delaySeconds ?? rule?.delay_seconds ?? fallback?.delaySeconds ?? 0;
     const maxAttempts = rule?.max_attempts ?? 3;
     const windowSeconds = rule?.dedupe_window_seconds ?? fallback?.dedupeWindowSeconds ?? 300;
     const bucket = Math.floor(Date.now() / Math.max(1000, windowSeconds * 1000));
@@ -322,7 +351,7 @@ export async function emitNotification(input: EmitNotificationInput): Promise<Em
       template_id: rule?.template_id ?? null,
       recipient: route.recipient,
       sender_phone_id: route.senderPhoneId,
-      payload: { variables, fallback_template: rule?.template ? undefined : template, requires_recipient_window: true },
+      payload: { variables, fallback_template: rule?.template ? undefined : template, requires_recipient_window: true, payment_order_id: input.paymentOrderId ?? undefined },
       status: "queued",
       max_attempts: maxAttempts,
       scheduled_at: scheduledAt,
@@ -372,6 +401,25 @@ export async function processNotificationJob(jobId: string): Promise<EmitNotific
   if (!template) {
     await supabase.from("notification_jobs").update({ status: "failed", last_error: "Pesan Tersimpan tidak tersedia" }).eq("id", job.id);
     return { status: "failed", error: "Pesan Tersimpan tidak tersedia" };
+  }
+
+  if (job.payload.payment_order_id) {
+    const { data: paymentOrder, error: paymentError } = await supabase
+      .from("payment_orders")
+      .select("status,expired_at")
+      .eq("order_id", job.payload.payment_order_id)
+      .maybeSingle();
+    const expired = !paymentOrder?.expired_at || new Date(paymentOrder.expired_at).getTime() <= Date.now();
+    if (paymentError || !paymentOrder || paymentOrder.status !== "PENDING" || expired) {
+      const reason = paymentError
+        ? `Pengingat pembayaran dibatalkan: status order tidak dapat dibaca (${paymentError.message})`
+        : !paymentOrder ? "Pengingat pembayaran dibatalkan: order tidak ditemukan"
+          : paymentOrder.status !== "PENDING" ? `Pengingat pembayaran dibatalkan: status order sudah ${paymentOrder.status}`
+            : "Pengingat pembayaran dibatalkan: QRIS sudah kedaluwarsa";
+      await supabase.from("notification_jobs").update({ status: "failed", last_error: reason }).eq("id", job.id);
+      await writeActivityLog({ customer: job.recipient, eventType: "notification.payment_reminder.skipped", status: "skipped", message: reason, metadata: { job_id: job.id, order_id: job.payload.payment_order_id } });
+      return { status: "skipped", reason };
+    }
   }
 
   // Existing queued jobs from before this field was introduced must be
@@ -436,8 +484,8 @@ export async function testNotificationRule(ruleId: string, customerPhone?: strin
   const variables = {
     customer_name: "Customer Test", company_name: "PT Contoh", package_name: "Paket Highlight",
     amount: "150.000", order_id: "TEST-123", invoice_number: "INV-TEST-123",
-    payment_url: `${process.env.NEXT_PUBLIC_APP_URL || "https://infolokerjombang.net"}/pay/TEST-123`,
-    invoice_url: `${process.env.NEXT_PUBLIC_APP_URL || "https://infolokerjombang.net"}/admin/invoices/TEST-123`,
+    payment_url: `${process.env.NEXT_PUBLIC_APP_URL || "https://infolokerjombang.net"}/pay/TEST-123/qris`,
+    invoice_url: `${process.env.NEXT_PUBLIC_APP_URL || "https://infolokerjombang.net"}/pay/TEST-123`,
     scheduled_date: new Date().toLocaleDateString("id-ID"), poster_count: 1, customer_phone: normalizePhone(customerPhone ?? route.recipient),
   };
   return sendDirect(rule.event_key, route.senderPhoneId, route.recipient, template, variables, `test:${ruleId}:${Date.now()}`, rule.id);

@@ -33,18 +33,28 @@ export function QrisDisplay({
     const [status, setStatus] = useState<"PENDING" | "PAID" | "EXPIRED">("PENDING");
     const [timeLeft, setTimeLeft] = useState("");
     const [isChecking, setIsChecking] = useState(false);
-    
-    const cardRef = useRef<HTMLDivElement>(null);
+
+    const statusRef = useRef(status);
+    const terminalStateRef = useRef<"PAID" | "EXPIRED" | null>(null);
+    const requestInFlightRef = useRef(false);
+    const checkStatusRef = useRef<() => void>(() => undefined);
+    const desktopQrRef = useRef<HTMLDivElement>(null);
+    const mobileQrRef = useRef<HTMLDivElement>(null);
     const [isDownloading, setIsDownloading] = useState(false);
 
     const handleDownload = async () => {
-        if (!cardRef.current) return;
+        const qrElement = [desktopQrRef.current, mobileQrRef.current]
+            .find((element) => element && element.getBoundingClientRect().width > 0);
+        if (!qrElement) return;
         setIsDownloading(true);
         const toastId = toast.loading("Mendownload QR Code...");
         
         try {
             await new Promise(r => setTimeout(r, 200));
-            const dataUrl = await toPng(cardRef.current, {
+            // Capture only the QR holder, not the branded payment card, timer,
+            // instructions, or download button. The white background keeps the
+            // exported QR reliably scannable on every device.
+            const dataUrl = await toPng(qrElement, {
                 pixelRatio: 4,
                 filter: (node) => {
                     if (node instanceof HTMLElement && node.dataset.html2canvasIgnore === "true") {
@@ -52,7 +62,7 @@ export function QrisDisplay({
                     }
                     return true;
                 },
-                backgroundColor: 'transparent'
+                backgroundColor: '#ffffff'
             });
             
             const link = document.createElement("a");
@@ -68,18 +78,45 @@ export function QrisDisplay({
         }
     };
 
-    // Countdown timer
+    const setPaymentStatus = useCallback((nextStatus: "PENDING" | "PAID" | "EXPIRED") => {
+        statusRef.current = nextStatus;
+        setStatus(nextStatus);
+    }, []);
+
+    const finishPaid = useCallback(() => {
+        if (terminalStateRef.current) return;
+        terminalStateRef.current = "PAID";
+        setPaymentStatus("PAID");
+        onPaymentSuccess();
+    }, [onPaymentSuccess, setPaymentStatus]);
+
+    const finishExpired = useCallback(() => {
+        if (terminalStateRef.current) return;
+        terminalStateRef.current = "EXPIRED";
+        setPaymentStatus("EXPIRED");
+        onPaymentExpired();
+    }, [onPaymentExpired, setPaymentStatus]);
+
     useEffect(() => {
-        const timer = setInterval(() => {
+        statusRef.current = status;
+    }, [status]);
+
+    // Countdown timer. It never decides expiry by itself; the server status
+    // endpoint gets the final say, which prevents a late local timer from
+    // overriding a successful payment.
+    useEffect(() => {
+        if (status !== "PENDING") return;
+
+        const tick = () => {
+            if (statusRef.current !== "PENDING" || terminalStateRef.current) return;
+
             const now = new Date().getTime();
             const expiry = new Date(expiredAt).getTime();
             const diff = expiry - now;
 
             if (diff <= 0) {
                 setTimeLeft("00:00");
-                setStatus("EXPIRED");
-                onPaymentExpired();
-                clearInterval(timer);
+                checkStatusRef.current();
                 return;
             }
 
@@ -87,39 +124,48 @@ export function QrisDisplay({
             const hours = Math.floor(totalSeconds / 3600);
             const minutes = Math.floor((totalSeconds % 3600) / 60);
             const seconds = totalSeconds % 60;
-            
+
             if (hours > 0) {
                 setTimeLeft(`${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`);
             } else {
                 setTimeLeft(`${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`);
             }
+        };
+
+        tick();
+        const timer = setInterval(() => {
+            tick();
         }, 1000);
 
         return () => clearInterval(timer);
-    }, [expiredAt, onPaymentExpired]);
+    }, [expiredAt, status]);
 
-    // Poll status every 1 second
+    // Poll the server periodically while the order is pending.
     const checkStatus = useCallback(async () => {
-        if (status !== "PENDING") return;
+        if (statusRef.current !== "PENDING" || terminalStateRef.current || requestInFlightRef.current) return;
+        requestInFlightRef.current = true;
         setIsChecking(true);
         try {
             const res = await fetch(`/api/payment/status/${orderId}?token=${encodeURIComponent(accessToken)}`, { cache: "no-store" });
             const data = await res.json();
             if (data.success && data.data) {
                 if (data.data.status === "PAID") {
-                    setStatus("PAID");
-                    onPaymentSuccess();
+                    finishPaid();
                 } else if (data.data.status === "EXPIRED") {
-                    setStatus("EXPIRED");
-                    onPaymentExpired();
+                    finishExpired();
                 }
             }
         } catch {
             // silently fail
         } finally {
+            requestInFlightRef.current = false;
             setIsChecking(false);
         }
-    }, [orderId, accessToken, status, onPaymentSuccess, onPaymentExpired]);
+    }, [orderId, accessToken, finishExpired, finishPaid]);
+
+    useEffect(() => {
+        checkStatusRef.current = () => { void checkStatus(); };
+    }, [checkStatus]);
 
     useEffect(() => {
         if (status !== "PENDING") return;
@@ -193,7 +239,6 @@ export function QrisDisplay({
 
                 {/* QR Code Container */}
                 <motion.div
-                    ref={cardRef}
                     initial={{ opacity: 0, scale: 0.9 }}
                     animate={{ opacity: 1, scale: 1 }}
                     transition={{ delay: 0.2 }}
@@ -251,7 +296,7 @@ export function QrisDisplay({
                                 status === "EXPIRED" ? "bg-gradient-to-br from-red-400 to-red-600 shadow-red-500/25" :
                                 "bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 shadow-purple-500/25"
                             )}>
-                                <div className="p-3 w-full h-full bg-white dark:bg-slate-900 rounded-[1.1rem] text-slate-900 dark:text-white flex items-center justify-center relative">
+                                <div ref={desktopQrRef} className="p-3 w-full h-full bg-white dark:bg-slate-900 rounded-[1.1rem] text-slate-900 dark:text-white flex items-center justify-center relative">
                                     {qrSrc ? (
                                         <img
                                             src={qrSrc}
@@ -367,9 +412,9 @@ export function QrisDisplay({
 
             {/* Mobile View */}
             {/* Mobile Native View (Full Screen - Green E-Wallet Style) */}
-            <div className="flex md:hidden fixed inset-0 z-[100] bg-[#00a550] flex-col font-sans">
+            <div className="flex md:hidden fixed inset-0 z-[100] min-h-[100dvh] overflow-hidden bg-[#00a550] flex-col font-sans">
                 {/* Header (Diabaikan saat download) */}
-                <div className="flex items-center px-4 pt-10 pb-4 text-white relative z-10 gap-3" data-html2canvas-ignore="true">
+                <div className="flex items-center px-4 pt-[calc(1rem+env(safe-area-inset-top))] pb-4 text-white relative z-10 gap-3" data-html2canvas-ignore="true">
                     {onBack && (
                         <button 
                             onClick={onBack}
@@ -412,8 +457,7 @@ export function QrisDisplay({
                 
                 {/* Floating Content Card */}
                 <div 
-                    ref={cardRef}
-                    className="flex-1 bg-white rounded-t-[32px] pt-14 px-6 pb-8 flex flex-col items-center relative shadow-[0_-10px_20px_rgba(0,0,0,0.1)] mt-8"
+                    className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-white rounded-t-[32px] pt-14 px-4 sm:px-6 pb-[calc(2rem+env(safe-area-inset-bottom))] flex flex-col items-center relative shadow-[0_-10px_20px_rgba(0,0,0,0.1)] mt-8"
                 >
                     {/* Floating Avatar */}
                     <div className="absolute -top-12 left-1/2 -translate-x-1/2 w-24 h-24 bg-white rounded-full p-2 shadow-lg">
@@ -425,7 +469,7 @@ export function QrisDisplay({
                     <h2 className="text-2xl font-bold text-slate-800 mb-1 tracking-tight">infolokerjombang</h2>
                     <p className="text-slate-500 text-sm font-semibold mb-6 bg-slate-100 px-4 py-1.5 rounded-full">Rp {totalAmount.toLocaleString("id-ID")}</p>
                     
-                    <div className="w-full max-w-[280px] aspect-square flex items-center justify-center p-5 rounded-[32px] border-2 border-slate-100 bg-white mb-6 shadow-sm relative overflow-hidden">
+                    <div ref={mobileQrRef} className="w-[min(72vw,280px)] max-w-[280px] aspect-square flex items-center justify-center p-4 sm:p-5 rounded-[32px] border-2 border-slate-100 bg-white mb-6 shadow-sm relative overflow-hidden shrink-0">
                         {qrSrc ? (
                             <img
                                 src={qrSrc}

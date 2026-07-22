@@ -31,7 +31,7 @@ interface NotificationJob {
 }
 
 const EVENT_VARIABLES: Record<string, string[]> = {
-  "payment.paid.customer": ["customer_name", "company_name", "package_name", "amount", "order_id"],
+  "payment.paid.customer": ["customer_name", "company_name", "package_name", "amount", "order_id", "invoice_url"],
   "payment.paid.admin": ["customer_name", "company_name", "package_name", "amount", "order_id"],
   "invoice.created.admin": ["invoice_number", "customer_name", "customer_phone", "amount", "invoice_url"],
   "invoice.created.customer": ["customer_name", "package_name", "amount", "order_id", "payment_url"],
