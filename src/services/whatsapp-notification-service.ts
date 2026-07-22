@@ -1,4 +1,5 @@
 import { getDynamicAccounts } from "@/lib/whatsapp/kirimdev-client";
+import { describeServiceWindow, getServiceWindowStatus } from "@/lib/whatsapp/service-window";
 import { sendMappedTemplate, type TemplateData } from "@/services/kirimdev-mapper";
 import { whatsappAdminClient as supabase, writeActivityLog } from "@/services/whatsapp-audit-service";
 
@@ -28,7 +29,7 @@ interface NotificationJobRow {
   template_id: string | null;
   recipient: string;
   sender_phone_id: string;
-  payload: { variables?: Record<string, unknown>; fallback_template?: TemplateData };
+  payload: { variables?: Record<string, unknown>; fallback_template?: TemplateData; requires_recipient_window?: boolean };
   attempts: number;
   max_attempts: number;
   template: TemplateData | null;
@@ -57,7 +58,15 @@ const FALLBACKS: Record<string, FallbackDefinition> = {
   },
   "poster.received.customer": {
     recipientType: "customer", senderRole: "admin", delaySeconds: 2, dedupeWindowSeconds: 86400,
-    template: { id: "fallback-poster-customer", name: "Konfirmasi Poster Diterima", type: "text", body: "Halo Kak {{customer_name}} 👋\n\nPoster lowongan *{{company_name}}* sudah kami terima! ✅\n\nTim kami akan segera memproses dan menjadwalkan posting sesuai paket yang dipilih.\n\nTerima kasih — Admin InfoLokerJombang" },
+    template: { id: "fallback-poster-customer", name: "Konfirmasi Poster Diterima", type: "text", body: "Halo Kak {{customer_name}} 👋\n\nPoster lowongan *{{company_name}}* sudah kami terima dan sudah masuk *antrean posting*. ✅\n\nPaket: *{{package_name}}*\nJumlah poster: *{{poster_count}}*\nTarget jadwal: *{{scheduled_date}}*\n\nTim kami akan mengecek materi lalu menerbitkannya sesuai antrean. Terima kasih — Admin InfoLokerJombang" },
+  },
+  "poster.received.admin": {
+    recipientType: "admin", senderRole: "bot", delaySeconds: 0, dedupeWindowSeconds: 86400,
+    template: { id: "fallback-poster-admin", name: "Laporan Poster Masuk", type: "text", body: "🖼️ *POSTER MASUK ANTREAN*\n\nKlien: {{customer_name}} ({{company_name}})\nPaket: {{package_name}}\nJumlah poster: {{poster_count}}\nOrder ID: {{order_id}}\nTarget jadwal: {{scheduled_date}}\n\nStatus antrean: siap diproses." },
+  },
+  "customer.message.admin": {
+    recipientType: "admin", senderRole: "bot", delaySeconds: 0, dedupeWindowSeconds: 86400,
+    template: { id: "fallback-customer-message-admin", name: "Laporan Aktivitas Customer", type: "text", body: "💬 *AKTIVITAS CUSTOMER*\n\nNomor: {{customer_phone}}\nJenis: {{message_type}}\nPesan: {{message}}\n\nBot telah mencatat aktivitas customer ini." },
   },
   "invoice.created.customer": {
     recipientType: "customer", senderRole: "admin", delaySeconds: 2, dedupeWindowSeconds: 86400,
@@ -76,11 +85,88 @@ export interface EmitNotificationInput {
   dedupeId?: string | null;
 }
 
+interface PaymentNotificationOrder {
+  order_id: string;
+  customer_name?: string | null;
+  customer_whatsapp?: string | null;
+  customer_company?: string | null;
+  package_name?: string | null;
+  amount?: number | null;
+  total_amount?: number | null;
+  payable_amount?: number | null;
+}
+
+interface InvoiceNotificationOrder extends PaymentNotificationOrder {
+  public_token?: string | null;
+}
+
 export type EmitNotificationResult =
   | { status: "sent"; jobId?: string; messageId?: string }
   | { status: "queued"; jobId: string; scheduledAt: string }
   | { status: "skipped"; reason: string }
   | { status: "failed"; error: string };
+
+function getAppUrl(): string {
+  return (process.env.NEXT_PUBLIC_APP_URL || "https://infolokerjombang.net").replace(/\/$/, "");
+}
+
+/** Emits the two configured payment-success rules. The job dedupe key makes this safe to call again during reconciliation. */
+export async function emitPaymentPaidNotifications(order: PaymentNotificationOrder): Promise<EmitNotificationResult[]> {
+  const amount = Number(order.payable_amount || order.total_amount || order.amount || 0);
+  const variables = {
+    customer_name: order.customer_name || "Pelanggan",
+    company_name: order.customer_company || "-",
+    package_name: order.package_name || "Paket Anda",
+    amount: formatRupiahValue(amount),
+    order_id: order.order_id,
+  };
+  return Promise.all([
+    emitNotification({ eventKey: "payment.paid.admin", variables, dedupeId: order.order_id }),
+    emitNotification({ eventKey: "payment.paid.customer", customerPhone: order.customer_whatsapp, variables, dedupeId: order.order_id }),
+  ]);
+}
+
+/** Emits invoice rules immediately after a QRIS order has successfully created its invoice. */
+export async function emitInvoiceCreatedNotifications(input: { order: InvoiceNotificationOrder; invoiceNumber: string }): Promise<EmitNotificationResult[]> {
+  const { order, invoiceNumber } = input;
+  const amount = Number(order.payable_amount || order.total_amount || order.amount || 0);
+  const paymentUrl = order.public_token ? `${getAppUrl()}/pay/${order.public_token}` : `${getAppUrl()}/payment`;
+  const variables = {
+    customer_name: order.customer_name || "Pelanggan",
+    customer_phone: normalizePhone(order.customer_whatsapp || ""),
+    company_name: order.customer_company || "-",
+    package_name: order.package_name || "Paket Anda",
+    amount: formatRupiahValue(amount),
+    order_id: order.order_id,
+    invoice_number: invoiceNumber,
+    payment_url: paymentUrl,
+    invoice_url: paymentUrl,
+  };
+  return Promise.all([
+    emitNotification({ eventKey: "invoice.created.admin", variables, dedupeId: order.order_id }),
+    emitNotification({ eventKey: "invoice.created.customer", customerPhone: order.customer_whatsapp, variables, dedupeId: order.order_id }),
+  ]);
+}
+
+export async function emitPosterReceivedNotifications(input: {
+  order: PaymentNotificationOrder;
+  posterCount: number;
+  scheduledDate?: string | null;
+}): Promise<EmitNotificationResult[]> {
+  const { order } = input;
+  const variables = {
+    customer_name: order.customer_name || "Pelanggan",
+    company_name: order.customer_company || "-",
+    package_name: order.package_name || "Paket Anda",
+    order_id: order.order_id,
+    poster_count: input.posterCount,
+    scheduled_date: input.scheduledDate || "Menunggu penjadwalan",
+  };
+  return Promise.all([
+    emitNotification({ eventKey: "poster.received.customer", customerPhone: order.customer_whatsapp, variables, dedupeId: order.order_id }),
+    emitNotification({ eventKey: "poster.received.admin", variables, dedupeId: order.order_id }),
+  ]);
+}
 
 function normalizePhone(phone: string): string {
   const digits = phone.replace(/\D/g, "");
@@ -180,6 +266,25 @@ async function getRule(eventKey: string): Promise<{ rule: NotificationRuleRow | 
   return { rule: data as unknown as NotificationRuleRow | null, tableMissing: false };
 }
 
+async function getRecipientServiceWindow(recipient: string) {
+  const { data, error } = await supabase.from("whatsapp_contact_activity")
+    .select("last_inbound_at")
+    .eq("customer", recipient)
+    .maybeSingle();
+  if (error) throw new Error(`Jendela layanan customer gagal dibaca: ${error.message}`);
+  return getServiceWindowStatus(data?.last_inbound_at ?? null);
+}
+
+async function logCustomerWindowBlock(input: { eventKey: string; recipient: string; reason: string; jobId?: string; ruleId?: string | null; test?: boolean }) {
+  await writeActivityLog({
+    customer: input.recipient,
+    eventType: "notification.blocked_24h",
+    status: "skipped",
+    message: `${input.eventKey} tidak dikirim. ${input.reason}`,
+    metadata: { event_key: input.eventKey, job_id: input.jobId ?? null, rule_id: input.ruleId ?? null, test: input.test ?? false, reason: "outside_or_unknown_24h_window" },
+  });
+}
+
 export async function emitNotification(input: EmitNotificationInput): Promise<EmitNotificationResult> {
   const fallback = FALLBACKS[input.eventKey];
   try {
@@ -199,6 +304,13 @@ export async function emitNotification(input: EmitNotificationInput): Promise<Em
     const bucket = Math.floor(Date.now() / Math.max(1000, windowSeconds * 1000));
     const dedupeKey = `${input.eventKey}:${input.dedupeId || route.recipient}:${input.dedupeId ? "event" : bucket}`;
 
+    const serviceWindow = await getRecipientServiceWindow(route.recipient);
+    if (serviceWindow.state !== "active") {
+      const reason = describeServiceWindow(serviceWindow);
+      await logCustomerWindowBlock({ eventKey: input.eventKey, recipient: route.recipient, reason, ruleId: rule?.id });
+      return { status: "skipped", reason };
+    }
+
     if (tableMissing) {
       return sendDirect(input.eventKey, route.senderPhoneId, route.recipient, template, variables, dedupeKey, rule?.id);
     }
@@ -210,7 +322,7 @@ export async function emitNotification(input: EmitNotificationInput): Promise<Em
       template_id: rule?.template_id ?? null,
       recipient: route.recipient,
       sender_phone_id: route.senderPhoneId,
-      payload: { variables, fallback_template: rule?.template ? undefined : template },
+      payload: { variables, fallback_template: rule?.template ? undefined : template, requires_recipient_window: true },
       status: "queued",
       max_attempts: maxAttempts,
       scheduled_at: scheduledAt,
@@ -262,6 +374,18 @@ export async function processNotificationJob(jobId: string): Promise<EmitNotific
     return { status: "failed", error: "Pesan Tersimpan tidak tersedia" };
   }
 
+  // Existing queued jobs from before this field was introduced must be
+  // protected too; all current Notification Center sends are free-form.
+  if (job.payload.requires_recipient_window !== false) {
+    const serviceWindow = await getRecipientServiceWindow(job.recipient);
+    if (serviceWindow.state !== "active") {
+      const reason = describeServiceWindow(serviceWindow);
+      await supabase.from("notification_jobs").update({ status: "failed", last_error: reason }).eq("id", job.id);
+      await logCustomerWindowBlock({ eventKey: job.event_key, recipient: job.recipient, reason, jobId: job.id, ruleId: job.rule_id });
+      return { status: "skipped", reason };
+    }
+  }
+
   const attempt = job.attempts + 1;
   const result = await sendDirect(job.event_key, job.sender_phone_id, job.recipient, template, job.payload.variables ?? {}, job.id, job.rule_id);
   if (result.status === "sent") {
@@ -303,6 +427,12 @@ export async function testNotificationRule(ruleId: string, customerPhone?: strin
   const route = await resolveRoute(rule.recipient_type, rule.custom_recipient, rule.sender_role, customerPhone);
   const template = rule.template;
   if (!template) return { status: "failed", error: "Pesan Tersimpan belum dipilih" };
+  const serviceWindow = await getRecipientServiceWindow(route.recipient);
+  if (serviceWindow.state !== "active") {
+    const reason = describeServiceWindow(serviceWindow);
+    await logCustomerWindowBlock({ eventKey: rule.event_key, recipient: route.recipient, reason, ruleId: rule.id, test: true });
+    return { status: "skipped", reason };
+  }
   const variables = {
     customer_name: "Customer Test", company_name: "PT Contoh", package_name: "Paket Highlight",
     amount: "150.000", order_id: "TEST-123", invoice_number: "INV-TEST-123",

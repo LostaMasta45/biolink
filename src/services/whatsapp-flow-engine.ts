@@ -1,5 +1,6 @@
 import { sendMappedTemplate, type TemplateData } from "@/services/kirimdev-mapper";
 import { whatsappAdminClient as supabase, writeActivityLog } from "@/services/whatsapp-audit-service";
+import { describeServiceWindow, getServiceWindowStatus, normalizeProviderTimestamp, type ServiceWindowStatus } from "@/lib/whatsapp/service-window";
 
 type FlowExecutionMode = "send_and_wait" | "send_and_continue" | "wait_for_reply" | "complete";
 type FlowRunStatus = "active" | "waiting" | "completed" | "failed" | "cancelled";
@@ -54,14 +55,13 @@ function normalizePhone(phone: string): string {
   return digits.startsWith("0") ? `62${digits.slice(1)}` : digits.startsWith("62") ? digits : `62${digits}`;
 }
 
-async function isInsideCustomerServiceWindow(customer: string): Promise<boolean> {
+async function getCustomerServiceWindow(customer: string): Promise<ServiceWindowStatus> {
   const { data, error } = await supabase.from("whatsapp_contact_activity")
     .select("last_inbound_at")
     .eq("customer", customer)
     .maybeSingle();
   if (error) throw new Error(`Jendela layanan customer gagal dibaca: ${error.message}`);
-  if (!data?.last_inbound_at) return false;
-  return Date.now() - new Date(data.last_inbound_at).getTime() < 24 * 60 * 60_000;
+  return getServiceWindowStatus(data?.last_inbound_at ?? null);
 }
 
 function renderValue(value: unknown, variables: Record<string, unknown>): unknown {
@@ -189,8 +189,9 @@ async function executeCurrentNode(run: FlowRunRow, hops = 0): Promise<FlowExecut
     return failRun(run, `Node "${node.name}" membutuhkan Pesan Tersimpan aktif`, node);
   }
 
-  if (!await isInsideCustomerServiceWindow(run.customer)) {
-    const error = "outside_24h_window: Pesan free-form Flow Map hanya dapat dikirim dalam 24 jam setelah pesan terakhir customer";
+  const serviceWindow = await getCustomerServiceWindow(run.customer);
+  if (serviceWindow.state !== "active") {
+    const error = `outside_24h_window: ${describeServiceWindow(serviceWindow)}`;
     await supabase.from("flow_run_steps").update({ status: "failed", error, completed_at: new Date().toISOString() }).eq("id", step.id);
     return failRun(run, error, node);
   }
@@ -339,13 +340,23 @@ async function claimTriggerFiring(trigger: FlowTriggerRow, customer: string, buc
   throw new Error(`Deduplikasi trigger flow gagal: ${error.message}`);
 }
 
-export async function recordCustomerActivity(input: { customerPhone: string; senderPhoneId: string; eventId?: string | null; text?: string }): Promise<void> {
+export async function recordCustomerActivity(input: { customerPhone: string; senderPhoneId: string; eventId?: string | null; text?: string; inboundAt?: string | null }): Promise<void> {
   const customer = normalizePhone(input.customerPhone);
   if (!customer) return;
+  const inboundAt = normalizeProviderTimestamp(input.inboundAt) ?? new Date().toISOString();
+  const { data: existing, error: lookupError } = await supabase.from("whatsapp_contact_activity")
+    .select("last_inbound_at")
+    .eq("customer", customer)
+    .maybeSingle();
+  if (lookupError) throw new Error(`Aktivitas customer gagal dibaca: ${lookupError.message}`);
+  const recordedAt = normalizeProviderTimestamp(existing?.last_inbound_at ?? null);
+  const lastInboundAt = recordedAt && new Date(recordedAt).getTime() > new Date(inboundAt).getTime()
+    ? recordedAt
+    : inboundAt;
   const { error } = await supabase.from("whatsapp_contact_activity").upsert({
     customer,
     sender_phone_id: input.senderPhoneId,
-    last_inbound_at: new Date().toISOString(),
+    last_inbound_at: lastInboundAt,
     last_inbound_event_id: input.eventId ?? null,
     last_inbound_text: input.text?.slice(0, 4000) ?? null,
   });

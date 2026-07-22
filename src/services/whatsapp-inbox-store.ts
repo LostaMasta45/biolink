@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import type { WhatsAppAccount } from "@/lib/whatsapp/types";
+import { describeServiceWindow, getServiceWindowStatus, normalizeProviderTimestamp } from "@/lib/whatsapp/service-window";
 
 const inboxDb = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -54,6 +55,16 @@ function preview(body: string | null | undefined, messageType: string) {
   const clean = body?.replace(/\s+/g, " ").trim();
   if (clean) return clean.slice(0, 180);
   return `[${messageType || "pesan"}]`;
+}
+
+function latestTimestamp(current?: string | null, candidate?: string | null): string | null {
+  const normalizedCurrent = normalizeProviderTimestamp(current);
+  const normalizedCandidate = normalizeProviderTimestamp(candidate);
+  if (!normalizedCandidate) return normalizedCurrent;
+  if (!normalizedCurrent) return normalizedCandidate;
+  return new Date(normalizedCandidate).getTime() >= new Date(normalizedCurrent).getTime()
+    ? normalizedCandidate
+    : normalizedCurrent;
 }
 
 function sourceFromSend(source?: string): InboxMessageSource {
@@ -189,8 +200,7 @@ export async function persistInboxInbound(input: {
   if (!account.is_customer_inbox) return null;
   const contact = await ensureContact(account.id, input.customer, input.profileName);
   const conversation = await getOrCreateConversation(account.id, contact.id);
-  const rawReceivedAt = input.providerCreatedAt && input.providerCreatedAt.trim() ? input.providerCreatedAt : null;
-  const receivedAt = rawReceivedAt && !isNaN(new Date(rawReceivedAt).getTime()) ? rawReceivedAt : new Date().toISOString();
+  const receivedAt = normalizeProviderTimestamp(input.providerCreatedAt) ?? new Date().toISOString();
   const { data: message, error } = await inboxDb.from("wa_inbox_messages").insert({
     wa_account_id: account.id,
     conversation_id: conversation.id,
@@ -212,16 +222,20 @@ export async function persistInboxInbound(input: {
   if (error?.code === "23505") return null;
   if (error) throw new Error(`Pesan inbound tidak dapat disimpan: ${error.message}`);
 
-  const windowExpiresAt = new Date(new Date(receivedAt).getTime() + 24 * 60 * 60_000).toISOString();
+  // History sync can arrive out of order. Never let an old inbound message
+  // shorten a newer 24-hour window that has already been recorded.
+  const lastInboundAt = latestTimestamp(conversation.last_inbound_at, receivedAt);
+  const serviceWindow = getServiceWindowStatus(lastInboundAt);
+  const isLatestInbound = lastInboundAt === receivedAt;
   try {
     await inboxDb.from("wa_inbox_conversations").update({
       status: "open",
-      unread_count: conversation.unread_count + 1,
-      needs_reply: true,
-      last_message_preview: preview(input.body, input.messageType ?? "text"),
-      last_message_at: receivedAt,
-      last_inbound_at: receivedAt,
-      service_window_expires_at: windowExpiresAt,
+      unread_count: isLatestInbound ? conversation.unread_count + 1 : conversation.unread_count,
+      needs_reply: isLatestInbound ? true : conversation.needs_reply,
+      last_message_preview: isLatestInbound ? preview(input.body, input.messageType ?? "text") : conversation.last_message_preview,
+      last_message_at: latestTimestamp(conversation.last_message_at, receivedAt),
+      last_inbound_at: lastInboundAt,
+      service_window_expires_at: serviceWindow.state === "active" || serviceWindow.state === "expired" ? serviceWindow.expiresAt : conversation.service_window_expires_at,
     }).eq("id", conversation.id);
   } catch (conversationUpdateError) {
     // Non-fatal: the message itself is already persisted.
@@ -322,13 +336,17 @@ export async function upsertInboxProviderConversation(input: {
   const conversation = await getOrCreateConversation(account.id, contact.id);
   const status: InboxConversationStatus = input.status === "pending" || input.status === "resolved" ? input.status : "open";
   const unreadCount = Math.max(0, Number(input.unreadCount ?? 0) || 0);
+  const lastInboundAt = latestTimestamp(conversation.last_inbound_at, input.lastInboundAt);
+  const lastMessageAt = latestTimestamp(conversation.last_message_at, input.lastMessageAt);
+  const serviceWindow = getServiceWindowStatus(lastInboundAt);
   const { data, error } = await inboxDb.from("wa_inbox_conversations").update({
     provider_conversation_id: input.providerConversationId,
     status,
     unread_count: unreadCount,
     needs_reply: unreadCount > 0,
-    last_message_at: input.lastMessageAt ?? conversation.last_message_at,
-    last_inbound_at: input.lastInboundAt ?? conversation.last_inbound_at,
+    last_message_at: lastMessageAt,
+    last_inbound_at: lastInboundAt,
+    service_window_expires_at: serviceWindow.state === "active" || serviceWindow.state === "expired" ? serviceWindow.expiresAt : conversation.service_window_expires_at,
   }).eq("id", conversation.id).select("id,wa_account_id,contact_id,status,priority,unread_count,needs_reply,last_message_at,last_inbound_at,last_outbound_at,service_window_expires_at,last_message_preview").single();
   if (error) throw new Error(`Percakapan provider tidak dapat disimpan: ${error.message}`);
   return data as unknown as InboxConversationRow;
@@ -407,7 +425,10 @@ export async function updateInboxConversation(id: string, patch: { status?: Inbo
 export async function stageInboxManualMessage(input: { conversationId: string; body: string; clientRequestId: string; userId?: string; quickReplyId?: string | null }) {
   const conversation = await getInboxConversation(input.conversationId);
   if (!conversation.account.is_customer_inbox) throw new Error("Akun ini bukan Inbox customer");
-  if (!conversation.service_window_expires_at || new Date(conversation.service_window_expires_at).getTime() <= Date.now()) throw new Error("Jendela layanan 24 jam telah berakhir. Pesan teks tidak boleh dikirim.");
+  const serviceWindow = getServiceWindowStatus(conversation.last_inbound_at);
+  if (serviceWindow.state !== "active") {
+    throw new Error(describeServiceWindow(serviceWindow));
+  }
   const { data: existing, error: lookupError } = await inboxDb.from("wa_inbox_messages")
     .select("id,wa_account_id,conversation_id,contact_id,provider_message_id,client_request_id,direction,message_type,body,media_url,media_mime_type,media_filename,status,source,quick_reply_id,error_message,provider_created_at,created_at,updated_at")
     .eq("wa_account_id", conversation.account.id).eq("client_request_id", input.clientRequestId).maybeSingle();

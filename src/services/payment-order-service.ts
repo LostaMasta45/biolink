@@ -8,6 +8,7 @@ import {
   type PaymentLineItem,
 } from "@/lib/payment-order";
 import type { KlikQRISCreateResponse } from "@/lib/payment-types";
+import { emitInvoiceCreatedNotifications } from "@/services/whatsapp-notification-service";
 
 type DatabaseRow = {
   id?: string;
@@ -49,6 +50,24 @@ function getPayableAmount(order: DatabaseRow, amountPaid?: number) {
   return Math.ceil(Number(amountPaid || order.payable_amount || order.total_amount || order.amount || 0));
 }
 
+// ID add-on di katalog pembayaran dan antrean posting memiliki sejarah yang
+// berbeda. Simpan ID antrean yang benar agar tim operasional menerima layanan
+// yang dibeli customer, bukan ID katalog mentah.
+const PAYMENT_TO_POSTING_ADDON_ID: Record<number, number> = {
+  1: 6, // Saluran WA/Threads/Telegram -> saluran distribusi
+  2: 1, // Grup Facebook
+  3: 2, // Pin 3 hari
+  4: 3, // Pin 7 hari
+  5: 4, // Sorotan
+  6: 5, // Link swipe up
+  7: 6, // Saluran IG
+  8: 7, // Jasa desain
+};
+
+function toPostingAddonIds(addons: number[]): number[] {
+  return [...new Set(addons.map((id) => PAYMENT_TO_POSTING_ADDON_ID[id]).filter((id): id is number => Boolean(id)))];
+}
+
 function asPaymentResponse(order: DatabaseRow) {
   return {
     order_id: order.order_id,
@@ -80,7 +99,7 @@ async function ensureInvoice(supabase: ReturnType<typeof getPaymentAdminClient>,
       if (error) throw new Error(`Status invoice tidak dapat diperbarui: ${error.message}`);
     }
     await supabase.from("payment_orders").update({ related_invoice_id: existing.id }).eq("order_id", order.order_id);
-    return existing;
+    return { invoice: existing, created: false };
   }
 
   const total = getPayableAmount(order);
@@ -122,7 +141,7 @@ async function ensureInvoice(supabase: ReturnType<typeof getPaymentAdminClient>,
 
   const { error: relationError } = await supabase.from("payment_orders").update({ related_invoice_id: invoice.id }).eq("order_id", order.order_id);
   if (relationError) throw new Error(`Relasi invoice tidak dapat disimpan: ${relationError.message}`);
-  return invoice;
+  return { invoice, created: true };
 }
 
 async function ensureFinanceTransaction(supabase: ReturnType<typeof getPaymentAdminClient>, order: DatabaseRow, amount: number) {
@@ -159,19 +178,24 @@ async function ensurePostingDraft(supabase: ReturnType<typeof getPaymentAdminCli
     .maybeSingle();
   if (findError) throw new Error(`Antrean posting tidak dapat dibaca: ${findError.message}`);
 
-  const posting = existing || (await supabase.from("posting_queue").insert({
-    company_name: order.customer_company,
-    whatsapp_number: order.customer_whatsapp,
-    scheduled_date: getTomorrowWIB(),
-    scheduled_time: "pagi",
-    package_id: order.package_id,
-    addons: order.addons || [],
-    total_price: amount,
-    status: "draft",
-    order_id: order.order_id,
-    poster_status: order.poster_status || "pending",
-    notes: `Auto dari QRIS | ${order.customer_name} | Order: ${order.order_id}`,
-  }).select("id").single()).data;
+  const { data: createdPosting, error: createPostingError } = existing
+    ? { data: existing, error: null }
+    : await supabase.from("posting_queue").insert({
+      company_name: order.customer_company,
+      whatsapp_number: order.customer_whatsapp,
+      scheduled_date: getTomorrowWIB(),
+      // Kolom scheduled_time di database bertipe time, bukan label periode.
+      scheduled_time: "10:00:00",
+      package_id: order.package_id,
+      addons: toPostingAddonIds(order.addons || []),
+      total_price: amount,
+      status: "draft",
+      order_id: order.order_id,
+      poster_status: order.poster_status || "pending",
+      notes: `Auto dari QRIS | ${order.customer_name} | Order: ${order.order_id}`,
+    }).select("id").single();
+  if (createPostingError) throw new Error(`Antrean posting tidak dapat dibuat: ${createPostingError.message}`);
+  const posting = createdPosting;
   if (!posting?.id) throw new Error("Antrean posting tidak dapat dibuat");
 
   const { error } = await supabase.from("payment_orders").update({ synced_to_posting: true, related_posting_id: posting.id }).eq("order_id", order.order_id);
@@ -247,7 +271,10 @@ export async function createPaymentOrder(input: CreatePaymentInput) {
     }).eq("order_id", orderId).select("*").single();
     if (updateError || !order) throw new Error(`QRIS dibuat tetapi order lokal tidak dapat diperbarui: ${updateError?.message || "unknown error"}`);
 
-    await ensureInvoice(supabase, order, "pending");
+    const invoiceResult = await ensureInvoice(supabase, order, "pending");
+    if (invoiceResult.created) {
+      await emitInvoiceCreatedNotifications({ order, invoiceNumber: invoiceResult.invoice.invoice_number });
+    }
     return asPaymentResponse(order);
   } catch (error) {
     const message = error instanceof Error ? error.message : "QRIS tidak dapat dibuat";
@@ -286,15 +313,21 @@ export async function confirmPaidPayment(input: { orderId: string; paidAt?: stri
   }, { onConflict: "order_id,event_key", ignoreDuplicates: true });
 
   try {
-    await ensureInvoice(supabase, order, "paid");
+    // Re-emit safely during reconciliation. If the invoice notification was
+    // already accepted, its unique notification job prevents a duplicate; this
+    // also repairs PAID orders created before the invoice event was wired up.
+    const invoiceResult = await ensureInvoice(supabase, order, "paid");
+    await emitInvoiceCreatedNotifications({ order, invoiceNumber: invoiceResult.invoice.invoice_number });
     await ensureFinanceTransaction(supabase, order, amount);
     await ensurePostingDraft(supabase, order, amount);
     await supabase.from("payment_orders").update({ processed_at: new Date().toISOString(), processing_error: null }).eq("order_id", input.orderId);
-    return { order, confirmed: Boolean(claimed), processed: true };
+    return { order, confirmed: Boolean(claimed), processed: true, processingError: null };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Sinkronisasi pembayaran gagal";
     await supabase.from("payment_orders").update({ processing_error: message }).eq("order_id", input.orderId);
-    throw new Error(message);
+    // Pembayaran sudah sah PAID. Sinkronisasi operasional dapat dipulihkan oleh
+    // polling/webhook berikutnya dan tidak boleh membatalkan notifikasi customer/admin.
+    return { order, confirmed: Boolean(claimed), processed: false, processingError: message };
   }
 }
 

@@ -40,6 +40,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { describeServiceWindow, formatServiceWindowDuration, getServiceWindowStatus } from "@/lib/whatsapp/service-window";
 import type { WhatsAppTemplate } from "@/types/whatsapp-manager";
 
 type ConversationStatus = "open" | "pending" | "resolved";
@@ -163,10 +164,14 @@ function formatTime(value: string | null) {
     : "";
 }
 function isWindowOpen(conversation: InboxConversation | null) {
-  return Boolean(
-    conversation?.service_window_expires_at &&
-      new Date(conversation.service_window_expires_at).getTime() > Date.now()
-  );
+  return getServiceWindowStatus(conversation?.last_inbound_at).state === "active";
+}
+function serviceWindowLabel(conversation: InboxConversation | null) {
+  const window = getServiceWindowStatus(conversation?.last_inbound_at);
+  if (window.state === "active") return `Aktif · sisa ${formatServiceWindowDuration(window.remainingMs)}`;
+  if (window.state === "missing") return "Menunggu chat customer";
+  if (window.state === "invalid") return "Waktu chat tidak valid";
+  return "24 jam berakhir";
 }
 const statusLabel: Record<MessageStatus, string> = {
   pending: "Menunggu",
@@ -806,11 +811,10 @@ export function InboxManager() {
                           : "destructive"
                       }
                       className="gap-1"
+                      title={describeServiceWindow(getServiceWindowStatus(selectedConversation.last_inbound_at))}
                     >
                       <Clock3 className="h-3 w-3" />
-                      {isWindowOpen(selectedConversation)
-                        ? "24 jam aktif"
-                        : "24 jam berakhir"}
+                      {serviceWindowLabel(selectedConversation)}
                     </Badge>
                     <Select
                       value={selectedConversation.status}
@@ -828,6 +832,9 @@ export function InboxManager() {
                       </SelectContent>
                     </Select>
                   </header>
+                  <p className="border-b bg-muted/30 px-4 py-2 text-xs text-muted-foreground">
+                    {describeServiceWindow(getServiceWindowStatus(selectedConversation.last_inbound_at))}
+                  </p>
                   <div className="flex-1 space-y-2 overflow-y-auto bg-[radial-gradient(#d9d4c7_1px,transparent_1px)] bg-[size:16px_16px] p-4 dark:bg-[#0b141a]">
                     {messages.length === 0 ? (
                       <div className="mx-auto mt-16 max-w-sm rounded-lg bg-background/90 p-4 text-center text-sm text-muted-foreground shadow-sm">

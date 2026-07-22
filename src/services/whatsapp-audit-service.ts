@@ -232,4 +232,18 @@ export async function recordProviderDeliveryStatus(input: {
   ]);
 }
 
+/** KirimDev returns an internal msg_* ID on the API response, then the WhatsApp
+ * wamid in its outbound webhook. Link them before delivery callbacks arrive. */
+export async function linkProviderDeliveryId(internalMessageId: string, providerMessageId: string): Promise<void> {
+  if (!internalMessageId || !providerMessageId || internalMessageId === providerMessageId) return;
+  const [autoReply, notification, flow] = await Promise.all([
+    supabase.from("auto_reply_jobs").update({ provider_message_id: providerMessageId }).eq("provider_message_id", internalMessageId),
+    supabase.from("notification_jobs").update({ provider_message_id: providerMessageId }).eq("provider_message_id", internalMessageId),
+    supabase.from("flow_run_steps").update({ provider_message_id: providerMessageId }).eq("provider_message_id", internalMessageId),
+  ]);
+  for (const result of [autoReply, notification, flow]) {
+    if (result.error) console.error("[WhatsAppAudit] Gagal menautkan ID delivery provider:", result.error.message);
+  }
+}
+
 export { supabase as whatsappAdminClient };

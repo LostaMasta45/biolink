@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { KlikQRISWebhookPayload } from "@/lib/payment-types";
 import { confirmPaidPayment, getPaymentAdminClient, markPaymentExpired } from "@/services/payment-order-service";
-import { emitNotification, formatRupiahValue } from "@/services/whatsapp-notification-service";
+import { emitPaymentPaidNotifications, formatRupiahValue } from "@/services/whatsapp-notification-service";
 import { writeActivityLog } from "@/services/whatsapp-audit-service";
 
 async function sendTelegramNotification(text: string) {
@@ -60,21 +60,14 @@ export async function POST(request: Request) {
         metadata: { order_id: orderId, amount, provider_status: providerStatus, first_confirmation: result.confirmed },
       });
 
-      // Keep existing notifications, but only once per first successful confirmation.
-      if (result.confirmed) {
-        const variables = {
-          customer_name: result.order.customer_name || "Pelanggan",
-          company_name: result.order.customer_company || "-",
-          package_name: result.order.package_name || "Paket Anda",
-          amount: formatRupiahValue(amount),
-          order_id: orderId,
-        };
-        await Promise.all([
-          emitNotification({ eventKey: "payment.paid.admin", variables, dedupeId: orderId }),
-          emitNotification({ eventKey: "payment.paid.customer", customerPhone: result.order.customer_whatsapp, variables, dedupeId: orderId }),
-          sendTelegramNotification(`<b>💳 PEMBAYARAN QRIS LUNAS</b>\n\n<b>Order:</b> ${orderId}\n<b>Perusahaan:</b> ${result.order.customer_company}\n<b>Paket:</b> ${result.order.package_name}\n<b>Total:</b> ${formatRupiahValue(amount)}\n\nPoster dapat ditunggu di antrean posting.`),
-        ]);
-      }
+      // Idempotent dedupe allows reconciliation webhooks to heal an earlier failed
+      // downstream sync without sending a second WhatsApp notification.
+      await Promise.all([
+        emitPaymentPaidNotifications(result.order),
+        result.confirmed
+          ? sendTelegramNotification(`<b>💳 PEMBAYARAN QRIS LUNAS</b>\n\n<b>Order:</b> ${orderId}\n<b>Perusahaan:</b> ${result.order.customer_company}\n<b>Paket:</b> ${result.order.package_name}\n<b>Total:</b> ${formatRupiahValue(amount)}\n\nPoster dapat ditunggu di antrean posting.`)
+          : Promise.resolve(),
+      ]);
     } else if (providerStatus === "EXPIRED") {
       await markPaymentExpired(orderId, eventKey, body);
       await writeActivityLog({ customer: order.customer_whatsapp, eventType: "payment.expired", status: "success", message: `Pembayaran ${orderId} expired`, metadata: { order_id: orderId } });

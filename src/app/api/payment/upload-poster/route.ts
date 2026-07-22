@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { getPaymentAdminClient } from "@/services/payment-order-service";
-import { emitNotification } from "@/services/whatsapp-notification-service";
+import { confirmPaidPayment, getPaymentAdminClient } from "@/services/payment-order-service";
+import { emitPosterReceivedNotifications } from "@/services/whatsapp-notification-service";
 
 const uploadPosterSchema = z.object({
   order_id: z.string().min(10).max(80),
@@ -46,8 +46,14 @@ export async function POST(request: Request) {
     }
     if (order.status !== "PAID") return NextResponse.json({ success: false, error: "Poster hanya dapat diunggah setelah pembayaran lunas" }, { status: 409 });
 
-    const { data: posting, error: postingError } = await supabase.from("posting_queue").select("*").eq("order_id", order_id).maybeSingle();
-    if (postingError || !posting) return NextResponse.json({ success: false, error: "Antrean posting belum siap. Silakan muat ulang halaman." }, { status: 409 });
+    let { data: posting, error: postingError } = await supabase.from("posting_queue").select("*").eq("order_id", order_id).maybeSingle();
+    // Webhook provider dan halaman upload bisa tiba berdekatan. Pulihkan sinkronisasi
+    // lebih dulu agar customer tidak perlu mengulang upload hanya karena antrean belum terbentuk.
+    if (!posting && !postingError) {
+      await confirmPaidPayment({ orderId: order_id, eventKey: `poster-upload-reconcile:${order_id}`, providerStatus: "PAID" });
+      ({ data: posting, error: postingError } = await supabase.from("posting_queue").select("*").eq("order_id", order_id).maybeSingle());
+    }
+    if (postingError || !posting) return NextResponse.json({ success: false, error: "Antrean posting belum siap. Silakan coba unggah lagi beberapa saat." }, { status: 409 });
 
     const notes = caption ? `${posting.notes || ""}${posting.notes ? "\n" : ""}Caption: ${caption}` : posting.notes;
     const { error: updateError } = await supabase.from("posting_queue").update({
@@ -67,13 +73,7 @@ export async function POST(request: Request) {
     const telegramCaption = `<b>🖼️ POSTER LOWONGAN DITERIMA</b>\n\n<b>Order:</b> ${order_id}\n<b>Perusahaan:</b> ${order.customer_company}\n<b>Paket:</b> ${order.package_name}\n<b>Total:</b> Rp ${total}\n<b>Status:</b> SIAP POSTING`;
     await sendTelegramWithPhoto(poster_urls[0], telegramCaption);
 
-    // Existing confirmation behaviour is retained; no new WhatsApp flow is introduced.
-    await emitNotification({
-      eventKey: "poster.received.customer",
-      customerPhone: order.customer_whatsapp,
-      dedupeId: order_id,
-      variables: { customer_name: order.customer_name, company_name: order.customer_company, package_name: order.package_name, order_id, poster_count: poster_urls.length, scheduled_date: posting.scheduled_date || "-" },
-    });
+    await emitPosterReceivedNotifications({ order, posterCount: poster_urls.length, scheduledDate: posting.scheduled_date });
 
     return NextResponse.json({ success: true, data: { posting_id: posting.id, poster_count: poster_urls.length, status: "queued" } });
   } catch (error) {

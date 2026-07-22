@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { asPaymentResponse, confirmPaidPayment, getPaymentAdminClient, markPaymentExpired } from "@/services/payment-order-service";
+import { emitPaymentPaidNotifications } from "@/services/whatsapp-notification-service";
 
 export async function GET(request: Request, { params }: { params: Promise<{ orderId: string }> }) {
   try {
@@ -13,7 +14,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ orde
 
     if (order.status === "PAID") {
       // Re-run idempotent sync so a prior temporary downstream failure heals itself.
-      await confirmPaidPayment({ orderId, eventKey: "status:paid-reconcile", providerStatus: "PAID" });
+      const result = await confirmPaidPayment({ orderId, eventKey: "status:paid-reconcile", providerStatus: "PAID" });
+      await emitPaymentPaidNotifications(result.order);
       return NextResponse.json({ success: true, data: { ...asPaymentResponse(order), status: "PAID", paid_at: order.paid_at } });
     }
     if (order.status === "EXPIRED" || order.status === "CANCELLED") {
@@ -37,6 +39,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ orde
           eventKey: `status:${provider.data.payment_date || provider.data.paid_at || "paid"}`,
           payload: provider,
         });
+        await emitPaymentPaidNotifications(result.order);
         return NextResponse.json({ success: true, data: { ...asPaymentResponse(result.order), status: "PAID", paid_at: result.order.paid_at } });
       }
       if (providerStatus === "EXPIRED") await markPaymentExpired(orderId, `status:expired:${order.updated_at}`, provider);

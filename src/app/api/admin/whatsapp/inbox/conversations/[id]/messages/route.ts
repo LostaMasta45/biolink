@@ -3,6 +3,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { sendTextMessage } from "@/lib/whatsapp/kirimdev-client";
 import { completeInboxManualMessage, listInboxMessages, stageInboxManualMessage } from "@/services/whatsapp-inbox-store";
+import { writeActivityLog } from "@/services/whatsapp-audit-service";
 
 interface RouteContext { params: Promise<{ id: string }>; }
 const sendSchema = z.object({
@@ -60,6 +61,17 @@ export async function POST(request: NextRequest, context: RouteContext) {
     if (!result.success) return NextResponse.json({ error: result.error ?? "KirimDev menolak pengiriman", data: message }, { status: 502 });
     return NextResponse.json({ data: message }, { status: 201 });
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Pesan tidak dapat dikirim" }, { status: 400 });
+    const message = error instanceof Error ? error.message : "Pesan tidak dapat dikirim";
+    if (message.startsWith("Jendela layanan WhatsApp")) {
+      const { id } = await context.params;
+      await writeActivityLog({
+        customer: `inbox:${id}`,
+        eventType: "inbox.message.blocked_24h",
+        status: "skipped",
+        message,
+        metadata: { conversation_id: id, reason: "outside_or_unknown_24h_window" },
+      });
+    }
+    return NextResponse.json({ error: message }, { status: 400 });
   }
 }

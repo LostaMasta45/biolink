@@ -17,7 +17,6 @@ import { QrisDisplay } from "@/components/payment/qris-display";
 import { StepIndicator } from "@/components/payment/step-indicator";
 import { PAYMENT_PACKAGES, PAYMENT_ADDONS } from "@/lib/payment-types";
 import { cn } from "@/lib/utils";
-import { uploadPoster } from "@/lib/posting-service";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import toast from "react-hot-toast";
@@ -282,14 +281,18 @@ function PaymentContent() {
 
         setIsUploading(true);
         try {
-            // Upload all files to Supabase Storage (HD, no compression)
+            if (!paymentData?.order_id || !paymentData.upload_token) throw new Error("Sesi pembayaran tidak lengkap. Silakan muat ulang halaman.");
+            // File diproses server agar tidak tergantung policy Storage pada browser.
             const uploadedUrls: string[] = [];
             for (const file of posterFiles) {
-                const { url, error } = await uploadPoster(file);
-                if (error || !url) {
-                    throw new Error(`Gagal upload ${file.name}: ${error}`);
-                }
-                uploadedUrls.push(url);
+                const form = new FormData();
+                form.append("order_id", paymentData.order_id);
+                form.append("upload_token", paymentData.upload_token);
+                form.append("file", file);
+                const response = await fetch("/api/payment/upload-poster-file", { method: "POST", body: form });
+                const result = await response.json();
+                if (!result.success || !result.data?.url) throw new Error(`Gagal upload ${file.name}: ${result.error || "unknown error"}`);
+                uploadedUrls.push(result.data.url);
             }
 
             // Call upload-poster API to link posters to posting queue

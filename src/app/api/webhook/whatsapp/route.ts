@@ -14,6 +14,7 @@ import { processFlowTriggers, recordCustomerActivity } from "@/services/whatsapp
 import { persistInboxInbound, persistInboxOutbound, recordInboxProviderStatus, syncInboxAccounts } from "@/services/whatsapp-inbox-store";
 import {
   claimWebhookEvent,
+  linkProviderDeliveryId,
   recordProviderDeliveryStatus,
   whatsappAdminClient,
   writeWebhookLog,
@@ -29,6 +30,7 @@ interface ParsedInboundMessage {
   mediaUrl: string | null;
   mediaMimeType: string | null;
   mediaFilename: string | null;
+  providerCreatedAt: string | null;
 }
 
 interface ParsedMessageStatus {
@@ -109,6 +111,7 @@ function parseMetaInbound(payload: KirimDevWebhookPayload): ParsedInboundMessage
     mediaUrl: typeof enrichment.media_url === "string" ? enrichment.media_url : typeof media.link === "string" ? media.link : null,
     mediaMimeType: typeof media.mime_type === "string" ? media.mime_type : null,
     mediaFilename: typeof media.filename === "string" ? media.filename : null,
+    providerCreatedAt: typeof message.timestamp === "string" || typeof message.timestamp === "number" ? String(message.timestamp) : null,
   };
 }
 
@@ -135,6 +138,7 @@ function parseLegacyInbound(payload: KirimDevWebhookPayload): ParsedInboundMessa
     mediaUrl: typeof message?.mediaUrl === "string" ? message.mediaUrl : typeof message?.media_url === "string" ? message.media_url : null,
     mediaMimeType: typeof message?.mime_type === "string" ? message.mime_type : null,
     mediaFilename: typeof message?.filename === "string" ? message.filename : null,
+    providerCreatedAt: typeof data.timestamp === "string" || typeof data.timestamp === "number" ? String(data.timestamp) : null,
   };
 }
 
@@ -203,12 +207,14 @@ function parseNativeSentMessage(payload: KirimDevWebhookPayload) {
   const phoneId = [data.session, data.phone_number_id, meta.phone_number_id].find((value): value is string => typeof value === "string" && value.length > 0) ?? "";
   const customer = typeof message.to === "string" ? message.to : "";
   const providerMessageId = typeof message.provider_id === "string" ? message.provider_id : "";
+  const internalMessageId = typeof message.id === "string" ? message.id : "";
   if (!phoneId || !customer || !providerMessageId) return null;
   return {
     phoneId,
     phoneNumber: typeof meta.display_phone_number === "string" ? meta.display_phone_number : null,
     customer,
     providerMessageId,
+    internalMessageId,
     body: typeof message.body === "string" ? message.body : "",
     messageType: typeof message.type === "string" ? message.type : "text",
     source: typeof message.source === "string" ? message.source : "app",
@@ -261,8 +267,13 @@ export async function POST(req: NextRequest) {
 
   // Setiap webhook ikut membantu menguras job yang sudah jatuh tempo. Worker cron
   // tetap menjadi jalur utama untuk delay ketika tidak ada event baru.
-  void Promise.all([processDueAutoReplyJobs(5), processDueNotificationJobs(5)])
-    .catch((error) => console.error("[Webhook] Queue worker gagal:", error));
+  // Serverless dapat menghentikan pekerjaan `void` segera setelah respons
+  // dikembalikan. Tunggu batch kecil ini supaya retry benar-benar dieksekusi.
+  try {
+    await Promise.all([processDueAutoReplyJobs(5), processDueNotificationJobs(5)]);
+  } catch (error) {
+    console.error("[Webhook] Queue worker gagal:", error);
+  }
 
   if (eventType === "message.status") {
     const status = parseMessageStatus(payload);
@@ -292,6 +303,7 @@ export async function POST(req: NextRequest) {
   if (eventType === "message.sent") {
     const sent = parseNativeSentMessage(payload);
     if (sent) {
+      await linkProviderDeliveryId(sent.internalMessageId, sent.providerMessageId);
       const accounts = await getAllAccounts();
       await syncInboxAccounts(accounts);
       const botPhoneId = accounts[1]?.phoneId;
@@ -374,13 +386,16 @@ export async function POST(req: NextRequest) {
       mediaUrl: inbound.mediaUrl,
       mediaMimeType: inbound.mediaMimeType,
       mediaFilename: inbound.mediaFilename,
+      providerCreatedAt: inbound.providerCreatedAt ?? undefined,
       payload: { event_id: eventId, message_type: inbound.messageType },
     });
   }
 
   const text = inbound.text.trim();
+  await recordCustomerActivity({ customerPhone: inbound.senderPhone, senderPhoneId: phoneId, eventId, text, inboundAt: inbound.providerCreatedAt ?? undefined });
+  // Foto, dokumen, tombol, dan jenis pesan non-teks juga merupakan inbound
+  // WhatsApp yang membuka ulang jendela layanan resmi selama 24 jam penuh.
   if (!text) return NextResponse.json({ status: "ok", action: "inbox_non_text_persisted" });
-  await recordCustomerActivity({ customerPhone: inbound.senderPhone, senderPhoneId: phoneId, eventId, text });
   if (inbound.messageId.startsWith("wamid.")) {
     const { data: receiptSettings, error: receiptError } = await whatsappAdminClient
       .from("settings")
