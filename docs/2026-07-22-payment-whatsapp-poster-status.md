@@ -218,4 +218,6 @@ Catatan persisten perubahan yang sudah dikerjakan dan dirilis hari ini:
 - Tombol download QR hanya menangkap holder QR, bukan card pembayaran, instruksi, timer, atau tombol.
 - Thank-you mobile kini memiliki tombol download invoice PNG dan PDF.
 - Fallback notifikasi invoice admin yang memiliki link diubah ke `url_button`; laporan chat customer umum tetap nonaktif.
+- Validasi sesi upload poster sekarang menerima `public_token` dari link QRIS sebagai pemulihan jika cache browser lama memiliki `upload_token` yang kedaluwarsa atau hilang. Status pembayaran dinormalisasi ke huruf besar dan endpoint mengembalikan alasan yang jelas (order tidak ditemukan, belum PAID, sesi kedaluwarsa, atau database tidak terbaca) tanpa mencatat token rahasia.
+- Patch upload poster dipublikasikan ke production deployment `dpl_4HzzvmCiV5V5B7Wp1xMAT9uErShj` dan sudah dialias ke `https://infolokerjombang.net`.
 - Validasi `npx tsc --noEmit` dan `npm run build` berhasil. Lint keseluruhan masih memiliki error baseline pada bundle Android dan komponen lama di luar perubahan ini.

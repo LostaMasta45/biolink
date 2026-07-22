@@ -144,9 +144,10 @@ function PaymentContent() {
                     setCustomerCompany(resumed.customer_company || "");
                     setSelectedPackage(resumed.package_id || null);
                     setSelectedAddons(Array.isArray(resumed.addons) ? resumed.addons : []);
-                    if (resumed.status === "PAID" && !["uploaded", "deferred"].includes(resumed.poster_status || "pending")) {
+                    const resumedStatus = String(resumed.status || "").toUpperCase();
+                    if (resumedStatus === "PAID" && !["uploaded", "deferred"].includes(String(resumed.poster_status || "pending").toLowerCase())) {
                         setStep(4);
-                    } else if (resumed.status === "PAID") {
+                    } else if (resumedStatus === "PAID") {
                         router.replace(`/payment/thankyou?order=${encodeURIComponent(resumed.order_id)}`);
                     } else {
                         setStep(3);
@@ -315,13 +316,14 @@ function PaymentContent() {
 
         setIsUploading(true);
         try {
-            if (!paymentData?.order_id || !paymentData.upload_token) throw new Error("Sesi pembayaran tidak lengkap. Silakan muat ulang halaman.");
+            if (!paymentData?.order_id || (!paymentData.upload_token && !paymentData.public_token)) throw new Error("Sesi pembayaran tidak lengkap. Silakan muat ulang halaman.");
             // File diproses server agar tidak tergantung policy Storage pada browser.
             const uploadedUrls: string[] = [];
             for (const file of posterFiles) {
                 const form = new FormData();
                 form.append("order_id", paymentData.order_id);
-                form.append("upload_token", paymentData.upload_token);
+                if (paymentData.upload_token) form.append("upload_token", paymentData.upload_token);
+                if (paymentData.public_token) form.append("public_token", paymentData.public_token);
                 form.append("file", file);
                 const response = await fetch("/api/payment/upload-poster-file", { method: "POST", body: form });
                 const result = await response.json();
@@ -336,6 +338,7 @@ function PaymentContent() {
                 body: JSON.stringify({
                     order_id: paymentData?.order_id,
                     upload_token: paymentData?.upload_token,
+                    public_token: paymentData?.public_token,
                     poster_urls: uploadedUrls,
                     caption: posterCaption || undefined,
                 }),
@@ -369,7 +372,7 @@ function PaymentContent() {
             const response = await fetch("/api/payment/defer-poster", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ order_id: paymentData?.order_id, upload_token: paymentData?.upload_token }),
+                body: JSON.stringify({ order_id: paymentData?.order_id, upload_token: paymentData?.upload_token, public_token: paymentData?.public_token }),
             });
             const data = await response.json();
             if (!data.success) throw new Error(data.error || "Status unggah nanti tidak dapat disimpan");
@@ -1468,10 +1471,10 @@ function PaymentContent() {
                     <div className="flex items-center justify-between relative z-50 mb-2 mt-2">
                         <button 
                             onClick={handleBack} 
-                            disabled={step === 1} 
+                            disabled={step === 1 || step === 3}
                             className={cn(
                                 "w-10 h-10 flex items-center justify-center bg-white/10 backdrop-blur-md rounded-full border border-white/10 transition-all active:scale-95", 
-                                step === 1 ? "opacity-0 invisible" : "opacity-100"
+                                (step === 1 || step === 3) ? "opacity-0 invisible pointer-events-none" : "opacity-100"
                             )}
                         >
                             <ArrowLeft className="w-5 h-5 text-white" />
@@ -1637,21 +1640,17 @@ function PaymentContent() {
                         )}
 
                         {step === 3 && paymentData && (
-                            <motion.div key="step3-mobile" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
-                                <div className="bg-white rounded-[1.5rem] p-6 shadow-[0_5px_20px_-5px_rgba(0,0,0,0.05)] border border-slate-100">
-                                    <QrisDisplay
-                                        orderId={paymentData.order_id}
-                                        accessToken={paymentData.public_token}
-                                        totalAmount={paymentData.total_amount}
-                                        qrisImage={paymentData.qris_image}
-                                        qrisUrl={paymentData.qris_url}
-                                        expiredAt={paymentData.expired_at}
-                                        onPaymentSuccess={handlePaymentSuccess}
-                                        onPaymentExpired={handlePaymentExpired}
-                                        onBack={handleBack}
-                                    />
-                                </div>
-                            </motion.div>
+                            <QrisDisplay
+                                orderId={paymentData.order_id}
+                                accessToken={paymentData.public_token}
+                                totalAmount={paymentData.total_amount}
+                                qrisImage={paymentData.qris_image}
+                                qrisUrl={paymentData.qris_url}
+                                expiredAt={paymentData.expired_at}
+                                onPaymentSuccess={handlePaymentSuccess}
+                                onPaymentExpired={handlePaymentExpired}
+                                onBack={handleBack}
+                            />
                         )}
 
                         {/* Step 4 Mobile: Upload Poster */}

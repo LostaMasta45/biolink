@@ -21,7 +21,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ pub
     }
 
     const response = asPaymentResponse(order);
-    if (order.status !== "PAID") response.upload_token = undefined;
+    if (String(order.status || "").toUpperCase() !== "PAID") response.upload_token = undefined;
     return NextResponse.json({ success: true, data: response }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     console.error("[PaymentResume]", error);

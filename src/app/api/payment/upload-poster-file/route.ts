@@ -16,16 +16,28 @@ export async function POST(request: Request) {
     const form = await request.formData();
     const orderId = String(form.get("order_id") || "");
     const uploadToken = String(form.get("upload_token") || "");
+    const publicToken = String(form.get("public_token") || "");
     const file = form.get("file");
-    if (!orderId || !uploadToken || !(file instanceof File)) return NextResponse.json({ success: false, error: "Data unggah poster tidak lengkap" }, { status: 400 });
+    if (!orderId || (!uploadToken && !publicToken) || !(file instanceof File)) return NextResponse.json({ success: false, error: "Data unggah poster tidak lengkap" }, { status: 400 });
     if (!file.type.startsWith("image/") || file.size <= 0 || file.size > MAX_FILE_SIZE) {
       return NextResponse.json({ success: false, error: "Poster harus berupa gambar maksimal 10 MB" }, { status: 400 });
     }
 
     const supabase = getPaymentAdminClient();
-    const { data: order, error: orderError } = await supabase.from("payment_orders").select("order_id,status,upload_token").eq("order_id", orderId).maybeSingle();
-    if (orderError || !order || order.status !== "PAID" || uploadToken !== order.upload_token) {
-      return NextResponse.json({ success: false, error: "Sesi unggah poster tidak valid" }, { status: 403 });
+    const { data: order, error: orderError } = await supabase.from("payment_orders").select("order_id,status,upload_token,public_token").eq("order_id", orderId).maybeSingle();
+    const orderStatus = String(order?.status || "").toUpperCase();
+    const tokenMatches = Boolean(order && ((uploadToken && uploadToken === order.upload_token) || (publicToken && publicToken === order.public_token)));
+    if (orderError) {
+      console.error("[PosterFileUpload] order lookup failed", { orderId, code: orderError.code });
+      return NextResponse.json({ success: false, error: "Sesi pembayaran tidak dapat dibaca. Silakan buka ulang link QRIS." }, { status: 503 });
+    }
+    if (!order) return NextResponse.json({ success: false, error: "Order pembayaran tidak ditemukan. Silakan buka ulang link QRIS." }, { status: 404 });
+    if (orderStatus !== "PAID") {
+      return NextResponse.json({ success: false, error: `Pembayaran belum berstatus lunas (status: ${orderStatus || "UNKNOWN"})` }, { status: 409 });
+    }
+    if (!tokenMatches) {
+      console.warn("[PosterFileUpload] invalid session", { orderId, orderStatus, hasUploadToken: Boolean(uploadToken), hasPublicToken: Boolean(publicToken) });
+      return NextResponse.json({ success: false, error: "Sesi upload kedaluwarsa. Buka ulang link QRIS lalu coba lagi." }, { status: 403 });
     }
 
     const path = `payment-posters/${orderId}/${Date.now()}-${crypto.randomUUID()}.${extensionFor(file)}`;

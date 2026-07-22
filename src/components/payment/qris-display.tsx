@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Clock, RefreshCcw, Loader2, CheckCircle2, XCircle, Wallet, Instagram, ShieldCheck, Download, ArrowLeft } from "lucide-react";
+import { Clock, RefreshCcw, Loader2, CheckCircle2, XCircle, Wallet, Instagram, ShieldCheck, Download, ArrowLeft, ChevronDown, ChevronUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toPng } from "html-to-image";
 import toast from "react-hot-toast";
@@ -33,6 +33,7 @@ export function QrisDisplay({
     const [status, setStatus] = useState<"PENDING" | "PAID" | "EXPIRED">("PENDING");
     const [timeLeft, setTimeLeft] = useState("");
     const [isChecking, setIsChecking] = useState(false);
+    const [showInstructions, setShowInstructions] = useState(false);
 
     const statusRef = useRef(status);
     const terminalStateRef = useRef<"PAID" | "EXPIRED" | null>(null);
@@ -149,9 +150,10 @@ export function QrisDisplay({
             const res = await fetch(`/api/payment/status/${orderId}?token=${encodeURIComponent(accessToken)}`, { cache: "no-store" });
             const data = await res.json();
             if (data.success && data.data) {
-                if (data.data.status === "PAID") {
+                const serverStatus = String(data.data.status || "").toUpperCase();
+                if (serverStatus === "PAID") {
                     finishPaid();
-                } else if (data.data.status === "EXPIRED") {
+                } else if (serverStatus === "EXPIRED") {
                     finishExpired();
                 }
             }
@@ -412,13 +414,14 @@ export function QrisDisplay({
 
             {/* Mobile View */}
             {/* Mobile Native View (Full Screen - Green E-Wallet Style) */}
-            <div className="flex md:hidden fixed inset-0 z-[100] min-h-[100dvh] overflow-hidden bg-[#00a550] flex-col font-sans">
+            <div className="flex md:hidden fixed inset-0 z-[100] h-[100dvh] min-h-[100dvh] overflow-hidden bg-[#00a550] flex-col font-sans">
                 {/* Header (Diabaikan saat download) */}
-                <div className="flex items-center px-4 pt-[calc(1rem+env(safe-area-inset-top))] pb-4 text-white relative z-10 gap-3" data-html2canvas-ignore="true">
+                <div className="flex items-center px-4 pt-[calc(0.75rem+env(safe-area-inset-top))] pb-3 text-white relative z-10 gap-3 shrink-0" data-html2canvas-ignore="true">
                     {onBack && (
                         <button 
                             onClick={onBack}
                             className="w-10 h-10 flex shrink-0 items-center justify-center bg-white/20 backdrop-blur-md rounded-full transition-all active:scale-95"
+                            aria-label="Kembali"
                         >
                             <ArrowLeft className="w-5 h-5 text-white" />
                         </button>
@@ -428,19 +431,19 @@ export function QrisDisplay({
                         {status === "PENDING" && (
                             <>
                                 <Loader2 className="w-5 h-5 animate-spin shrink-0" />
-                                <span className="font-bold text-[17px] leading-tight truncate">Menunggu Pembayaran</span>
+                                <span className="font-bold text-base sm:text-[17px] leading-tight truncate">Menunggu Pembayaran</span>
                             </>
                         )}
                         {status === "PAID" && (
                             <>
                                 <CheckCircle2 className="w-5 h-5 shrink-0" />
-                                <span className="font-bold text-[17px] leading-tight truncate">Pembayaran Berhasil</span>
+                                <span className="font-bold text-base sm:text-[17px] leading-tight truncate">Pembayaran Berhasil</span>
                             </>
                         )}
                         {status === "EXPIRED" && (
                             <>
                                 <XCircle className="w-5 h-5 shrink-0" />
-                                <span className="font-bold text-[17px] leading-tight truncate">Pembayaran Kadaluarsa</span>
+                                <span className="font-bold text-base sm:text-[17px] leading-tight truncate">Pembayaran Kadaluarsa</span>
                             </>
                         )}
                     </div>
@@ -450,26 +453,26 @@ export function QrisDisplay({
                 
                 {/* Timer Display */}
                 {status === "PENDING" && (
-                    <div className="text-center text-white/90 text-sm font-medium mb-4 z-10" data-html2canvas-ignore="true">
-                        Selesaikan dalam <span className="font-bold font-mono">{timeLeft}</span>
+                    <div className="text-center text-white/90 text-xs sm:text-sm font-medium mb-3 shrink-0 z-10" data-html2canvas-ignore="true">
+                        Selesaikan dalam <span className="font-bold font-mono text-sm sm:text-base">{timeLeft}</span>
                     </div>
                 )}
                 
                 {/* Floating Content Card */}
                 <div 
-                    className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-white rounded-t-[32px] pt-14 px-4 sm:px-6 pb-[calc(2rem+env(safe-area-inset-bottom))] flex flex-col items-center relative shadow-[0_-10px_20px_rgba(0,0,0,0.1)] mt-8"
+                    className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-white rounded-t-[28px] sm:rounded-t-[32px] pt-7 sm:pt-9 px-4 sm:px-6 pb-[calc(1.5rem+env(safe-area-inset-bottom))] flex flex-col items-center relative shadow-[0_-10px_20px_rgba(0,0,0,0.1)] mt-5 sm:mt-7"
                 >
                     {/* Floating Avatar */}
-                    <div className="absolute -top-12 left-1/2 -translate-x-1/2 w-24 h-24 bg-white rounded-full p-2 shadow-lg">
+                    <div className="absolute -top-7 sm:-top-9 left-1/2 -translate-x-1/2 w-16 h-16 sm:w-20 sm:h-20 bg-white rounded-full p-1.5 shadow-lg shrink-0">
                         <div className="w-full h-full bg-slate-100 rounded-full overflow-hidden flex items-center justify-center">
-                            <img src="/logo-infoloker.png" alt="Logo" className="w-12 h-12 object-contain" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+                            <img src="/logo-infoloker.png" alt="Logo" className="w-9 h-9 sm:w-11 sm:h-11 object-contain" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
                         </div>
                     </div>
                     
-                    <h2 className="text-2xl font-bold text-slate-800 mb-1 tracking-tight">infolokerjombang</h2>
-                    <p className="text-slate-500 text-sm font-semibold mb-6 bg-slate-100 px-4 py-1.5 rounded-full">Rp {totalAmount.toLocaleString("id-ID")}</p>
+                    <h2 className="text-lg sm:text-xl font-bold text-slate-800 mb-0.5 tracking-tight">infolokerjombang</h2>
+                    <p className="text-slate-500 text-xs font-semibold mb-2.5 sm:mb-3.5 bg-slate-100 px-3 py-1 rounded-full">Rp {totalAmount.toLocaleString("id-ID")}</p>
                     
-                    <div ref={mobileQrRef} className="w-[min(72vw,280px)] max-w-[280px] aspect-square flex items-center justify-center p-4 sm:p-5 rounded-[32px] border-2 border-slate-100 bg-white mb-6 shadow-sm relative overflow-hidden shrink-0">
+                    <div ref={mobileQrRef} className="w-[min(55vw,210px)] max-w-[210px] aspect-square flex items-center justify-center p-2.5 sm:p-3.5 rounded-[24px] sm:rounded-[28px] border-2 border-slate-100 bg-white mb-2.5 sm:mb-3.5 shadow-sm relative overflow-hidden shrink-0">
                         {qrSrc ? (
                             <img
                                 src={qrSrc}
@@ -487,44 +490,67 @@ export function QrisDisplay({
                         
                         {status === "PAID" && (
                             <div className="absolute inset-0 flex items-center justify-center bg-white/40 backdrop-blur-[2px]">
-                                <div className="bg-emerald-500 rounded-full p-4 shadow-xl shadow-emerald-500/50">
-                                    <CheckCircle2 className="w-12 h-12 text-white" />
+                                <div className="bg-emerald-500 rounded-full p-3.5 shadow-xl shadow-emerald-500/50">
+                                    <CheckCircle2 className="w-10 h-10 text-white" />
                                 </div>
                             </div>
                         )}
                         {status === "EXPIRED" && (
                             <div className="absolute inset-0 flex items-center justify-center bg-white/40 backdrop-blur-[2px]">
-                                <div className="bg-red-500 rounded-full p-4 shadow-xl shadow-red-500/50">
-                                    <XCircle className="w-12 h-12 text-white" />
+                                <div className="bg-red-500 rounded-full p-3.5 shadow-xl shadow-red-500/50">
+                                    <XCircle className="w-10 h-10 text-white" />
                                 </div>
                             </div>
                         )}
                     </div>
 
-                    {/* Penjelasan / Instruksi Scan */}
-                    <div className="w-full bg-emerald-50 rounded-2xl p-5 mb-auto border border-emerald-100/80">
-                        <h3 className="text-emerald-800 font-bold text-sm mb-3 flex items-center gap-2">
-                            <span className="w-6 h-6 bg-emerald-200 rounded-full flex items-center justify-center text-emerald-800 text-xs">ℹ</span>
-                            Cara Pembayaran
-                        </h3>
-                        <ol className="text-emerald-700/80 text-xs space-y-2.5 font-medium leading-relaxed pl-1">
-                            <li className="flex gap-2">
-                                <span className="font-bold">1.</span>
-                                <span>Buka aplikasi e-Wallet atau M-Banking Anda (Gopay, OVO, BCA, dll).</span>
-                            </li>
-                            <li className="flex gap-2">
-                                <span className="font-bold">2.</span>
-                                <span>Pilih opsi <strong>Scan QRIS</strong>.</span>
-                            </li>
-                            <li className="flex gap-2">
-                                <span className="font-bold">3.</span>
-                                <span>Arahkan kamera ke QR Code di atas, atau masukkan gambar QR ini dari galeri.</span>
-                            </li>
-                            <li className="flex gap-2">
-                                <span className="font-bold">4.</span>
-                                <span>Pastikan nama merchant adalah <strong>infolokerjombang</strong>.</span>
-                            </li>
-                        </ol>
+                    {/* Penjelasan / Instruksi Scan (Collapsible Accordion for Single-Screen View) */}
+                    <div className="w-full bg-emerald-50/90 rounded-2xl border border-emerald-100/80 shrink-0 mb-3 overflow-hidden transition-all">
+                        <button 
+                            type="button"
+                            onClick={() => setShowInstructions(!showInstructions)}
+                            className="w-full px-3.5 py-2.5 flex items-center justify-between text-left focus:outline-none"
+                        >
+                            <span className="text-emerald-900 font-bold text-xs sm:text-sm flex items-center gap-1.5">
+                                <span className="w-5 h-5 bg-emerald-200/80 rounded-full flex items-center justify-center text-emerald-800 text-[10px]">ℹ</span>
+                                Cara Pembayaran
+                            </span>
+                            <span className="text-[11px] text-emerald-700 font-semibold flex items-center gap-1">
+                                {showInstructions ? "Tutup" : "Petunjuk"}
+                                {showInstructions ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                            </span>
+                        </button>
+                        
+                        <AnimatePresence>
+                            {showInstructions && (
+                                <motion.div
+                                    initial={{ height: 0, opacity: 0 }}
+                                    animate={{ height: "auto", opacity: 1 }}
+                                    exit={{ height: 0, opacity: 0 }}
+                                    transition={{ duration: 0.2 }}
+                                    className="overflow-hidden border-t border-emerald-100/60"
+                                >
+                                    <ol className="p-3.5 pt-2 text-emerald-800/80 text-[11px] space-y-1.5 font-medium leading-relaxed">
+                                        <li className="flex gap-1.5">
+                                            <span className="font-bold">1.</span>
+                                            <span>Buka aplikasi e-Wallet atau M-Banking (Gopay, OVO, BCA, dll).</span>
+                                        </li>
+                                        <li className="flex gap-1.5">
+                                            <span className="font-bold">2.</span>
+                                            <span>Pilih opsi <strong>Scan QRIS</strong>.</span>
+                                        </li>
+                                        <li className="flex gap-1.5">
+                                            <span className="font-bold">3.</span>
+                                            <span>Arahkan kamera ke QR Code di atas atau upload dari galeri.</span>
+                                        </li>
+                                        <li className="flex gap-1.5">
+                                            <span className="font-bold">4.</span>
+                                            <span>Pastikan nama merchant: <strong>infolokerjombang</strong>.</span>
+                                        </li>
+                                    </ol>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
                     </div>
                     
                     {/* Tombol Simpan */}
@@ -532,9 +558,9 @@ export function QrisDisplay({
                         data-html2canvas-ignore="true"
                         onClick={handleDownload}
                         disabled={isDownloading || status !== "PENDING"}
-                        className="w-full mt-6 bg-[#00a550] hover:bg-[#008c44] text-white py-4 rounded-[20px] font-bold text-base flex justify-center items-center gap-2 shadow-lg shadow-emerald-500/30 active:scale-[0.98] transition-all disabled:opacity-50 disabled:shadow-none"
+                        className="w-full bg-[#00a550] hover:bg-[#008c44] text-white py-3 sm:py-3.5 rounded-[18px] sm:rounded-[20px] font-bold text-sm flex justify-center items-center gap-2 shadow-lg shadow-emerald-500/30 active:scale-[0.98] transition-all disabled:opacity-50 disabled:shadow-none shrink-0"
                     >
-                        {isDownloading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Download className="w-5 h-5" />} 
+                        {isDownloading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />} 
                         {isDownloading ? "Menyimpan QR..." : "Simpan QR Code"}
                     </button>
                 </div>
