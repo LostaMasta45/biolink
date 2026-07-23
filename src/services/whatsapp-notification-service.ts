@@ -47,7 +47,7 @@ interface FallbackDefinition {
 const FALLBACKS: Record<string, FallbackDefinition> = {
   "payment.paid.customer": {
     recipientType: "customer", senderRole: "admin", delaySeconds: 2, dedupeWindowSeconds: 86400,
-    template: { id: "fallback-payment-customer", name: "Invoice Setelah Pembayaran", type: "url_button", body: "Halo Kak {{customer_name}} 👋\n\nPembayaran untuk *{{package_name}}* sebesar *Rp {{amount}}* telah berhasil kami terima. ✅\n\nTekan tombol di bawah untuk membuka invoice pembayaran.\n\nPoster dan pesanan Kakak akan segera kami proses. Terima kasih — Admin InfoLokerJombang", buttons: [{ id: "open_invoice", title: "Buka Invoice", url: "{{invoice_url}}" }] },
+    template: { id: "fallback-payment-customer", name: "Invoice Setelah Pembayaran", type: "text", preview_url: false, body: "Halo Kak {{customer_name}} 👋\n\nPembayaran untuk *{{package_name}}* sebesar *Rp {{amount}}* telah kami terima dan terkonfirmasi. ✅\n\nInvoice pembayaran dapat dilihat dan diunduh melalui link berikut:\n{{invoice_url}}\n\nPoster dan pesanan Kakak akan segera kami proses sesuai paket yang dipilih.\n\nTerima kasih atas kepercayaannya.\n— Admin InfoLokerJombang" },
   },
   "payment.paid.admin": {
     recipientType: "admin", senderRole: "bot", delaySeconds: 0, dedupeWindowSeconds: 86400,
@@ -71,11 +71,11 @@ const FALLBACKS: Record<string, FallbackDefinition> = {
   },
   "invoice.created.customer": {
     recipientType: "customer", senderRole: "admin", delaySeconds: 2, dedupeWindowSeconds: 86400,
-    template: { id: "fallback-invoice-customer", name: "QRIS Baru Customer", type: "url_button", body: "Halo Kak {{customer_name}} 👋\n\nQRIS untuk *{{package_name}}* senilai *Rp {{amount}}* sudah siap.\n\nTekan tombol di bawah untuk membuka QRIS dan menyelesaikan pembayaran. Terima kasih.", buttons: [{ id: "open_qris", title: "Buka QRIS", url: "{{payment_url}}" }] },
+    template: { id: "fallback-invoice-customer", name: "QRIS Baru Customer", type: "text", preview_url: false, body: "Halo Kak {{customer_name}} 👋\n\nTagihan untuk *{{package_name}}* sebesar *Rp {{amount}}* telah dibuat.\n\nSilakan buka link berikut untuk melihat QRIS dan menyelesaikan pembayaran:\n{{payment_url}}\n\nMohon pastikan nominal dan nama merchant sudah sesuai sebelum melakukan pembayaran.\n\nTerima kasih.\n— Admin InfoLokerJombang" },
   },
   "invoice.reminder.customer": {
     recipientType: "customer", senderRole: "admin", delaySeconds: 2, dedupeWindowSeconds: 3600,
-    template: { id: "fallback-invoice-reminder", name: "Pengingat QRIS Customer", type: "url_button", body: "Halo Kak {{customer_name}} 👋\n\nPembayaran QRIS untuk *{{package_name}}* sebesar *Rp {{amount}}* masih menunggu.\n\nTekan tombol di bawah untuk melanjutkan pembayaran. Jika sudah membayar, pesan ini dapat diabaikan. Terima kasih.", buttons: [{ id: "open_qris_reminder", title: "Buka QRIS", url: "{{payment_url}}" }] },
+    template: { id: "fallback-invoice-reminder", name: "Pengingat QRIS Customer", type: "text", preview_url: false, body: "Halo Kak {{customer_name}} 👋\n\nKami mengingatkan bahwa pembayaran QRIS untuk *{{package_name}}* sebesar *Rp {{amount}}* masih menunggu.\n\nSilakan lanjutkan pembayaran melalui link berikut:\n{{payment_url}}\n\nApabila pembayaran telah dilakukan, pesan ini dapat diabaikan.\n\nTerima kasih.\n— Admin InfoLokerJombang" },
   },
 };
 
@@ -229,6 +229,34 @@ export function renderNotificationTemplate(template: TemplateData, variables: Re
   return renderValue(template, variables) as TemplateData;
 }
 
+const REQUIRED_TEXT_LINK_VARIABLES: Record<string, "payment_url" | "invoice_url"> = {
+  "invoice.created.customer": "payment_url",
+  "invoice.reminder.customer": "payment_url",
+  "payment.paid.customer": "invoice_url",
+};
+
+export function validateRenderedNotificationLink(
+  eventKey: string,
+  template: TemplateData,
+  variables: Record<string, unknown>,
+): string | null {
+  const variableName = REQUIRED_TEXT_LINK_VARIABLES[eventKey];
+  if (!variableName || template.type !== "text") return null;
+
+  const link = String(variables[variableName] ?? "").trim();
+  try {
+    const parsed = new URL(link);
+    if (parsed.protocol !== "https:") return `Link HTTPS ${variableName} tidak valid`;
+  } catch {
+    return `Link HTTPS ${variableName} tidak valid`;
+  }
+
+  if (!template.body.includes(link)) {
+    return `Template text ${eventKey} wajib memuat ${variableName}`;
+  }
+  return null;
+}
+
 async function resolveRoute(recipientType: RecipientType, customRecipient: string | null, senderRole: SenderRole, customerPhone?: string | null) {
   const accounts = await getDynamicAccounts();
   const admin = accounts[0];
@@ -266,6 +294,8 @@ async function sendDirect(
   ruleId?: string | null,
 ): Promise<EmitNotificationResult> {
   const rendered = renderNotificationTemplate(template, variables);
+  const linkValidationError = validateRenderedNotificationLink(eventKey, rendered, variables);
+  if (linkValidationError) return { status: "failed", error: linkValidationError };
   const result = await sendMappedTemplate(senderPhoneId, recipient, rendered, {
     source: `notification:${eventKey}`,
     correlationId,

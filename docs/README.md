@@ -69,3 +69,5 @@ Notification Center, copywriting event payment/invoice/poster, antrean notifikas
 PRD WhatsApp Inbox KirimDev yang disesuaikan dengan arsitektur ILJ-Hub tersedia di [19-prd-whatsapp-inbox-kirimdev.md](./19-prd-whatsapp-inbox-kirimdev.md).
 
 Catatan handoff lengkap pekerjaan WhatsApp pada 16 Juli 2026 tersedia di [2026-07-16-whatsapp-session-handoff.md](./2026-07-16-whatsapp-session-handoff.md).
+
+PRD perbaikan link QRIS/invoice WhatsApp dengan mengganti `url_button` menjadi pesan `text` berisi URL mentah, berdasarkan hasil tes langsung bahwa link text membuka browser eksternal, tersedia di [2026-07-23-prd-whatsapp-in-app-browser-qris-invoice-download.md](./2026-07-23-prd-whatsapp-in-app-browser-qris-invoice-download.md).
