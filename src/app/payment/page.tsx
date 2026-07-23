@@ -317,6 +317,15 @@ function PaymentContent() {
         setIsUploading(true);
         try {
             if (!paymentData?.order_id || (!paymentData.upload_token && !paymentData.public_token)) throw new Error("Sesi pembayaran tidak lengkap. Silakan muat ulang halaman.");
+            // Refresh the provider-confirmed payment state before accepting
+            // files. This recovers payments that were received right around
+            // the QRIS deadline but were temporarily marked expired locally.
+            const statusResponse = await fetch(`/api/payment/status/${encodeURIComponent(paymentData.order_id)}?token=${encodeURIComponent(paymentData.public_token)}`, { cache: "no-store" });
+            const statusResult = await statusResponse.json();
+            const latestStatus = String(statusResult?.data?.status || "").toUpperCase();
+            if (!statusResponse.ok || !statusResult?.success || latestStatus !== "PAID") {
+                throw new Error(`Pembayaran belum berstatus lunas (status: ${latestStatus || "UNKNOWN"})`);
+            }
             // File diproses server agar tidak tergantung policy Storage pada browser.
             const uploadedUrls: string[] = [];
             for (const file of posterFiles) {

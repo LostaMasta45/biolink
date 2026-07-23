@@ -416,18 +416,18 @@ export function QrisDisplay({
             {/* Mobile Native View (Full Screen - Green E-Wallet Style) */}
             <div className="flex md:hidden fixed inset-0 z-[100] h-[100dvh] min-h-[100dvh] overflow-hidden bg-[#00a550] flex-col font-sans">
                 {/* Header (Diabaikan saat download) */}
-                <div className="flex items-center px-4 pt-[calc(0.75rem+env(safe-area-inset-top))] pb-3 text-white relative z-10 gap-3 shrink-0" data-html2canvas-ignore="true">
+                <div className="flex items-center justify-center px-4 pt-[calc(0.75rem+env(safe-area-inset-top))] pb-3 text-white relative z-10 shrink-0 min-h-[60px]" data-html2canvas-ignore="true">
                     {onBack && (
                         <button 
                             onClick={onBack}
-                            className="w-10 h-10 flex shrink-0 items-center justify-center bg-white/20 backdrop-blur-md rounded-full transition-all active:scale-95"
+                            className="absolute left-4 w-10 h-10 flex shrink-0 items-center justify-center bg-white/20 backdrop-blur-md rounded-full transition-all active:scale-95 z-20"
                             aria-label="Kembali"
                         >
                             <ArrowLeft className="w-5 h-5 text-white" />
                         </button>
                     )}
                     
-                    <div className="flex-1 flex items-center gap-2 overflow-hidden">
+                    <div className="flex items-center justify-center gap-2 overflow-hidden px-14 w-full">
                         {status === "PENDING" && (
                             <>
                                 <Loader2 className="w-5 h-5 animate-spin shrink-0" />
@@ -447,8 +447,6 @@ export function QrisDisplay({
                             </>
                         )}
                     </div>
-                    
-                    <ShieldCheck className="w-6 h-6 opacity-90 shrink-0 ml-auto" />
                 </div>
                 
                 {/* Timer Display */}
@@ -458,51 +456,51 @@ export function QrisDisplay({
                     </div>
                 )}
                 
-                {/* Floating Content Card */}
-                <div 
-                    className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-white rounded-t-[28px] sm:rounded-t-[32px] pt-7 sm:pt-9 px-4 sm:px-6 pb-[calc(1.5rem+env(safe-area-inset-bottom))] flex flex-col items-center relative shadow-[0_-10px_20px_rgba(0,0,0,0.1)] mt-5 sm:mt-7"
-                >
+                {/* Floating Content Card Container */}
+                <div className="min-h-0 flex-1 flex flex-col relative mt-7 sm:mt-9 w-full max-w-[500px] mx-auto">
                     {/* Floating Avatar */}
-                    <div className="absolute -top-7 sm:-top-9 left-1/2 -translate-x-1/2 w-16 h-16 sm:w-20 sm:h-20 bg-white rounded-full p-1.5 shadow-lg shrink-0">
-                        <div className="w-full h-full bg-slate-100 rounded-full overflow-hidden flex items-center justify-center">
+                    <div className="absolute -top-8 sm:-top-10 left-1/2 -translate-x-1/2 w-16 h-16 sm:w-20 sm:h-20 bg-white rounded-full p-1.5 shadow-[0_4px_15px_rgba(0,0,0,0.08)] z-20 shrink-0">
+                        <div className="w-full h-full bg-slate-50 rounded-full overflow-hidden flex items-center justify-center border border-slate-100">
                             <img src="/logo-infoloker.png" alt="Logo" className="w-9 h-9 sm:w-11 sm:h-11 object-contain" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
                         </div>
                     </div>
                     
-                    <h2 className="text-lg sm:text-xl font-bold text-slate-800 mb-0.5 tracking-tight">infolokerjombang</h2>
-                    <p className="text-slate-500 text-xs font-semibold mb-2.5 sm:mb-3.5 bg-slate-100 px-3 py-1 rounded-full">Rp {totalAmount.toLocaleString("id-ID")}</p>
-                    
-                    <div ref={mobileQrRef} className="w-[min(55vw,210px)] max-w-[210px] aspect-square flex items-center justify-center p-2.5 sm:p-3.5 rounded-[24px] sm:rounded-[28px] border-2 border-slate-100 bg-white mb-2.5 sm:mb-3.5 shadow-sm relative overflow-hidden shrink-0">
-                        {qrSrc ? (
-                            <img
-                                src={qrSrc}
-                                alt="QRIS Payment"
-                                className={cn(
-                                    "w-full h-full object-contain rounded-lg",
-                                    status !== "PENDING" && "opacity-30 blur-sm"
-                                )}
-                            />
-                        ) : (
-                            <div className="w-full h-full rounded-lg bg-slate-50 flex items-center justify-center">
-                                <Loader2 className="w-8 h-8 animate-spin text-emerald-500" />
-                            </div>
-                        )}
+                    {/* Scrollable Content inside Card */}
+                    <div className="flex-1 overflow-y-auto overscroll-contain bg-white rounded-t-[28px] sm:rounded-t-[32px] pt-10 sm:pt-14 px-5 sm:px-6 pb-[calc(1.5rem+env(safe-area-inset-bottom))] flex flex-col items-center relative shadow-[0_-10px_20px_rgba(0,0,0,0.1)] z-10 w-full">
+                        <h2 className="text-lg sm:text-xl font-bold text-slate-800 mb-1 tracking-tight">infolokerjombang</h2>
+                        <p className="text-slate-600 text-sm font-semibold mb-5 sm:mb-6 bg-slate-50 px-4 py-1.5 rounded-full border border-slate-100">Rp {totalAmount.toLocaleString("id-ID")}</p>
                         
-                        {status === "PAID" && (
-                            <div className="absolute inset-0 flex items-center justify-center bg-white/40 backdrop-blur-[2px]">
-                                <div className="bg-emerald-500 rounded-full p-3.5 shadow-xl shadow-emerald-500/50">
-                                    <CheckCircle2 className="w-10 h-10 text-white" />
+                        <div ref={mobileQrRef} className="w-full max-w-[260px] aspect-square flex items-center justify-center p-3 sm:p-4 rounded-[28px] border-2 border-slate-100 bg-white mb-5 sm:mb-6 shadow-sm relative overflow-hidden shrink-0">
+                            {qrSrc ? (
+                                <img
+                                    src={qrSrc}
+                                    alt="QRIS Payment"
+                                    className={cn(
+                                        "w-full h-full object-contain rounded-xl",
+                                        status !== "PENDING" && "opacity-30 blur-sm"
+                                    )}
+                                />
+                            ) : (
+                                <div className="w-full h-full rounded-xl bg-slate-50 flex items-center justify-center">
+                                    <Loader2 className="w-8 h-8 animate-spin text-[#00a550]" />
                                 </div>
-                            </div>
-                        )}
-                        {status === "EXPIRED" && (
-                            <div className="absolute inset-0 flex items-center justify-center bg-white/40 backdrop-blur-[2px]">
-                                <div className="bg-red-500 rounded-full p-3.5 shadow-xl shadow-red-500/50">
-                                    <XCircle className="w-10 h-10 text-white" />
+                            )}
+                            
+                            {status === "PAID" && (
+                                <div className="absolute inset-0 flex items-center justify-center bg-white/40 backdrop-blur-[2px]">
+                                    <div className="bg-emerald-500 rounded-full p-3.5 shadow-xl shadow-emerald-500/50">
+                                        <CheckCircle2 className="w-10 h-10 text-white" />
+                                    </div>
                                 </div>
-                            </div>
-                        )}
-                    </div>
+                            )}
+                            {status === "EXPIRED" && (
+                                <div className="absolute inset-0 flex items-center justify-center bg-white/40 backdrop-blur-[2px]">
+                                    <div className="bg-red-500 rounded-full p-3.5 shadow-xl shadow-red-500/50">
+                                        <XCircle className="w-10 h-10 text-white" />
+                                    </div>
+                                </div>
+                            )}
+                        </div>
 
                     {/* Penjelasan / Instruksi Scan (Collapsible Accordion for Single-Screen View) */}
                     <div className="w-full bg-emerald-50/90 rounded-2xl border border-emerald-100/80 shrink-0 mb-3 overflow-hidden transition-all">
@@ -564,6 +562,7 @@ export function QrisDisplay({
                         {isDownloading ? "Menyimpan QR..." : "Simpan QR Code"}
                     </button>
                 </div>
+            </div>
             </div>
         </>
     );

@@ -55,10 +55,11 @@ function normalizePhone(phone: string): string {
   return digits.startsWith("0") ? `62${digits.slice(1)}` : digits.startsWith("62") ? digits : `62${digits}`;
 }
 
-async function getCustomerServiceWindow(customer: string): Promise<ServiceWindowStatus> {
+async function getCustomerServiceWindow(customer: string, senderPhoneId: string): Promise<ServiceWindowStatus> {
   const { data, error } = await supabase.from("whatsapp_contact_activity")
     .select("last_inbound_at")
     .eq("customer", customer)
+    .eq("sender_phone_id", senderPhoneId)
     .maybeSingle();
   if (error) throw new Error(`Jendela layanan customer gagal dibaca: ${error.message}`);
   return getServiceWindowStatus(data?.last_inbound_at ?? null);
@@ -189,7 +190,7 @@ async function executeCurrentNode(run: FlowRunRow, hops = 0): Promise<FlowExecut
     return failRun(run, `Node "${node.name}" membutuhkan Pesan Tersimpan aktif`, node);
   }
 
-  const serviceWindow = await getCustomerServiceWindow(run.customer);
+  const serviceWindow = await getCustomerServiceWindow(run.customer, run.sender_phone_id);
   if (serviceWindow.state !== "active") {
     const error = `outside_24h_window: ${describeServiceWindow(serviceWindow)}`;
     await supabase.from("flow_run_steps").update({ status: "failed", error, completed_at: new Date().toISOString() }).eq("id", step.id);
@@ -347,6 +348,7 @@ export async function recordCustomerActivity(input: { customerPhone: string; sen
   const { data: existing, error: lookupError } = await supabase.from("whatsapp_contact_activity")
     .select("last_inbound_at")
     .eq("customer", customer)
+    .eq("sender_phone_id", input.senderPhoneId)
     .maybeSingle();
   if (lookupError) throw new Error(`Aktivitas customer gagal dibaca: ${lookupError.message}`);
   const recordedAt = normalizeProviderTimestamp(existing?.last_inbound_at ?? null);
@@ -359,7 +361,7 @@ export async function recordCustomerActivity(input: { customerPhone: string; sen
     last_inbound_at: lastInboundAt,
     last_inbound_event_id: input.eventId ?? null,
     last_inbound_text: input.text?.slice(0, 4000) ?? null,
-  });
+  }, { onConflict: "customer,sender_phone_id" });
   if (error) throw new Error(`Aktivitas customer gagal disimpan: ${error.message}`);
 }
 

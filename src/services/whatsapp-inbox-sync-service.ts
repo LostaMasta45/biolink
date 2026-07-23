@@ -10,6 +10,7 @@ import {
 } from "@/services/whatsapp-inbox-store";
 import { getAllAccounts } from "@/lib/whatsapp/kirimdev-client";
 import { listInboxAccounts, syncInboxAccounts } from "@/services/whatsapp-inbox-store";
+import { recordCustomerActivity } from "@/services/whatsapp-flow-engine";
 
 function record(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" ? value as Record<string, unknown> : {};
@@ -17,6 +18,12 @@ function record(value: unknown): Record<string, unknown> {
 
 function string(value: unknown) {
   return typeof value === "string" ? value : "";
+}
+
+function normalizePhone(phone: string) {
+  const digits = phone.replace(/\D/g, "");
+  if (!digits) return "";
+  return digits.startsWith("0") ? `62${digits.slice(1)}` : digits.startsWith("62") ? digits : `62${digits}`;
 }
 
 function messageBody(message: Record<string, unknown>) {
@@ -125,6 +132,15 @@ async function syncMessagesPage(account: InboxAccount, cursor?: string | null) {
         providerCreatedAt: createdAt,
         payload: { provider_id: string(message.id), sync: true },
       });
+      // History sync is also a recovery path when a provider webhook was
+      // delayed or missed. It must refresh the same 24-hour source of truth.
+      await recordCustomerActivity({
+        customerPhone: customer,
+        senderPhoneId: account.phone_number_id,
+        eventId: providerMessageId,
+        text: messageBody(message),
+        inboundAt: createdAt,
+      });
       return true;
     } else if (direction === "outbound") {
       const customer = string(message.to) || string(message.recipient) || string(message.bsuid);
@@ -148,6 +164,29 @@ async function syncMessagesPage(account: InboxAccount, cursor?: string | null) {
     return false;
   });
   return { processed, hasMore: page.hasMore, nextCursor: page.nextCursor };
+}
+
+/**
+ * Refresh one recipient's 24-hour window from KirimDev's current conversation
+ * data. This is intentionally used only as a fallback when local webhook
+ * activity is missing or expired, keeping routine notification sends fast.
+ */
+export async function refreshRecipientActivityFromProvider(input: { recipient: string; senderPhoneId: string }): Promise<boolean> {
+  const recipient = normalizePhone(input.recipient);
+  if (!recipient || !input.senderPhoneId) return false;
+
+  const page = await listKirimDevResourcePage(input.senderPhoneId, "conversations");
+  const conversation = page.data.map(record).find((item) => {
+    const contact = record(item.contact);
+    const phone = string(contact.phone_number) || string(contact.wa_id) || string(contact.id);
+    return normalizePhone(phone) === recipient;
+  });
+  if (!conversation) return false;
+
+  const lastInboundAt = string(conversation.last_inbound_at);
+  if (!lastInboundAt) return false;
+  await recordCustomerActivity({ customerPhone: recipient, senderPhoneId: input.senderPhoneId, inboundAt: lastInboundAt });
+  return true;
 }
 
 async function syncContactsPage(account: InboxAccount, cursor?: string | null) {

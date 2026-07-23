@@ -51,20 +51,21 @@ export async function POST(request: Request) {
         eventKey,
         payload: body,
       });
+      const isPaid = result.order.status === "PAID";
       const amount = Number(result.order.payable_amount || result.order.total_amount || result.order.amount);
       await writeActivityLog({
         customer: result.order.customer_whatsapp,
-        eventType: "payment.paid",
-        status: "success",
-        message: `Pembayaran ${orderId} berhasil dikonfirmasi`,
-        metadata: { order_id: orderId, amount, provider_status: providerStatus, first_confirmation: result.confirmed },
+        eventType: isPaid ? "payment.paid" : "payment.paid_rejected",
+        status: isPaid ? "success" : "skipped",
+        message: isPaid ? `Pembayaran ${orderId} berhasil dikonfirmasi` : `Konfirmasi pembayaran ${orderId} tidak mengubah status menjadi lunas`,
+        metadata: { order_id: orderId, amount, provider_status: providerStatus, first_confirmation: result.confirmed, final_status: result.order.status },
       });
 
       // Idempotent dedupe allows reconciliation webhooks to heal an earlier failed
       // downstream sync without sending a second WhatsApp notification.
       await Promise.all([
-        emitPaymentPaidNotifications(result.order),
-        result.confirmed
+        isPaid ? emitPaymentPaidNotifications(result.order) : Promise.resolve(),
+        isPaid && result.confirmed
           ? sendTelegramNotification(`<b>💳 PEMBAYARAN QRIS LUNAS</b>\n\n<b>Order:</b> ${orderId}\n<b>Perusahaan:</b> ${result.order.customer_company}\n<b>Paket:</b> ${result.order.package_name}\n<b>Total:</b> ${formatRupiahValue(amount)}\n\nPoster dapat ditunggu di antrean posting.`)
           : Promise.resolve(),
       ]);

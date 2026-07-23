@@ -303,13 +303,6 @@ export async function confirmPaidPayment(input: { orderId: string; paidAt?: stri
   const { data: initial, error: initialError } = await supabase.from("payment_orders").select("*").eq("order_id", input.orderId).maybeSingle();
   if (initialError || !initial) throw new Error("Order pembayaran tidak ditemukan");
 
-  const expiresAt = initial.expired_at ? new Date(initial.expired_at).getTime() : NaN;
-  const paidAt = input.paidAt ? new Date(input.paidAt).getTime() : Date.now();
-  if (initial.status === "PENDING" && Number.isFinite(expiresAt) && paidAt > expiresAt) {
-    const expired = await markPaymentExpired(input.orderId, `local_expiry:${initial.updated_at || initial.order_id}`, input.payload);
-    return { order: expired ?? initial, confirmed: false, processed: false, processingError: "Pembayaran diterima setelah batas 30 menit berakhir" };
-  }
-
   const amount = getPayableAmount(initial, input.amountPaid);
   const { data: claimed, error: claimError } = await supabase.from("payment_orders").update({
     status: "PAID",
@@ -318,7 +311,9 @@ export async function confirmPaidPayment(input: { orderId: string; paidAt?: stri
     total_amount: amount,
     processing_error: null,
     updated_at: new Date().toISOString(),
-  }).eq("order_id", input.orderId).eq("status", "PENDING").select("*").maybeSingle();
+  // A provider-confirmed payment remains valid even when its QRIS session was
+  // marked expired locally before the provider status/webhook arrived.
+  }).eq("order_id", input.orderId).in("status", ["PENDING", "EXPIRED"]).select("*").maybeSingle();
   if (claimError) throw new Error(`Status pembayaran tidak dapat diperbarui: ${claimError.message}`);
 
   const { data: order, error: refreshedError } = claimed

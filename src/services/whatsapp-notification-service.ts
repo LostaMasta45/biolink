@@ -1,5 +1,6 @@
 import { getDynamicAccounts } from "@/lib/whatsapp/kirimdev-client";
 import { describeServiceWindow, getServiceWindowStatus } from "@/lib/whatsapp/service-window";
+import { refreshRecipientActivityFromProvider } from "@/services/whatsapp-inbox-sync-service";
 import { sendMappedTemplate, type TemplateData } from "@/services/kirimdev-mapper";
 import { whatsappAdminClient as supabase, writeActivityLog } from "@/services/whatsapp-audit-service";
 
@@ -295,13 +296,29 @@ async function getRule(eventKey: string): Promise<{ rule: NotificationRuleRow | 
   return { rule: data as unknown as NotificationRuleRow | null, tableMissing: false };
 }
 
-async function getRecipientServiceWindow(recipient: string) {
-  const { data, error } = await supabase.from("whatsapp_contact_activity")
-    .select("last_inbound_at")
-    .eq("customer", recipient)
-    .maybeSingle();
-  if (error) throw new Error(`Jendela layanan customer gagal dibaca: ${error.message}`);
-  return getServiceWindowStatus(data?.last_inbound_at ?? null);
+async function getRecipientServiceWindow(recipient: string, senderPhoneId: string) {
+  const readLocalWindow = async () => {
+    const { data, error } = await supabase.from("whatsapp_contact_activity")
+      .select("last_inbound_at")
+      .eq("customer", recipient)
+      .eq("sender_phone_id", senderPhoneId)
+      .maybeSingle();
+    if (error) throw new Error(`Jendela layanan customer gagal dibaca: ${error.message}`);
+    return getServiceWindowStatus(data?.last_inbound_at ?? null);
+  };
+
+  const localWindow = await readLocalWindow();
+  if (localWindow.state === "active") return localWindow;
+
+  // A webhook can be delayed or missed. Before blocking a free-form message,
+  // reconcile the latest provider conversation for this exact sender account.
+  try {
+    const refreshed = await refreshRecipientActivityFromProvider({ recipient, senderPhoneId });
+    if (refreshed) return await readLocalWindow();
+  } catch (error) {
+    console.error("[Notification] recipient window refresh failed", { recipient, senderPhoneId, error });
+  }
+  return localWindow;
 }
 
 async function logCustomerWindowBlock(input: { eventKey: string; recipient: string; reason: string; jobId?: string; ruleId?: string | null; test?: boolean }) {
@@ -333,7 +350,7 @@ export async function emitNotification(input: EmitNotificationInput): Promise<Em
     const bucket = Math.floor(Date.now() / Math.max(1000, windowSeconds * 1000));
     const dedupeKey = `${input.eventKey}:${input.dedupeId || route.recipient}:${input.dedupeId ? "event" : bucket}`;
 
-    const serviceWindow = await getRecipientServiceWindow(route.recipient);
+    const serviceWindow = await getRecipientServiceWindow(route.recipient, route.senderPhoneId);
     if (serviceWindow.state !== "active") {
       const reason = describeServiceWindow(serviceWindow);
       await logCustomerWindowBlock({ eventKey: input.eventKey, recipient: route.recipient, reason, ruleId: rule?.id });
@@ -425,7 +442,7 @@ export async function processNotificationJob(jobId: string): Promise<EmitNotific
   // Existing queued jobs from before this field was introduced must be
   // protected too; all current Notification Center sends are free-form.
   if (job.payload.requires_recipient_window !== false) {
-    const serviceWindow = await getRecipientServiceWindow(job.recipient);
+    const serviceWindow = await getRecipientServiceWindow(job.recipient, job.sender_phone_id);
     if (serviceWindow.state !== "active") {
       const reason = describeServiceWindow(serviceWindow);
       await supabase.from("notification_jobs").update({ status: "failed", last_error: reason }).eq("id", job.id);
@@ -475,7 +492,7 @@ export async function testNotificationRule(ruleId: string, customerPhone?: strin
   const route = await resolveRoute(rule.recipient_type, rule.custom_recipient, rule.sender_role, customerPhone);
   const template = rule.template;
   if (!template) return { status: "failed", error: "Pesan Tersimpan belum dipilih" };
-  const serviceWindow = await getRecipientServiceWindow(route.recipient);
+  const serviceWindow = await getRecipientServiceWindow(route.recipient, route.senderPhoneId);
   if (serviceWindow.state !== "active") {
     const reason = describeServiceWindow(serviceWindow);
     await logCustomerWindowBlock({ eventKey: rule.event_key, recipient: route.recipient, reason, ruleId: rule.id, test: true });

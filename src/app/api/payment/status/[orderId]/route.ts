@@ -19,14 +19,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ orde
       // Re-run idempotent sync so a prior temporary downstream failure heals itself.
       const result = await confirmPaidPayment({ orderId, eventKey: "status:paid-reconcile", providerStatus: "PAID" });
       await emitPaymentPaidNotifications(result.order);
-      return NextResponse.json({ success: true, data: { ...asPaymentResponse(order), status: "PAID", paid_at: order.paid_at } });
+      return NextResponse.json({ success: true, data: { ...asPaymentResponse(result.order), status: result.order.status, paid_at: result.order.paid_at } });
     }
-    if (order.status === "EXPIRED" || order.status === "CANCELLED") {
+    if (order.status === "CANCELLED") {
       return NextResponse.json({ success: true, data: { ...asPaymentResponse(order), status: order.status, paid_at: order.paid_at } });
-    }
-    if (order.expired_at && new Date(order.expired_at).getTime() <= Date.now()) {
-      const expired = await markPaymentExpired(orderId, `local_expiry:${order.updated_at}`);
-      return NextResponse.json({ success: true, data: { ...asPaymentResponse(expired || order), status: "EXPIRED", paid_at: order.paid_at } });
     }
 
     try {
@@ -46,12 +42,22 @@ export async function GET(request: Request, { params }: { params: Promise<{ orde
           eventKey: `status:${provider.data.payment_date || provider.data.paid_at || "paid"}`,
           payload: provider,
         });
-        await emitPaymentPaidNotifications(result.order);
-        return NextResponse.json({ success: true, data: { ...asPaymentResponse(result.order), status: "PAID", paid_at: result.order.paid_at } });
+        // Always return the persisted result of reconciliation so the UI and
+        // upload endpoint use the same final payment state.
+        if (result.order.status === "PAID") {
+          await emitPaymentPaidNotifications(result.order);
+        }
+        return NextResponse.json({ success: true, data: { ...asPaymentResponse(result.order), status: result.order.status, paid_at: result.order.paid_at } });
       }
       if (providerStatus === "EXPIRED") await markPaymentExpired(orderId, `status:expired:${order.updated_at}`, provider);
     } catch (providerError) {
       console.error("[PaymentStatus] provider check failed", providerError);
+    }
+
+    // Ask the provider first. A payment made near the deadline can be
+    // reported slightly after the local countdown reaches zero.
+    if (order.status === "PENDING" && order.expired_at && new Date(order.expired_at).getTime() <= Date.now()) {
+      await markPaymentExpired(orderId, `local_expiry:${order.updated_at}`);
     }
 
     const { data: latest } = await supabase.from("payment_orders").select("*").eq("order_id", orderId).single();
