@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { confirmPaidPayment, getPaymentAdminClient } from "@/services/payment-order-service";
+import { reportTelegramPosterReceived } from "@/services/telegram-admin-service";
 import { emitPosterReceivedNotifications } from "@/services/whatsapp-notification-service";
 
 const uploadPosterSchema = z.object({
@@ -14,21 +15,6 @@ const uploadPosterSchema = z.object({
 function isApprovedPosterUrl(value: string) {
   const base = process.env.NEXT_PUBLIC_SUPABASE_URL;
   return Boolean(base && value.startsWith(`${base}/storage/v1/object/public/posters/`));
-}
-
-async function sendTelegramWithPhoto(photo: string, caption: string) {
-  const token = process.env.TELEGRAM_BOT_TOKEN;
-  const chatId = process.env.TELEGRAM_ADMIN_CHAT_ID;
-  if (!token || !chatId) return;
-  try {
-    await fetch(`https://api.telegram.org/bot${token}/sendPhoto`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ chat_id: chatId, photo, caption, parse_mode: "HTML" }),
-    });
-  } catch (error) {
-    console.error("[PosterUpload] Telegram notification failed", error);
-  }
 }
 
 export async function POST(request: Request) {
@@ -73,11 +59,21 @@ export async function POST(request: Request) {
 
     await supabase.from("payment_orders").update({ poster_status: "uploaded", related_posting_id: posting.id, synced_to_posting: true, updated_at: new Date().toISOString() }).eq("order_id", order_id);
 
-    const total = Number(order.payable_amount || order.total_amount || order.amount || 0).toLocaleString("id-ID");
-    const telegramCaption = `<b>🖼️ POSTER LOWONGAN DITERIMA</b>\n\n<b>Order:</b> ${order_id}\n<b>Perusahaan:</b> ${order.customer_company}\n<b>Paket:</b> ${order.package_name}\n<b>Total:</b> Rp ${total}\n<b>Status:</b> SIAP POSTING`;
-    await sendTelegramWithPhoto(poster_urls[0], telegramCaption);
-
-    await emitPosterReceivedNotifications({ order, posterCount: poster_urls.length, scheduledDate: posting.scheduled_date });
+    await Promise.all([
+      reportTelegramPosterReceived({
+        order,
+        posterUrls: poster_urls,
+        scheduledDate: posting.scheduled_date,
+        caption,
+      }),
+      emitPosterReceivedNotifications({
+        order,
+        posterCount: poster_urls.length,
+        posterUrls: poster_urls,
+        scheduledDate: posting.scheduled_date,
+        caption,
+      }),
+    ]);
 
     return NextResponse.json({ success: true, data: { posting_id: posting.id, poster_count: poster_urls.length, status: "queued" } });
   } catch (error) {

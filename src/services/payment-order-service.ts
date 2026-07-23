@@ -8,6 +8,7 @@ import {
   type PaymentLineItem,
 } from "@/lib/payment-order";
 import type { KlikQRISCreateResponse } from "@/lib/payment-types";
+import { reportTelegramPaymentCancelled, reportTelegramTransactionCreated } from "@/services/telegram-admin-service";
 import { emitInvoiceCreatedNotifications, schedulePendingPaymentReminder } from "@/services/whatsapp-notification-service";
 
 type DatabaseRow = {
@@ -287,13 +288,17 @@ export async function createPaymentOrder(input: CreatePaymentInput) {
 
     const invoiceResult = await ensureInvoice(supabase, order, "pending");
     if (invoiceResult.created) {
-      await emitInvoiceCreatedNotifications({ order, invoiceNumber: invoiceResult.invoice.invoice_number });
-      await schedulePendingPaymentReminder(order);
+      await Promise.all([
+        emitInvoiceCreatedNotifications({ order, invoiceNumber: invoiceResult.invoice.invoice_number }),
+        schedulePendingPaymentReminder(order),
+        reportTelegramTransactionCreated({ order, invoiceNumber: invoiceResult.invoice.invoice_number }),
+      ]);
     }
     return asPaymentResponse(order);
   } catch (error) {
     const message = error instanceof Error ? error.message : "QRIS tidak dapat dibuat";
     await supabase.from("payment_orders").update({ status: "CANCELLED", processing_error: message, updated_at: new Date().toISOString() }).eq("order_id", orderId);
+    await reportTelegramPaymentCancelled({ ...draft, status: "CANCELLED" }, message);
     throw new Error(message);
   }
 }

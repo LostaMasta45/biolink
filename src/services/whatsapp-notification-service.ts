@@ -65,6 +65,10 @@ const FALLBACKS: Record<string, FallbackDefinition> = {
     recipientType: "admin", senderRole: "bot", delaySeconds: 0, dedupeWindowSeconds: 86400,
     template: { id: "fallback-poster-admin", name: "Laporan Poster Masuk", type: "text", body: "🖼️ *POSTER MASUK ANTREAN*\n\nKlien: {{customer_name}} ({{company_name}})\nPaket: {{package_name}}\nJumlah poster: {{poster_count}}\nOrder ID: {{order_id}}\nTarget jadwal: {{scheduled_date}}\n\nStatus antrean: siap diproses." },
   },
+  "poster.received.admin.media": {
+    recipientType: "admin", senderRole: "bot", delaySeconds: 0, dedupeWindowSeconds: 86400,
+    template: { id: "fallback-poster-admin-media", name: "Gambar Poster Customer", type: "image", media_url: "{{poster_url}}", body: "🖼️ *POSTER CUSTOMER {{poster_number}}/{{poster_count}}*\n\nOrder ID: {{order_id}}\nPerusahaan: {{company_name}}\nCustomer: {{customer_name}}\nPaket: {{package_name}}\nTarget jadwal: {{scheduled_date}}\nCaption customer: {{customer_caption}}\n\nPoster ini dikirim langsung oleh customer dan siap diperiksa." },
+  },
   "customer.message.admin": {
     recipientType: "admin", senderRole: "bot", delaySeconds: 0, dedupeWindowSeconds: 86400,
     template: { id: "fallback-customer-message-admin", name: "Laporan Aktivitas Customer", type: "text", body: "💬 *AKTIVITAS CUSTOMER*\n\nNomor: {{customer_phone}}\nJenis: {{message_type}}\nPesan: {{message}}\n\nBot telah mencatat aktivitas customer ini." },
@@ -181,6 +185,8 @@ export async function emitInvoiceCreatedNotifications(input: { order: InvoiceNot
 export async function emitPosterReceivedNotifications(input: {
   order: PaymentNotificationOrder;
   posterCount: number;
+  posterUrls?: string[];
+  caption?: string | null;
   scheduledDate?: string | null;
 }): Promise<EmitNotificationResult[]> {
   const { order } = input;
@@ -191,11 +197,31 @@ export async function emitPosterReceivedNotifications(input: {
     order_id: order.order_id,
     poster_count: input.posterCount,
     scheduled_date: input.scheduledDate || "Menunggu penjadwalan",
+    customer_caption: input.caption?.trim().slice(0, 300) || "Tidak ada caption dari customer",
   };
-  return Promise.all([
+  const notifications = [
     emitNotification({ eventKey: "poster.received.customer", customerPhone: order.customer_whatsapp, variables, dedupeId: order.order_id }),
     emitNotification({ eventKey: "poster.received.admin", variables, dedupeId: order.order_id }),
-  ]);
+    ...(input.posterUrls ?? []).map((posterUrl, index) => emitNotification({
+      eventKey: "poster.received.admin.media",
+      variables: {
+        ...variables,
+        poster_url: posterUrl,
+        poster_number: index + 1,
+      },
+      dedupeId: `${order.order_id}:poster:${index + 1}:${stableHash(posterUrl)}`,
+    })),
+  ];
+  return Promise.all(notifications);
+}
+
+function stableHash(value: string): string {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36);
 }
 
 function normalizePhone(phone: string): string {

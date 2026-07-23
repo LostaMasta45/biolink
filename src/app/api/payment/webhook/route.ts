@@ -1,23 +1,9 @@
 import { NextResponse } from "next/server";
 import type { KlikQRISWebhookPayload } from "@/lib/payment-types";
 import { confirmPaidPayment, getPaymentAdminClient, markPaymentExpired } from "@/services/payment-order-service";
-import { emitPaymentPaidNotifications, formatRupiahValue } from "@/services/whatsapp-notification-service";
+import { reportTelegramPaymentExpired, reportTelegramPaymentPaid } from "@/services/telegram-admin-service";
+import { emitPaymentPaidNotifications } from "@/services/whatsapp-notification-service";
 import { writeActivityLog } from "@/services/whatsapp-audit-service";
-
-async function sendTelegramNotification(text: string) {
-  const token = process.env.TELEGRAM_BOT_TOKEN;
-  const chatId = process.env.TELEGRAM_ADMIN_CHAT_ID;
-  if (!token || !chatId) return;
-  try {
-    await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ chat_id: chatId, text, parse_mode: "HTML", disable_web_page_preview: true }),
-    });
-  } catch (error) {
-    console.error("[PaymentWebhook] Telegram notification failed", error);
-  }
-}
 
 export async function POST(request: Request) {
   let orderId: string | null = null;
@@ -65,13 +51,18 @@ export async function POST(request: Request) {
       // downstream sync without sending a second WhatsApp notification.
       await Promise.all([
         isPaid ? emitPaymentPaidNotifications(result.order) : Promise.resolve(),
-        isPaid && result.confirmed
-          ? sendTelegramNotification(`<b>💳 PEMBAYARAN QRIS LUNAS</b>\n\n<b>Order:</b> ${orderId}\n<b>Perusahaan:</b> ${result.order.customer_company}\n<b>Paket:</b> ${result.order.package_name}\n<b>Total:</b> ${formatRupiahValue(amount)}\n\nPoster dapat ditunggu di antrean posting.`)
+        isPaid
+          ? reportTelegramPaymentPaid({
+            order: result.order,
+            processed: result.processed,
+            processingError: result.processingError,
+          })
           : Promise.resolve(),
       ]);
     } else if (providerStatus === "EXPIRED") {
-      await markPaymentExpired(orderId, eventKey, body);
+      const expiredOrder = await markPaymentExpired(orderId, eventKey, body);
       await writeActivityLog({ customer: order.customer_whatsapp, eventType: "payment.expired", status: "success", message: `Pembayaran ${orderId} expired`, metadata: { order_id: orderId } });
+      await reportTelegramPaymentExpired(expiredOrder || order);
     }
     return NextResponse.json({ message: "OK" });
   } catch (error) {
