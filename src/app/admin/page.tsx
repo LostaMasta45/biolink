@@ -358,12 +358,17 @@ export default function AdminDashboard() {
                                             <div key={post.id} className="p-4 flex items-center gap-4 hover:bg-muted/30 transition-colors cursor-default">
                                                 {/* Thumbnail with Time Overlay */}
                                                 <div className="relative w-16 h-16 flex-shrink-0 rounded-xl overflow-hidden bg-muted border border-border">
-                                                    {post.poster_url ? (
+                                                    {(post.gallery?.[0] || post.poster_url) ? (
                                                         // eslint-disable-next-line @next/next/no-img-element
-                                                        <img src={post.poster_url} alt="" className="w-full h-full object-cover" />
+                                                        <img src={post.gallery?.[0] || post.poster_url} alt="" className="w-full h-full object-cover" />
                                                     ) : (
                                                         <div className="w-full h-full flex items-center justify-center">
                                                             <Package className="w-6 h-6 text-muted-foreground/50" />
+                                                        </div>
+                                                    )}
+                                                    {(post.gallery?.length || 0) > 1 && (
+                                                        <div className="absolute top-1 right-1 rounded bg-black/65 px-1.5 py-0.5 text-[9px] font-bold text-white">
+                                                            +{post.gallery!.length - 1}
                                                         </div>
                                                     )}
                                                     <div className="absolute bottom-0 w-full bg-black/60 backdrop-blur-[2px] text-white text-[10px] font-medium text-center py-0.5">

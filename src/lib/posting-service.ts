@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/client";
+import { getPosterGallery, getPosterStoragePath } from "@/lib/poster-gallery";
 import type { QueuePost, PostingPackage, PostingAddon, QueueStatus } from "@/lib/types";
 import { formatNewLokerMessage, formatStatusChangeMessage, sendTelegramMessage, sendTelegramPhoto } from "./telegram-service";
 import { syncPostingToTransaction } from "./finance-service";
@@ -54,10 +55,10 @@ export async function getPostings(): Promise<{ data: QueuePost[]; error: string 
 
         if (error) throw error;
 
-        // Transform pipe-separated urls into gallery array
+        // Prefer structured poster_urls and retain legacy pipe-separated data.
         const posts = (data || []).map((post: QueuePost) => ({
             ...post,
-            gallery: post.poster_url ? post.poster_url.split('|') : []
+            gallery: getPosterGallery(post),
         }));
 
         return { data: posts, error: null };
@@ -80,8 +81,7 @@ export async function getPostingById(id: string): Promise<{ data: QueuePost | nu
         if (error) throw error;
 
         if (data) {
-            // Transform pipe-separated urls into gallery array
-            (data as QueuePost).gallery = data.poster_url ? data.poster_url.split('|') : [];
+            (data as QueuePost).gallery = getPosterGallery(data as QueuePost);
         }
 
         return { data, error: null };
@@ -110,6 +110,7 @@ export async function createPosting(posting: Omit<QueuePost, "id" | "created_at"
                 company_name: posting.company_name,
                 whatsapp_number: posting.whatsapp_number,
                 poster_url: posterUrl,
+                poster_urls: posting.gallery || [],
                 scheduled_date: posting.scheduled_date,
                 scheduled_time: posting.scheduled_time,
                 package_id: posting.package_id,
@@ -124,7 +125,7 @@ export async function createPosting(posting: Omit<QueuePost, "id" | "created_at"
         if (error) throw error;
 
         if (data) {
-            (data as QueuePost).gallery = data.poster_url ? data.poster_url.split('|') : [];
+            (data as QueuePost).gallery = getPosterGallery(data as QueuePost);
 
             // Sync to finance if not draft
             if (data.status !== "draft") {
@@ -162,11 +163,12 @@ export async function updatePosting(id: string, posting: Partial<QueuePost>): Pr
     const supabase = createClient();
 
     try {
-        const updateData: any = { ...posting, updated_at: new Date().toISOString() };
+        const updateData: Record<string, unknown> = { ...posting, updated_at: new Date().toISOString() };
 
         // Handle gallery update
         if (posting.gallery) {
             updateData.poster_url = posting.gallery.length > 0 ? posting.gallery.join('|') : null;
+            updateData.poster_urls = posting.gallery;
             delete updateData.gallery;
         }
 
@@ -180,7 +182,7 @@ export async function updatePosting(id: string, posting: Partial<QueuePost>): Pr
         if (error) throw error;
 
         if (data) {
-            (data as QueuePost).gallery = data.poster_url ? data.poster_url.split('|') : [];
+            (data as QueuePost).gallery = getPosterGallery(data as QueuePost);
 
             // Sync to finance if not draft
             if (data.status !== "draft") {
@@ -275,19 +277,21 @@ export async function deletePosting(id: string): Promise<{ success: boolean; err
     const supabase = createClient();
 
     try {
-        // First get the posting to check for poster_url
+        // Resolve every structured/legacy poster before removing the record.
         const { data: posting } = await supabase
             .from("posting_queue")
-            .select("poster_url")
+            .select("poster_url,poster_urls")
             .eq("id", id)
             .single();
 
-        // Delete poster from storage if exists
-        if (posting?.poster_url) {
-            const fileName = posting.poster_url.split("/").pop();
-            if (fileName) {
-                await supabase.storage.from("posters").remove([fileName]);
-            }
+        const posterPaths = posting
+            ? getPosterGallery(posting).map(getPosterStoragePath).filter((path): path is string => Boolean(path))
+            : [];
+        if (posterPaths.length) {
+            const { error: storageError } = await supabase.storage.from("posters").remove(posterPaths);
+            // Storage cleanup must not leave an operational queue record stuck
+            // when an older bucket policy does not permit browser-side delete.
+            if (storageError) console.warn("[Posting] Poster storage cleanup failed:", storageError.message);
         }
 
         // Delete the posting
@@ -342,7 +346,7 @@ export async function deletePoster(url: string): Promise<{ success: boolean; err
     const supabase = createClient();
 
     try {
-        const fileName = url.split("/").pop();
+        const fileName = getPosterStoragePath(url);
         if (!fileName) throw new Error("Invalid URL");
 
         const { error } = await supabase.storage

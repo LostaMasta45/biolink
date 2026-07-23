@@ -1,15 +1,17 @@
 import { NextResponse } from "next/server";
+import {
+  isAllowedPosterMimeType,
+  MAX_POSTER_FILE_SIZE_LABEL,
+  posterExtensionForMimeType,
+} from "@/lib/poster-upload-constants";
 import { getPaymentAdminClient } from "@/services/payment-order-service";
 
 export const runtime = "nodejs";
 
-const MAX_FILE_SIZE = 10 * 1024 * 1024;
-
-function extensionFor(file: File): string {
-  const fromName = file.name.split(".").pop()?.toLowerCase();
-  if (fromName && /^[a-z0-9]{1,8}$/.test(fromName)) return fromName;
-  return file.type.split("/")[1]?.replace(/[^a-z0-9]/gi, "") || "jpg";
-}
+// Compatibility fallback for older clients. New clients upload directly to
+// Supabase through a signed upload URL because Vercel Functions accept at most
+// 4.5 MB request bodies.
+const MAX_PROXY_FILE_SIZE = 4 * 1024 * 1024;
 
 export async function POST(request: Request) {
   try {
@@ -19,8 +21,11 @@ export async function POST(request: Request) {
     const publicToken = String(form.get("public_token") || "");
     const file = form.get("file");
     if (!orderId || (!uploadToken && !publicToken) || !(file instanceof File)) return NextResponse.json({ success: false, error: "Data unggah poster tidak lengkap" }, { status: 400 });
-    if (!file.type.startsWith("image/") || file.size <= 0 || file.size > MAX_FILE_SIZE) {
-      return NextResponse.json({ success: false, error: "Poster harus berupa gambar maksimal 10 MB" }, { status: 400 });
+    if (!isAllowedPosterMimeType(file.type) || file.size <= 0 || file.size > MAX_PROXY_FILE_SIZE) {
+      return NextResponse.json({
+        success: false,
+        error: `Gunakan halaman upload terbaru untuk poster JPG, PNG, atau WebP hingga ${MAX_POSTER_FILE_SIZE_LABEL}`,
+      }, { status: 400 });
     }
 
     const supabase = getPaymentAdminClient();
@@ -40,7 +45,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: "Sesi upload kedaluwarsa. Buka ulang link QRIS lalu coba lagi." }, { status: 403 });
     }
 
-    const path = `payment-posters/${orderId}/${Date.now()}-${crypto.randomUUID()}.${extensionFor(file)}`;
+    const path = `payment-posters/${orderId}/${Date.now()}-${crypto.randomUUID()}.${posterExtensionForMimeType(file.type)}`;
     const { error: uploadError } = await supabase.storage.from("posters").upload(path, file, { contentType: file.type, cacheControl: "3600", upsert: false });
     if (uploadError) throw new Error(uploadError.message);
     const { data } = supabase.storage.from("posters").getPublicUrl(path);

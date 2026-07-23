@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/client";
+import { getPosterGallery } from "@/lib/poster-gallery";
 import type { QueuePost, AggregatedClient, ClientDetail, ClientTier } from "@/lib/types";
 
 // ============================================
@@ -64,9 +65,7 @@ export async function getAggregatedClients(): Promise<{ data: AggregatedClient[]
                 existing.total_postings += 1;
                 existing.total_spent += post.total_price;
                 existing.dates.push(post.scheduled_date);
-                if (post.poster_url) {
-                    existing.posters.push(post.poster_url);
-                }
+                existing.posters.push(...getPosterGallery(post));
                 // Use the most recent company name
                 if (post.scheduled_date > existing.dates[0]) {
                     existing.company_name = post.company_name;
@@ -77,7 +76,7 @@ export async function getAggregatedClients(): Promise<{ data: AggregatedClient[]
                     total_postings: 1,
                     total_spent: post.total_price,
                     dates: [post.scheduled_date],
-                    posters: post.poster_url ? [post.poster_url] : [],
+                    posters: getPosterGallery(post),
                 });
             }
         });
@@ -122,9 +121,12 @@ export async function getClientDetail(whatsappNumber: string): Promise<{ data: C
             return { data: null, error: "Client not found" };
         }
 
-        const posts = data as QueuePost[];
+        const posts = (data as QueuePost[]).map((post) => ({
+            ...post,
+            gallery: getPosterGallery(post),
+        }));
         const totalSpent = posts.reduce((sum, post) => sum + post.total_price, 0);
-        const posters = posts.filter(p => p.poster_url).map(p => p.poster_url!);
+        const posters = posts.flatMap(getPosterGallery);
         const sortedDates = posts.map(p => p.scheduled_date).sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
 
         const clientDetail: ClientDetail = {

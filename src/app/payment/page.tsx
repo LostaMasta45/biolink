@@ -24,6 +24,13 @@ import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
 import { formatDate, formatRupiah } from "@/lib/utils";
 import type { InvoiceData, InvoiceItemData } from "@/lib/invoice-types";
+import {
+    isAllowedPosterMimeType,
+    MAX_POSTER_FILES,
+    MAX_POSTER_FILE_SIZE,
+    MAX_POSTER_FILE_SIZE_LABEL,
+} from "@/lib/poster-upload-constants";
+import { uploadPaymentPoster } from "@/lib/payment-poster-upload-client";
 
 const STEPS = [
     { label: "Pilih Paket", icon: "1" },
@@ -84,6 +91,7 @@ function PaymentContent() {
     const [posterPreviews, setPosterPreviews] = useState<string[]>([]);
     const [posterCaption, setPosterCaption] = useState("");
     const [isUploading, setIsUploading] = useState(false);
+    const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number; percentage: number } | null>(null);
     const [isDragOver, setIsDragOver] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const paymentAttemptRef = useRef<string | null>(null);
@@ -274,16 +282,24 @@ function PaymentContent() {
     // File handling for poster upload
     const handleFileSelect = (files: FileList | File[]) => {
         const fileArray = Array.from(files);
+        const availableSlots = Math.max(0, MAX_POSTER_FILES - posterFiles.length);
+        if (availableSlots === 0) {
+            toast.error(`Maksimal ${MAX_POSTER_FILES} poster dalam satu pesanan`);
+            return;
+        }
+        if (fileArray.length > availableSlots) {
+            toast.error(`Hanya ${availableSlots} poster lagi yang dapat ditambahkan. Maksimal ${MAX_POSTER_FILES} poster.`);
+        }
         const validFiles: File[] = [];
         const newPreviews: string[] = [];
 
-        fileArray.slice(0, Math.max(0, 10 - posterFiles.length)).forEach(file => {
-            if (file.size > 50 * 1024 * 1024) {
-                alert(`File ${file.name} terlalu besar (max 50MB)`);
+        fileArray.slice(0, availableSlots).forEach(file => {
+            if (file.size > MAX_POSTER_FILE_SIZE) {
+                toast.error(`${file.name} melebihi batas ${MAX_POSTER_FILE_SIZE_LABEL}`);
                 return;
             }
-            if (!file.type.startsWith('image/')) {
-                alert(`File ${file.name} bukan gambar`);
+            if (!isAllowedPosterMimeType(file.type)) {
+                toast.error(`${file.name} harus berformat JPG, PNG, atau WebP`);
                 return;
             }
             validFiles.push(file);
@@ -328,16 +344,18 @@ function PaymentContent() {
             }
             // File diproses server agar tidak tergantung policy Storage pada browser.
             const uploadedUrls: string[] = [];
-            for (const file of posterFiles) {
-                const form = new FormData();
-                form.append("order_id", paymentData.order_id);
-                if (paymentData.upload_token) form.append("upload_token", paymentData.upload_token);
-                if (paymentData.public_token) form.append("public_token", paymentData.public_token);
-                form.append("file", file);
-                const response = await fetch("/api/payment/upload-poster-file", { method: "POST", body: form });
-                const result = await response.json();
-                if (!result.success || !result.data?.url) throw new Error(`Gagal upload ${file.name}: ${result.error || "unknown error"}`);
-                uploadedUrls.push(result.data.url);
+            for (const [index, file] of posterFiles.entries()) {
+                setUploadProgress({ current: index + 1, total: posterFiles.length, percentage: 0 });
+                const url = await uploadPaymentPoster(file, {
+                    orderId: paymentData.order_id,
+                    uploadToken: paymentData.upload_token,
+                    publicToken: paymentData.public_token,
+                }, (percentage) => setUploadProgress({
+                    current: index + 1,
+                    total: posterFiles.length,
+                    percentage,
+                }));
+                uploadedUrls.push(url);
             }
 
             // Call upload-poster API to link posters to posting queue
@@ -372,6 +390,7 @@ function PaymentContent() {
             alert(error instanceof Error ? error.message : "Terjadi kesalahan saat upload poster");
         } finally {
             setIsUploading(false);
+            setUploadProgress(null);
         }
     };
 
@@ -1318,7 +1337,7 @@ function PaymentContent() {
                                             <h3 className="font-bold text-foreground">Upload Poster Lowongan</h3>
                                         </div>
                                         <p className="text-xs text-muted-foreground mb-4">
-                                            Upload poster HD (tanpa kompresi). Format: JPG, PNG, WebP. Maks 50MB per file.
+                                            Pilih 1–{MAX_POSTER_FILES} poster HD tanpa kompresi. Format JPG, PNG, atau WebP. Maksimal {MAX_POSTER_FILE_SIZE_LABEL} per file.
                                         </p>
 
                                         {/* Drop Zone */}
@@ -1337,10 +1356,13 @@ function PaymentContent() {
                                             <input
                                                 ref={fileInputRef}
                                                 type="file"
-                                                accept="image/*"
+                                                accept="image/jpeg,image/png,image/webp"
                                                 multiple
                                                 className="hidden"
-                                                onChange={(e) => e.target.files && handleFileSelect(e.target.files)}
+                                                onChange={(e) => {
+                                                    if (e.target.files) handleFileSelect(e.target.files);
+                                                    e.currentTarget.value = "";
+                                                }}
                                             />
                                             <Upload className={cn(
                                                 "w-10 h-10 mx-auto mb-3 transition-colors",
@@ -1350,8 +1372,13 @@ function PaymentContent() {
                                                 {isDragOver ? "Lepaskan file di sini" : "Klik atau drag & drop poster"}
                                             </p>
                                             <p className="text-xs text-muted-foreground">
-                                                Bisa upload lebih dari 1 poster
+                                                Bisa pilih beberapa sekaligus • Maksimal {MAX_POSTER_FILES} poster
                                             </p>
+                                        </div>
+
+                                        <div className="mt-3 flex items-center justify-between text-xs font-medium text-muted-foreground">
+                                            <span>{posterFiles.length} dari {MAX_POSTER_FILES} poster dipilih</span>
+                                            {posterFiles.length >= MAX_POSTER_FILES && <span className="text-amber-600">Batas tercapai</span>}
                                         </div>
 
                                         {/* Preview Grid */}
@@ -1404,7 +1431,7 @@ function PaymentContent() {
                                             className="w-full rounded-xl font-bold bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white shadow-lg shadow-emerald-500/30 h-12"
                                         >
                                             {isUploading ? (
-                                                <><Loader2 className="w-5 h-5 mr-2 animate-spin" /> Mengupload...</>
+                                                <><Loader2 className="w-5 h-5 mr-2 animate-spin" /> {uploadProgress ? `Poster ${uploadProgress.current}/${uploadProgress.total} • ${uploadProgress.percentage}%` : "Menyiapkan upload..."}</>
                                             ) : (
                                                 <><Send className="w-5 h-5 mr-2" /> Kirim Poster & Selesai</>
                                             )}
@@ -1685,7 +1712,7 @@ function PaymentContent() {
                                         <ImagePlus className="w-4 h-4 text-[#0b411d]" />
                                         <h4 className="font-extrabold text-[14px] text-slate-800">Poster Lowongan</h4>
                                     </div>
-                                    <p className="text-[12px] text-slate-400 mb-3">Upload poster HD. Format: JPG, PNG, WebP. Maks 50MB.</p>
+                                    <p className="text-[12px] text-slate-400 mb-3">Pilih 1–{MAX_POSTER_FILES} poster HD. JPG, PNG, atau WebP. Maks {MAX_POSTER_FILE_SIZE_LABEL} per file.</p>
 
                                     <div
                                         onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
@@ -1702,14 +1729,22 @@ function PaymentContent() {
                                         <input
                                             ref={fileInputRef}
                                             type="file"
-                                            accept="image/*"
+                                            accept="image/jpeg,image/png,image/webp"
                                             multiple
                                             className="hidden"
-                                            onChange={(e) => e.target.files && handleFileSelect(e.target.files)}
+                                            onChange={(e) => {
+                                                if (e.target.files) handleFileSelect(e.target.files);
+                                                e.currentTarget.value = "";
+                                            }}
                                         />
                                         <Upload className="w-8 h-8 mx-auto mb-2 text-slate-300" />
                                         <p className="text-[13px] font-bold text-slate-600">Tap untuk pilih poster</p>
-                                        <p className="text-[11px] text-slate-400 mt-0.5">Bisa upload lebih dari 1</p>
+                                        <p className="text-[11px] text-slate-400 mt-0.5">Bisa pilih beberapa • Maks {MAX_POSTER_FILES} poster</p>
+                                    </div>
+
+                                    <div className="mt-2.5 flex items-center justify-between text-[11px] font-semibold text-slate-500">
+                                        <span>{posterFiles.length}/{MAX_POSTER_FILES} poster dipilih</span>
+                                        {posterFiles.length >= MAX_POSTER_FILES && <span className="text-amber-600">Batas tercapai</span>}
                                     </div>
 
                                     {/* Preview */}
@@ -1790,7 +1825,7 @@ function PaymentContent() {
                                 )}
                             >
                                 {isUploading ? (
-                                    <><Loader2 className="w-5 h-5 animate-spin" /> Mengupload...</>
+                                    <><Loader2 className="w-5 h-5 animate-spin" /> {uploadProgress ? `${uploadProgress.current}/${uploadProgress.total} • ${uploadProgress.percentage}%` : "Menyiapkan..."}</>
                                 ) : (
                                     <><Send className="w-5 h-5" /> Kirim Poster & Selesai</>
                                 )}

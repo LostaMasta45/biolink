@@ -567,13 +567,20 @@ export default function DatabasePage() {
                                             key={post.id}
                                             className="flex items-center gap-3 p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
                                         >
-                                            {post.poster_url ? (
-                                                // eslint-disable-next-line @next/next/no-img-element
-                                                <img
-                                                    src={post.poster_url}
-                                                    alt=""
-                                                    className="w-12 h-12 rounded-lg object-cover"
-                                                />
+                                            {(post.gallery?.[0] || post.poster_url) ? (
+                                                <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-lg">
+                                                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                                                    <img
+                                                        src={post.gallery?.[0] || post.poster_url}
+                                                        alt=""
+                                                        className="h-full w-full object-cover"
+                                                    />
+                                                    {(post.gallery?.length || 0) > 1 && (
+                                                        <span className="absolute inset-0 flex items-center justify-center bg-black/45 text-[10px] font-bold text-white">
+                                                            +{post.gallery!.length - 1}
+                                                        </span>
+                                                    )}
+                                                </div>
                                             ) : (
                                                 <div className="w-12 h-12 rounded-lg bg-muted flex items-center justify-center">
                                                     <Package className="w-4 h-4 text-muted-foreground/50" />

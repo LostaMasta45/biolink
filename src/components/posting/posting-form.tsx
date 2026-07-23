@@ -11,6 +11,12 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn, formatRupiah, getTodayWIB } from "@/lib/utils";
 import type { PostingPackage, PostingAddon, QueuePost } from "@/lib/types";
 import { uploadPoster, createPosting, updatePosting, calculateTotalPrice } from "@/lib/posting-service";
+import {
+    isAllowedPosterMimeType,
+    MAX_POSTER_FILES,
+    MAX_POSTER_FILE_SIZE,
+    MAX_POSTER_FILE_SIZE_LABEL,
+} from "@/lib/poster-upload-constants";
 import toast from "react-hot-toast";
 
 interface PostingFormProps {
@@ -90,14 +96,27 @@ export function PostingForm({ open, onOpenChange, packages, addons, editData, on
     // Handle file selection
     const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
         const files = Array.from(e.target.files || []);
+        const currentCount = existingGallery.length + posterFiles.length;
+        const availableSlots = Math.max(0, MAX_POSTER_FILES - currentCount);
+        if (availableSlots === 0) {
+            toast.error(`Maksimal ${MAX_POSTER_FILES} poster dalam satu posting`);
+            if (fileInputRef.current) fileInputRef.current.value = "";
+            return;
+        }
+        if (files.length > availableSlots) {
+            toast.error(`Hanya ${availableSlots} poster lagi yang dapat ditambahkan`);
+        }
 
         const validFiles: File[] = [];
         const newPreviews: string[] = [];
 
-        files.forEach(file => {
-            // Increased limit to 50MB
-            if (file.size > 50 * 1024 * 1024) {
-                toast.error(`File ${file.name} terlalu besar (max 50MB)`);
+        files.slice(0, availableSlots).forEach(file => {
+            if (file.size > MAX_POSTER_FILE_SIZE) {
+                toast.error(`${file.name} melebihi batas ${MAX_POSTER_FILE_SIZE_LABEL}`);
+                return;
+            }
+            if (!isAllowedPosterMimeType(file.type)) {
+                toast.error(`${file.name} harus berformat JPG, PNG, atau WebP`);
                 return;
             }
             validFiles.push(file);
@@ -114,6 +133,7 @@ export function PostingForm({ open, onOpenChange, packages, addons, editData, on
     };
 
     const handleRemoveNew = (index: number) => {
+        if (posterPreviews[index]) URL.revokeObjectURL(posterPreviews[index]);
         setPosterFiles(prev => prev.filter((_, i) => i !== index));
         setPosterPreviews(prev => prev.filter((_, i) => i !== index));
     };
@@ -322,19 +342,23 @@ export function PostingForm({ open, onOpenChange, packages, addons, editData, on
                                                 {(existingGallery?.length || 0) + posterFiles.length === 0 ? "Upload Poster" : "Tambah Poster"}
                                             </p>
                                             <p className="text-xs text-muted-foreground">
-                                                PNG, JPG (Max 5MB)
+                                                JPG, PNG, WebP • Maks {MAX_POSTER_FILE_SIZE_LABEL}
                                             </p>
                                         </div>
                                     </div>
                                     <input
                                         ref={fileInputRef}
                                         type="file"
-                                        accept="image/*"
+                                        accept="image/jpeg,image/png,image/webp"
                                         multiple
                                         className="hidden"
                                         onChange={handleFileSelect}
                                     />
                                 </label>
+                            </div>
+                            <div className="flex items-center justify-between text-xs font-medium text-muted-foreground">
+                                <span>{existingGallery.length + posterFiles.length} dari {MAX_POSTER_FILES} poster</span>
+                                <span>Bisa pilih beberapa sekaligus</span>
                             </div>
                         </div>
 

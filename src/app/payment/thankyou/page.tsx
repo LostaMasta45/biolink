@@ -646,19 +646,22 @@ function ThankYouContent() {
             {/* Mobile View */}
             <motion.div 
                 initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                className="md:hidden min-h-[100dvh] bg-[#00a550] flex flex-col font-sans relative overflow-x-hidden"
+                className="md:hidden min-h-[100dvh] bg-[#f8fafc] flex flex-col font-sans relative"
             >
-                {/* Background elements */}
-                <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/4 pointer-events-none" />
-                <div className="absolute top-1/4 left-0 w-48 h-48 bg-[#008c44] rounded-full blur-2xl -translate-x-1/2 pointer-events-none" />
-                
-                {/* Header */}
-                <div className="flex justify-center items-center px-6 pt-12 pb-16 text-white relative z-10">
-                    <span className="font-bold text-lg tracking-tight">Status Pembayaran</span>
+                {/* Top Green Section */}
+                <div className="bg-[#00a550] relative overflow-hidden pt-12 pb-24 z-10">
+                    {/* Background elements */}
+                    <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/4 pointer-events-none" />
+                    <div className="absolute top-1/4 left-0 w-48 h-48 bg-[#008c44] rounded-full blur-2xl -translate-x-1/2 pointer-events-none" />
+                    
+                    {/* Header */}
+                    <div className="flex justify-center items-center px-6 text-white relative z-10">
+                        <span className="font-bold text-lg tracking-tight">Status Pembayaran</span>
+                    </div>
                 </div>
                 
                 {/* Floating Content Card */}
-                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-[#f8fafc] rounded-t-[32px] pt-20 px-4 sm:px-6 pb-[calc(2rem+env(safe-area-inset-bottom))] flex flex-col items-center relative shadow-[0_-20px_40px_rgba(0,0,0,0.15)] z-20">
+                <div className="flex-1 bg-[#f8fafc] rounded-t-[32px] pt-20 px-4 sm:px-6 pb-[calc(2rem+env(safe-area-inset-bottom))] flex flex-col items-center relative z-20 -mt-10 shadow-[0_-20px_40px_rgba(0,0,0,0.1)]">
                     {/* Floating Success Icon */}
                     <div className="absolute -top-14 left-1/2 -translate-x-1/2 w-28 h-28 z-30">
                         <motion.div 

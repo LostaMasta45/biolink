@@ -100,6 +100,7 @@ export interface QueuePost {
     company_name: string;
     whatsapp_number: string;
     poster_url?: string;
+    poster_urls?: string[];
     scheduled_date: string;
     scheduled_time: string;
     package_id: number;
